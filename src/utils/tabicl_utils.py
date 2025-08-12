@@ -9,6 +9,7 @@ class ColEmbAggregation(Enum):
     MEAN = "mean"
     CONCAT = "concat"
     PERCENTILE = "percentile"
+    COLUMN = "column"
 
 
 class DataSetEmbeddings(ColEmbedding):
@@ -75,6 +76,29 @@ class DataSetEmbeddings(ColEmbedding):
         self.eval()
 
     def forward(self, X, **kwargs) -> torch.Tensor:
+        """
+        Computes a forward pass for input embeddings based on the specified column
+        embedding aggregation method. The method processes the input tensor and outputs
+        a tensor based on one of the aggregation strategies: mean, concatenation,
+        percentile, or retaining the original column embeddings.
+
+        If the aggregation method is set to COLUMN, the output shape will be (B, C, D), where
+            - B is the batch size,
+            - C is the number of columns,
+            - D is the embedding dimension.
+        Otherwise, the output shape will be (B, D).
+
+        Args:
+            X: torch.Tensor
+                The input tensor for the forward pass.
+            **kwargs: dict
+                Additional arguments passed to the method.
+
+        Returns:
+            torch.Tensor:
+                Processed tensor based on the specified column embedding aggregation
+                method.
+        """
         X = super().forward(X)
 
         if self.col_emb_aggregation == ColEmbAggregation.MEAN:
@@ -83,6 +107,8 @@ class DataSetEmbeddings(ColEmbedding):
             return torch.flatten(X, start_dim=1)
         elif self.col_emb_aggregation == ColEmbAggregation.PERCENTILE:
             return torch.quantile(X, q=self.percentile, dim=1)
+        elif self.col_emb_aggregation == ColEmbAggregation.COLUMN:
+            return X
 
 
 def get_col_embedding(state_dict, config) -> ColEmbedding:
