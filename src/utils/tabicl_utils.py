@@ -75,7 +75,7 @@ class DataSetEmbeddings(ColEmbedding):
 
         self.eval()
 
-    def forward(self, X, **kwargs) -> torch.Tensor:
+    def forward(self, X: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Computes a forward pass for input embeddings based on the specified column
         embedding aggregation method. The method processes the input tensor and outputs
@@ -90,7 +90,10 @@ class DataSetEmbeddings(ColEmbedding):
 
         Args:
             X: torch.Tensor
-                The input tensor for the forward pass.
+                The input tensor for the forward pass. It has the shape (B, N, C), where
+                    - B is the batch size,
+                    - N is the number of samples per datasets,
+                    - C is the number of columns/features.
             **kwargs: dict
                 Additional arguments passed to the method.
 
