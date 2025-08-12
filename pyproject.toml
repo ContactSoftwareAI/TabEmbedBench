@@ -5,6 +5,7 @@ description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
     "fsspec>=2025.7.0",
+    "liac-arff==2.5.0",
     "marimo>=0.14.16",
     "mlflow>=3.2.0",
     "plotly-express>=0.4.1",

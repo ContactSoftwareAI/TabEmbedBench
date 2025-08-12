@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.14.16"
+__generated_with = "0.14.17"
 app = marimo.App(width="medium")
 
 
@@ -92,11 +92,11 @@ def _(X_test_embed, X_train_embed, pl, y_test, y_train):
 
     for k in range(150):
         knn = KNeighborsClassifier(n_neighbors=k+1)
-    
+
         knn.fit(X_train_embed.squeeze().detach().numpy(), y_train)
-    
+
         y_pred = knn.predict(X_test_embed.squeeze().detach().numpy())
-    
+
         score_per_neighbors["neighbor"].append(k+1)
         score_per_neighbors["roc_auc_score"].append(roc_auc_score(y_test, y_pred))
 
@@ -110,28 +110,6 @@ def _(result_df):
     import plotly.express as px
 
     px.line(data_frame=result_df, x="neighbor", y="roc_auc_score")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""## Outlier Detection""")
-    return
-
-
-@app.cell
-def _():
-    import numpy as np
-
-    thyroid_data = np.load("data/adbench_tabular_datasets/38_thyroid.npz")
-
-    thyroid_data
-    return
-
-
-@app.cell
-def _():
-    from sklearn.neighbors import LocalOutlierFactor
     return
 
 
