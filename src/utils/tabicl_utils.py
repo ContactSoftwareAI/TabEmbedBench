@@ -1,15 +1,9 @@
 import torch
 
-from enum import Enum
+
+from config import EmbAggregation
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.interaction import RowInteraction
-
-
-class ColEmbAggregation(Enum):
-    MEAN = "mean"
-    CONCAT = "concat"
-    PERCENTILE = "percentile"
-    COLUMN = "column"
 
 
 class DataSetEmbeddings(ColEmbedding):
@@ -38,10 +32,10 @@ class DataSetEmbeddings(ColEmbedding):
         dim_feedforward: int,
         num_inds: int,
         dropout: float = 0.0,
-        activation: str | callable = "gelu",
+        activation: str = "gelu",
         norm_first: bool = True,
         reserve_cls_tokens: int = 4,
-        col_emb_aggregation: ColEmbAggregation = ColEmbAggregation.MEAN,
+        col_emb_aggregation: EmbAggregation = EmbAggregation.MEAN,
         percentile: float = 0.75,
     ):
         super().__init__(
@@ -60,9 +54,9 @@ class DataSetEmbeddings(ColEmbedding):
 
         if isinstance(col_emb_aggregation, str):
             try:
-                self.col_emb_aggregation = ColEmbAggregation(col_emb_aggregation)
+                self.col_emb_aggregation = EmbAggregation(col_emb_aggregation)
             except ValueError:
-                valid_values = [e.value for e in ColEmbAggregation]
+                valid_values = [e.value for e in EmbAggregation]
                 raise ValueError(
                     f"Invalid aggregation method: {col_emb_aggregation}. "
                     f"Valid options are: {valid_values}"
@@ -104,13 +98,13 @@ class DataSetEmbeddings(ColEmbedding):
         """
         X = super().forward(X)
 
-        if self.col_emb_aggregation == ColEmbAggregation.MEAN:
+        if self.col_emb_aggregation == EmbAggregation.MEAN:
             return torch.mean(X, dim=1)
-        elif self.col_emb_aggregation == ColEmbAggregation.CONCAT:
+        elif self.col_emb_aggregation == EmbAggregation.CONCAT:
             return torch.flatten(X, start_dim=1)
-        elif self.col_emb_aggregation == ColEmbAggregation.PERCENTILE:
+        elif self.col_emb_aggregation == EmbAggregation.PERCENTILE:
             return torch.quantile(X, q=self.percentile, dim=1)
-        elif self.col_emb_aggregation == ColEmbAggregation.COLUMN:
+        elif self.col_emb_aggregation == EmbAggregation.COLUMN:
             return X
 
 
@@ -236,7 +230,7 @@ def get_row_embeddings_model(state_dict: dict, config: dict):
 def get_dataset_embeddings(
     state_dict: dict,
     config: dict,
-    col_emb_aggregation: ColEmbAggregation = ColEmbAggregation.MEAN,
+    col_emb_aggregation: EmbAggregation = EmbAggregation.MEAN,
     percentile: float = 0.75,
 ) -> DataSetEmbeddings:
     """
