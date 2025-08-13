@@ -5,6 +5,22 @@ from config import EmbAggregation
 from typing import Union
 
 def get_embeddings_aggregation(embeddings: Union[list[np.ndarray], list[torch.Tensor]], agg_func: str = "mean"):
+    """
+    Aggregates a list of embeddings using the specified aggregation function.
+
+    This function takes a list of embeddings, which can be NumPy arrays or PyTorch tensors,
+    and applies the specified aggregation function to them. The default aggregation function
+    is "mean". The function ensures the desired aggregation method is valid before
+    performing the aggregation.
+
+    Args:
+        embeddings (Union[list[np.ndarray], list[torch.Tensor]]): A list of embeddings to be aggregated.
+        agg_func (str, optional): The aggregation function to use. Defaults to "mean".
+
+    Returns:
+        np.ndarray or torch.Tensor: The aggregated embedding, depending on the type of
+        input embeddings.
+    """
     agg_func = check_emb_aggregation(agg_func)
     return embeddings_aggregation(embeddings, agg_func)
 
@@ -15,6 +31,27 @@ def embeddings_aggregation(
     axis: int = 0,
     quantile: float = 0.75,
 ) -> Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]]:
+    """
+    Aggregates embeddings using the specified aggregation function. The function supports various
+    aggregation methods such as mean, concatenation, percentile, and column-wise operations.
+
+    Args:
+        embeddings: Union[list[np.ndarray], list[torch.Tensor]]. A list of numpy arrays or torch tensors
+            representing embeddings to be aggregated.
+        agg_func: EmbAggregation. The aggregation function to apply to the embeddings. Must be an
+            instance of the EmbAggregation enumeration.
+        axis: int, optional. The axis along which to perform aggregation. Defaults to 0.
+        quantile: float, optional. The quantile used when the aggregation function is set to
+            `EmbAggregation.PERCENTILE`. Defaults to 0.75.
+
+    Raises:
+        ValueError: If `agg_func` is not an instance of EmbAggregation.
+        ValueError: If `embeddings` is not a list of numpy arrays or torch tensors.
+
+    Returns:
+        Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]]. The aggregated embeddings.
+        The type and shape depend on the input and the specified aggregation function.
+    """
     if not isinstance(agg_func, EmbAggregation):
         raise ValueError("agg_func must be an instance of EmbAggregation.")
 
