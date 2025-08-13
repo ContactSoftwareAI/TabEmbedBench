@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
 
-from embedding_utils import embeddings_aggregation
+from utils.embedding_utils import embeddings_aggregation
 from utils.preprocess_utils import infer_categorical_columns
-from sklearn.model_selection import Kfold
+from sklearn.model_selection import KFold
 from tabpfn import TabPFNRegressor, TabPFNClassifier
 from typing import Union
 
@@ -13,7 +13,7 @@ class UniversalTabPFNEmbedding:
         self,
         tabpfn_clf: TabPFNClassifier,
         tabpfn_reg: TabPFNRegressor,
-        n_fold: int = 0,
+        n_fold: int = 2,
     ) -> None:
         self.tabpfn_clf = tabpfn_clf
         self.tabpfn_reg = tabpfn_reg
@@ -25,8 +25,6 @@ class UniversalTabPFNEmbedding:
         cat_cols: list[Union[int, str]] | None = None,
         numeric_cols: list[Union[int, str]] | None = None,
     ) -> list[np.ndarray]:
-        if self.model is None:
-            raise ValueError("No model has been set.")
 
         if cat_cols is None:
             cat_cols_idx = infer_categorical_columns(X)
@@ -38,13 +36,13 @@ class UniversalTabPFNEmbedding:
             cat_cols_idx = cat_cols
 
         if numeric_cols is None:
-            if cat_cols is None:
+            if cat_cols_idx is None:
                 raise NotImplementedError
             else:
                 numeric_cols_idx = [
-                    idx for idx in range(X.shape[-1]) if idx not in cat_cols
+                    idx for idx in range(X.shape[-1]) if idx not in cat_cols_idx
                 ]
-        elif isinstance(num_cols[0], str) and isinstance(X, pd.DataFrame):
+        elif isinstance(numeric_cols[0], str) and isinstance(X, pd.DataFrame):
             numeric_cols_idx = [
                 X.get_loc(col_name) for col_name in numeric_cols
             ]
@@ -61,7 +59,7 @@ class UniversalTabPFNEmbedding:
             mask = np.ones(X.shape[-1], dtype=bool)
             mask[col_idx] = False
 
-            kf = Kfold(n_splits=self.n_fold, shuffle=False)
+            kf = KFold(n_splits=self.n_fold, shuffle=False)
             tmp_embeddings = []
             for train_idx, val_idx in kf.split(X):
                 X_train_fold = X[train_idx][:, mask]

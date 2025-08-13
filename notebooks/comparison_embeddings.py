@@ -4,6 +4,8 @@ import sys
 import polars as pl
 import pickle
 from utils.tabicl_utils import get_row_embeddings_model
+from tabpfn import TabPFNRegressor, TabPFNClassifier
+from utils.tabpfn_utils import UniversalTabPFNEmbedding
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
@@ -11,42 +13,50 @@ from sklearn.metrics import roc_auc_score
 sys.path.insert(0,"../../embedding-workflow")
 import graph, load_data
 
-model_ckpt = torch.load("../data/models/tabicl/tabicl-classifier-v1.1-0506.ckpt")
+dataset = "grid_stability"
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# load data and graph
+if dataset == "grid_stability":
+    data, categorical_columns, numerical_columns, num_bins, text_columns, num_clusters, target = load_data.grid_stability("../../data.tabdata-testsets/OpenML_CTR23_benchmark")
+    g = pickle.load(open(r"C:\Users\fho\Documents\code\TabData\results\Grid_stability\02_graph_building\grid_stability.graph", "rb"))
+elif dataset == "titanic":
+    data, categorical_columns, numerical_columns, num_bins, text_columns, num_clusters, target = load_data.load_titanic_original(
+        "../../data.tabdata-testsets/Titanic")
+    g = pickle.load(open(r"C:\Users\fho\Documents\code\TabData\results\Titanic\02_graph_building\titanic.graph", "rb"))
+elif dataset == "synthetic":
+    name = "20250331_1451_num_nodes_14"
+    add = False
+    target_node = ""
+    max_number_of_rows = 0
+    masked = 0
+    noise_std = 0.1
+    noise_ratio = 0.1
+    hidden_dim = 2
+    data, categorical_columns, numerical_columns, num_bins, text_columns, num_clusters, target = load_data.load_synthetic_data_scm(
+        "../../data.tabdata-testsets/Synthetic Data SCM", name, hidden_dim, noise_std, noise_ratio, max_number_of_rows,
+        add, masked)
+    if len(target_node) > 0:
+        target = {target_node: target[target_node]}
+    print(f"Target: {target}")
+    g = pickle.load(open(r"C:\Users\fho\Documents\code\TabData\results\Synthetic\02_graph_building\scm_20250331_1451_num_nodes_14_noise_std_0.1_ratio_0.1_hidden_dim_2.graph", "rb"))
+else:
+    raise ValueError("Dataset not found")
+# load model for TabICL embeddings
+model_ckpt = torch.load("../data/models/tabicl/tabicl-classifier-v1.1-0506.ckpt")
 state_dict = model_ckpt["state_dict"]
 config = model_ckpt["config"]
 
 row_embedder = get_row_embeddings_model(state_dict=state_dict, config=config)
 row_embedder.eval()
-
 le = LabelEncoder()
-grid_stability = pl.read_csv("../data/Data_for_UCI_named.csv")
-grid_stability_features = grid_stability.select(pl.all().exclude(["stab", "stabf"]))
 
-clf_targets = grid_stability.select("stabf")
-reg_targets = grid_stability.select("stab")
+tabpfn_clf = TabPFNClassifier(device=device, n_estimators=1)
+tabpfn_reg = TabPFNRegressor(device=device, n_estimators=1)
 
-train_size = int(0.9 * len(grid_stability_features))
-
-X_train = grid_stability_features[:train_size]
-X_test = grid_stability_features[train_size:]
-y_train = clf_targets[:train_size]
-y_test = clf_targets[train_size:]
-
-
-### TabICL universal embeddings
-X_train = X_train.to_torch().float().unsqueeze(0)
-X_test = X_test.to_torch().float().unsqueeze(0)
-y_train = le.fit_transform(y_train.to_numpy().ravel())
-y_test = le.transform(y_test.to_numpy().ravel())
-
-X_train_embed_tabicl = row_embedder(X_train)
-X_test_embed_tabicl = row_embedder(X_test)
-
+tabpfn_model = UniversalTabPFNEmbedding(tabpfn_clf, tabpfn_reg)
 
 ### our universal embeddings
-data, categorical_columns, numerical_columns, num_bins, text_columns, num_clusters, target = load_data.grid_stability("../../data.tabdata-testsets/OpenML_CTR23_benchmark")
-g = pickle.load(open(r"C:\Users\fho\Documents\code\TabData\results\Grid_stability\02_graph_building\grid_stability.graph", "rb"))
 nodes = g.node_list
 input_vectors = torch.tensor(np.array(g.random_embeddings(dimension=512), dtype=np.float32))
 emb = {nodes[i]: np.array(input_vectors[i].cpu()) for i in range(len(nodes))}
@@ -63,13 +73,47 @@ train_indices_index = {}
 for i in range(len(train_indices)):
     train_indices_index[train_indices[i]] = i
 test_indices = list(data[data.set == "test"].index)
-data_train = data.loc[train_indices]["embeddings"]
-data_test = data.loc[test_indices]["embeddings"]
-X_train_embed_shellmodel = np.array(list(data_train.values))
-X_test_embed_shellmodel = np.array(list(data_test.values))
 
+target_key = list(target.keys())[1]
 
+data_train = data.loc[train_indices]
+data_test = data.loc[test_indices]
+y_train = data_train[target_key]
+y_test = data_test[target_key]
 
+# Entfernen der embeddings-Spalte für TabICL, da sie numerische Features erwartet
+if dataset == "grid_stability":
+    data_train_for_tabicl = data_train.drop(['stab', 'stabf', 'embeddings', 'set'], axis=1)
+    data_test_for_tabicl = data_test.drop(['stab', 'stabf', 'embeddings', 'set'], axis=1)
+#elif dataset == "synthetic":
+#    print(data_train)
+#    data_train_for_tabicl = data_train.drop(['stab', 'stabf', 'embeddings', 'set'], axis=1)
+#    data_test_for_tabicl = data_test.drop(['stab', 'stabf', 'embeddings', 'set'], axis=1)
+
+# Konvertierung zu Tensoren für TabICL
+X_train_tensor = torch.tensor(data_train_for_tabicl.values, dtype=torch.float32).unsqueeze(0)
+X_test_tensor = torch.tensor(data_test_for_tabicl.values, dtype=torch.float32).unsqueeze(0)
+
+# TabICL universal embeddings
+#X_train_embed_tabicl = row_embedder(X_train_tensor)
+#X_test_embed_tabicl = row_embedder(X_test_tensor)
+
+# TabPFN embeddings: embeddings for every column as target
+
+X_train_embed_tabpfn = tabpfn_model.get_embeddings(data_train_for_tabicl)
+X_test_embed_tabpfn = tabpfn_model.get_embeddings(X_test_tensor)
+
+# Shell model embeddings
+data_train_embeddings = data.loc[train_indices]["embeddings"]
+data_test_embeddings = data.loc[test_indices]["embeddings"]
+X_train_embed_shellmodel = np.array(list(data_train_embeddings.values))
+X_test_embed_shellmodel = np.array(list(data_test_embeddings.values))
+
+# Label encoding
+y_train = le.fit_transform(y_train.to_numpy().ravel())
+y_test = le.transform(y_test.to_numpy().ravel())
+
+# Evaluation
 score_per_neighbors_tabicl = dict()
 score_per_neighbors_tabicl["neighbor_tabicl"] = []
 score_per_neighbors_tabicl["roc_auc_score"] = []
@@ -78,7 +122,8 @@ score_per_neighbors_shellmodel = dict()
 score_per_neighbors_shellmodel["neighbor_shellmodel"] = []
 score_per_neighbors_shellmodel["roc_auc_score"] = []
 
-for k in range(20):
+# KNN
+for k in range(10):
     knn = KNeighborsClassifier(n_neighbors=k+1)
     knn.fit(X_train_embed_tabicl.squeeze().detach().numpy(), y_train)
     y_pred = knn.predict(X_test_embed_tabicl.squeeze().detach().numpy())
@@ -94,4 +139,6 @@ for k in range(20):
 result_df_tabicl = pl.from_dict(score_per_neighbors_tabicl)
 result_df_shellmodel = pl.from_dict(score_per_neighbors_shellmodel)
 print(result_df_tabicl)
+print("Dimension 512")
 print(result_df_shellmodel)
+print("Dimension 512")

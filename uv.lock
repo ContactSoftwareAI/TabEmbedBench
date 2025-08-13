@@ -643,6 +643,12 @@ wheels = [
 ]
 
 [[package]]
+name = "liac-arff"
+version = "2.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6e/43/73944aa5ad2b3185c0f0ba0ee6f73277f2eb51782ca6ccf3e6793caf209a/liac-arff-2.5.0.tar.gz", hash = "sha256:3220d0af6487c5aa71b47579be7ad1d94f3849ff1e224af3bf05ad49a0b5c4da", size = 13358, upload-time = "2020-08-31T18:59:16.878Z" }
+
+[[package]]
 name = "loro"
 version = "1.5.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1967,6 +1973,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fsspec" },
+    { name = "liac-arff" },
     { name = "marimo" },
     { name = "mlflow" },
     { name = "plotly-express" },
@@ -1981,6 +1988,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fsspec", specifier = ">=2025.7.0" },
+    { name = "liac-arff", specifier = "==2.5.0" },
     { name = "marimo", specifier = ">=0.14.16" },
     { name = "mlflow", specifier = ">=3.2.0" },
     { name = "plotly-express", specifier = ">=0.4.1" },
