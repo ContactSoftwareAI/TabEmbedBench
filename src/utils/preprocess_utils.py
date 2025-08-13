@@ -1,11 +1,12 @@
 import numpy as np
+import pandas as pd
 import torch
 
 from typing import Union, List, Tuple, Optional
 
 
 def infer_categorical_columns(
-    X: Union[np.ndarray, torch.Tensor],
+    X: Union[np.ndarray, torch.Tensor, pd.DataFrame],
     max_unique_ratio: float = 0.1,
     max_unique_count: int = 200,
     return_split: bool = False,
@@ -20,6 +21,9 @@ def infer_categorical_columns(
     elif isinstance(X, np.ndarray):
         is_tensor = False
         data_np = X
+    elif isinstance(X, pd.DataFrame):
+        is_tensor = False
+        data_np = X.to_numpy()
     else:
         raise ValueError("Input must be numpy array or torch tensor")
 
