@@ -4,7 +4,10 @@ import torch
 from utils.config import EmbAggregation
 from typing import Union
 
-def get_embeddings_aggregation(embeddings: Union[list[np.ndarray], list[torch.Tensor]], agg_func: str = "mean"):
+
+def get_embeddings_aggregation(
+    embeddings: Union[list[np.ndarray], list[torch.Tensor]], agg_func: str = "mean"
+):
     """
     Aggregates a list of embeddings using the specified aggregation function.
 
@@ -134,22 +137,23 @@ def validate_input(input_list):
     """
     first_type = type(input_list[0])
     first_shape = input_list[0].shape
-    if all(isinstance(item, first_type) for item in input_list) and all(item.shape == first_shape for item in input_list):
+    if all(isinstance(item, first_type) for item in input_list) and all(
+        item.shape == first_shape for item in input_list
+    ):
         return first_type, first_shape
     else:
         raise ValueError(
             "All elements in the input list must be of the same type and have the same shape."
         )
 
+
 if __name__ == "__main__":
     embeddings = [
         np.array([[1, 2], [3, 4]]),
         np.array([[5, 6], [7, 8]]),
-        np.array([[9, 10], [11, 12]])
+        np.array([[9, 10], [11, 12]]),
     ]
 
     agg_func = "mean"
 
     print(get_embeddings_aggregation(embeddings, agg_func))
-
-

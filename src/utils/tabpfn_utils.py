@@ -25,6 +25,7 @@ class UniversalTabPFNEmbedding:
         n_fold (int): The number of folds used in k-fold cross-validation for
             embedding generation.
     """
+
     def __init__(
         self,
         tabpfn_clf: TabPFNClassifier,
@@ -63,9 +64,7 @@ class UniversalTabPFNEmbedding:
         if cat_cols is None:
             cat_cols_idx = infer_categorical_columns(X)
         elif isinstance(cat_cols[0], str) and isinstance(X, pd.DataFrame):
-            cat_cols_idx = [
-                X.get_loc(col_name) for col_name in cat_cols
-            ]
+            cat_cols_idx = [X.get_loc(col_name) for col_name in cat_cols]
         else:
             cat_cols_idx = cat_cols
 
@@ -77,9 +76,7 @@ class UniversalTabPFNEmbedding:
                     idx for idx in range(X.shape[-1]) if idx not in cat_cols_idx
                 ]
         elif isinstance(numeric_cols[0], str) and isinstance(X, pd.DataFrame):
-            numeric_cols_idx = [
-                X.get_loc(col_name) for col_name in numeric_cols
-            ]
+            numeric_cols_idx = [X.get_loc(col_name) for col_name in numeric_cols]
         else:
             numeric_cols_idx = numeric_cols
 
@@ -96,10 +93,14 @@ class UniversalTabPFNEmbedding:
             if self.n_fold == 0:
                 if col_idx in cat_cols_idx:
                     self.tabpfn_clf.fit(X[:, mask], target)
-                    tmp_embeddings = self.tabpfn_clf.get_embeddings(X[:, mask], data_source="test")
+                    tmp_embeddings = self.tabpfn_clf.get_embeddings(
+                        X[:, mask], data_source="test"
+                    )
                 elif col_idx in numeric_cols_idx:
                     self.tabpfn_reg.fit(X[:, mask], target)
-                    tmp_embeddings = self.tabpfn_reg.get_embeddings(X[:, mask], data_source="test")
+                    tmp_embeddings = self.tabpfn_reg.get_embeddings(
+                        X[:, mask], data_source="test"
+                    )
                 embeddings.append(tmp_embeddings)
             else:
                 kf = KFold(n_splits=self.n_fold, shuffle=False)
@@ -112,13 +113,17 @@ class UniversalTabPFNEmbedding:
                         self.tabpfn_clf.fit(X_train_fold, y_train_fold)
 
                         tmp_embeddings.append(
-                            self.tabpfn_clf.get_embeddings(X_val_fold, data_source="test")
+                            self.tabpfn_clf.get_embeddings(
+                                X_val_fold, data_source="test"
+                            )
                         )
                     elif col_idx in numeric_cols_idx:
                         self.tabpfn_reg.fit(X_train_fold, y_train_fold)
 
                         tmp_embeddings.append(
-                            self.tabpfn_reg.get_embeddings(X_val_fold, data_source="test")
+                            self.tabpfn_reg.get_embeddings(
+                                X_val_fold, data_source="test"
+                            )
                         )
                 embeddings.append(np.concatenate(tmp_embeddings, axis=1))
 

@@ -1,6 +1,5 @@
 import torch
 
-
 from utils.config import EmbAggregation
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.interaction import RowInteraction
@@ -222,6 +221,19 @@ def combine_col_embedder_row_interactor(
 
 
 def get_row_embeddings_model(state_dict: dict, config: dict):
+    """
+    Builds and returns the row embeddings model by combining the column embeddings
+    model and row interaction model. This function uses given state dictionary and
+    configuration to initialize the column embedder and row interaction models,
+    then combines them to create the final model.
+
+    Args:
+        state_dict (dict): State dictionary containing model parameters.
+        config (dict): Configuration dictionary containing model settings.
+
+    Returns:
+        object: The combined row embeddings model.
+    """
     col_emb_model = get_col_embedding(state_dict, config)
     row_interactor = get_row_interaction(state_dict, config)
     return combine_col_embedder_row_interactor(col_emb_model, row_interactor)

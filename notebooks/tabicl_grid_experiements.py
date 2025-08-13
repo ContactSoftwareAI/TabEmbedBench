@@ -48,7 +48,6 @@ def _(pl, train_test_split):
 
     le = LabelEncoder()
 
-
     grid_stability = pl.read_csv("./data/Data_for_UCI_named.csv")
 
     grid_stability_features = grid_stability.select(pl.all().exclude(["stab", "stabf"]))
@@ -57,10 +56,7 @@ def _(pl, train_test_split):
     reg_targets = grid_stability.select("stab")
 
     X_train, X_test, y_train, y_test = train_test_split(
-        grid_stability_features,
-        clf_targets,
-        test_size=0.2,
-        random_state=42
+        grid_stability_features, clf_targets, test_size=0.2, random_state=42
     )
 
     X_train = X_train.to_torch().float().unsqueeze(0)
@@ -91,13 +87,13 @@ def _(X_test_embed, X_train_embed, pl, y_test, y_train):
     score_per_neighbors["roc_auc_score"] = []
 
     for k in range(150):
-        knn = KNeighborsClassifier(n_neighbors=k+1)
+        knn = KNeighborsClassifier(n_neighbors=k + 1)
 
         knn.fit(X_train_embed.squeeze().detach().numpy(), y_train)
 
         y_pred = knn.predict(X_test_embed.squeeze().detach().numpy())
 
-        score_per_neighbors["neighbor"].append(k+1)
+        score_per_neighbors["neighbor"].append(k + 1)
         score_per_neighbors["roc_auc_score"].append(roc_auc_score(y_test, y_pred))
 
     result_df = pl.from_dict(score_per_neighbors)
