@@ -34,30 +34,33 @@ def download_adbench_tabular_datasets(save_path: Optional[str] = None) -> None:
 
     # Save zip file temporarily
     zip_path = save_path / "adbench_temp.zip"
-    with open(zip_path, 'wb') as f:
+    with open(zip_path, "wb") as f:
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
 
     # Extract only the Classical datasets
     print("Extracting datasets...")
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
         # Get all files in the Classical datasets directory
-        classical_files = [f for f in zip_ref.namelist()
-                           if f.startswith('ADBench-main/adbench/datasets/Classical/')]
+        classical_files = [
+            f
+            for f in zip_ref.namelist()
+            if f.startswith("ADBench-main/adbench/datasets/Classical/")
+        ]
 
         for file_path in classical_files:
-            if file_path.endswith('/'):  # Skip directories
+            if file_path.endswith("/"):  # Skip directories
                 continue
 
             # Extract relative path after Classical/
-            relative_path = file_path.split('Classical/', 1)[1]
+            relative_path = file_path.split("Classical/", 1)[1]
             target_path = save_path / relative_path
 
             # Create directory if needed
             target_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Extract file
-            with zip_ref.open(file_path) as source, open(target_path, 'wb') as target:
+            with zip_ref.open(file_path) as source, open(target_path, "wb") as target:
                 target.write(source.read())
 
     # Clean up temporary zip file
@@ -65,7 +68,7 @@ def download_adbench_tabular_datasets(save_path: Optional[str] = None) -> None:
     print(f"ADBench tabular datasets downloaded to: {save_path}")
 
 
-def get_data_description(X: np.ndarray, y: np.ndarray) -> dict[str, int | float]:
+def get_data_description(X: np.ndarray, y: np.ndarray, dataset_name: str) -> dict[str, str | int | float]:
     """
     Provides a summary of the dataset by computing statistical information
     such as the number of samples, features, anomalies, and the anomaly ratio.
@@ -83,10 +86,11 @@ def get_data_description(X: np.ndarray, y: np.ndarray) -> dict[str, int | float]
             - "Anomaly Ratio (%)": Percentage of anomalies in the dataset.
     """
     des_dict = {}
+    des_dict["Dataset"] = dataset_name
     des_dict["Samples"] = X.shape[0]
     des_dict["Features"] = X.shape[1]
     des_dict["Anomalies"] = sum(y)
-    des_dict["Anomaly Ratio (%)"] = round(sum(y)/len(y)*100, 2)
+    des_dict["Anomaly Ratio (%)"] = round(sum(y) / len(y) * 100, 2)
 
     return des_dict
 
@@ -98,6 +102,7 @@ def read_data(data_path: Union[str, Path]) -> tuple[np.ndarray, np.ndarray]:
     y = data["y"]
 
     return X, y
+
 
 def select_random_combined_datasets(datasets_dir: str) -> list[Union[str, Path]]:
     """
