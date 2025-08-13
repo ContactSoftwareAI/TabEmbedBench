@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 from embedding_utils import embeddings_aggregation
 from utils.preprocess_utils import infer_categorical_columns
@@ -20,7 +21,7 @@ class UniversalTabPFNEmbedding:
 
     def get_embeddings(
         self,
-        X: np.ndarray,
+        X: Union[np.ndarray, pd.DataFrame],
         cat_cols: list[Union[int, str]] | None = None,
         numeric_cols: list[Union[int, str]] | None = None,
     ) -> list[np.ndarray]:
@@ -29,6 +30,10 @@ class UniversalTabPFNEmbedding:
 
         if cat_cols is None:
             cat_cols_idx = infer_categorical_columns(X)
+        elif isinstance(cat_cols[0], str) and isinstance(X, pd.DataFrame):
+            cat_cols_idx = [
+                X.get_loc(col_name) for col_name in cat_cols
+            ]
         else:
             cat_cols_idx = cat_cols
 
@@ -39,8 +44,14 @@ class UniversalTabPFNEmbedding:
                 numeric_cols_idx = [
                     idx for idx in range(X.shape[-1]) if idx not in cat_cols
                 ]
+        elif isinstance(num_cols[0], str) and isinstance(X, pd.DataFrame):
+            numeric_cols_idx = [
+                X.get_loc(col_name) for col_name in numeric_cols
+            ]
         else:
             numeric_cols_idx = numeric_cols
+
+        X = X.to_numpy()
 
         embeddings = []
 

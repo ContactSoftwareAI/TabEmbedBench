@@ -30,7 +30,9 @@ def run_experiment(
         else:
             outlier_algo = LocalOutlierFactor(**unsup_outlier_config)
     else:
-        raise NotImplementedError("Other unsupervised outlier detection algorithms are not implemented yet.")
+        raise NotImplementedError(
+            "Other unsupervised outlier detection algorithms are not implemented yet."
+        )
 
     if type(X_train_embed) == torch.Tensor:
         if len(X_train_embed.shape) == 3:
@@ -48,7 +50,9 @@ def run_experiment(
     return y_pred, outlier_algo.negative_outlier_factor_
 
 
-def get_embeddings(model, X: Union[torch.Tensor, np.ndarray]) -> Union[torch.Tensor, np.ndarray]:
+def get_embeddings(
+    model, X: Union[torch.Tensor, np.ndarray]
+) -> Union[torch.Tensor, np.ndarray]:
     if hasattr(model, "forward"):
         return model.forward(X)
     elif hasattr(model, "transform"):
@@ -58,6 +62,7 @@ def get_embeddings(model, X: Union[torch.Tensor, np.ndarray]) -> Union[torch.Ten
             return model.fit_transform(X)
     else:
         raise ValueError("Model does not have a forward or transform method.")
+
 
 def get_unsupervised_outlier_algorithm(unsup_outlier_config):
     raise NotImplementedError
