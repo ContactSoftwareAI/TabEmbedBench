@@ -1,7 +1,7 @@
 import torch
 
 
-from config import EmbAggregation
+from utils.config import EmbAggregation
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.interaction import RowInteraction
 

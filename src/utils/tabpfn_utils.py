@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from embedding_utils import embeddings_aggregation
+from utils.embedding_utils import embeddings_aggregation
 from utils.preprocess_utils import infer_categorical_columns
 from sklearn.model_selection import KFold
 from tabpfn import TabPFNRegressor, TabPFNClassifier
@@ -75,7 +75,7 @@ class UniversalTabPFNEmbedding:
                 raise NotImplementedError
             else:
                 numeric_cols_idx = [
-                    idx for idx in range(X.shape[-1]) if idx not in cat_cols
+                    idx for idx in range(X.shape[-1]) if idx not in cat_cols_idx
                 ]
         elif isinstance(numeric_cols[0], str) and isinstance(X, pd.DataFrame):
             numeric_cols_idx = [

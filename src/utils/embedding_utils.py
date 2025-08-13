@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from config import EmbAggregation
+from utils.config import EmbAggregation
 from typing import Union
 
 def get_embeddings_aggregation(embeddings: Union[list[np.ndarray], list[torch.Tensor]], agg_func: str = "mean"):
