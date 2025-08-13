@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 
-from utils.embedding_utils import embeddings_aggregation
 from utils.preprocess_utils import infer_categorical_columns
 from sklearn.model_selection import KFold
 from tabpfn import TabPFNRegressor, TabPFNClassifier
@@ -93,7 +92,7 @@ class UniversalTabPFNEmbedding:
 
             mask = np.ones(X.shape[-1], dtype=bool)
             mask[col_idx] = False
-
+            tmp_embeddings = []
             if self.n_fold == 0:
                 if col_idx in cat_cols_idx:
                     self.tabpfn_clf.fit(X[:, mask], target)
@@ -104,7 +103,6 @@ class UniversalTabPFNEmbedding:
                 embeddings.append(tmp_embeddings)
             else:
                 kf = KFold(n_splits=self.n_fold, shuffle=False)
-                tmp_embeddings = []
                 for train_idx, val_idx in kf.split(X):
                     X_train_fold = X[train_idx][:, mask]
                     X_val_fold = X[val_idx][:, mask]
@@ -122,6 +120,6 @@ class UniversalTabPFNEmbedding:
                         tmp_embeddings.append(
                             self.tabpfn_reg.get_embeddings(X_val_fold, data_source="test")
                         )
-            embeddings.append(np.concatenate(tmp_embeddings, axis=1))
+                embeddings.append(np.concatenate(tmp_embeddings, axis=1))
 
         return embeddings
