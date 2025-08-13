@@ -68,7 +68,7 @@ def download_adbench_tabular_datasets(save_path: Optional[str] = None) -> None:
     print(f"ADBench tabular datasets downloaded to: {save_path}")
 
 
-def get_data_description(X: np.ndarray, y: np.ndarray) -> dict[str, int | float]:
+def get_data_description(X: np.ndarray, y: np.ndarray, dataset_name: str) -> dict[str, str | int | float]:
     """
     Provides a summary of the dataset by computing statistical information
     such as the number of samples, features, anomalies, and the anomaly ratio.
@@ -86,6 +86,7 @@ def get_data_description(X: np.ndarray, y: np.ndarray) -> dict[str, int | float]
             - "Anomaly Ratio (%)": Percentage of anomalies in the dataset.
     """
     des_dict = {}
+    des_dict["Dataset"] = dataset_name
     des_dict["Samples"] = X.shape[0]
     des_dict["Features"] = X.shape[1]
     des_dict["Anomalies"] = sum(y)

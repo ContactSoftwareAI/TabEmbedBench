@@ -1,14 +1,23 @@
+import numpy as np
+import polars as pl
 import torch
 
 from sklearn.neighbors import LocalOutlierFactor
+from sklearn.base import BaseEstimator
+from typing import Union
 
 
-def run_benchmark(
-    model: torch.nn.Module,
-    X_train: torch.Tensor,
-    y_train: torch.Tensor,
-    X_test: torch.Tensor,
-    y_test: torch.Tensor,
+def run_benchmark(model: Union[torch.nn.Module, BaseEstimator]) -> pl.DataFrame:
+    pass
+
+
+def run_experiment(
+    model: Union[torch.nn.Module, BaseEstimator],
+    X_train: Union[torch.Tensor, np.ndarray],
+    y_train: Union[torch.Tensor, np.ndarray],
+    X_test: Union[torch.Tensor, np.ndarray],
+    y_test: Union[torch.Tensor, np.ndarray],
+    dataset_description: dict,
     unsup_outlier_algo: str = "local_outlier_factor",
     unsup_outlier_config: dict = None,
 ):
@@ -20,16 +29,35 @@ def run_benchmark(
             outlier_algo = LocalOutlierFactor(n_neighbors=10, contamination=0.1)
         else:
             outlier_algo = LocalOutlierFactor(**unsup_outlier_config)
+    else:
+        raise NotImplementedError("Other unsupervised outlier detection algorithms are not implemented yet.")
 
-    outlier_algo.fit(X_train_embed.squeeze().detach().numpy())
+    if type(X_train_embed) == torch.Tensor:
+        if len(X_train_embed.shape) == 3:
+            X_train_embed = X_train_embed.squeeze()
+        X_train_embed = X_train_embed.detach().numpy()
+    if type(X_test_embed) == torch.Tensor:
+        if len(X_test_embed.shape) == 3:
+            X_test_embed = X_test_embed.squeeze()
+        X_test_embed = X_test_embed.detach().numpy()
 
-    y_pred = outlier_algo.predict(X_test_embed.squeeze().detach().numpy())
+    outlier_algo.fit(X_train_embed)
+
+    y_pred = outlier_algo.predict(X_test_embed)
 
     return y_pred, outlier_algo.negative_outlier_factor_
 
 
-def get_embeddings(model, X: torch.Tensor) -> torch.Tensor:
+def get_embeddings(model, X: Union[torch.Tensor, np.ndarray]) -> Union[torch.Tensor, np.ndarray]:
     if hasattr(model, "forward"):
         return model.forward(X)
-    if hasattr(model, "transform"):
-        return model.transform(X)
+    elif hasattr(model, "transform"):
+        if model.is_fitted:
+            return model.transform(X)
+        else:
+            return model.fit_transform(X)
+    else:
+        raise ValueError("Model does not have a forward or transform method.")
+
+def get_unsupervised_outlier_algorithm(unsup_outlier_config):
+    raise NotImplementedError
