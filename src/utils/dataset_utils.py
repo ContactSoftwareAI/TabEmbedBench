@@ -12,7 +12,7 @@ from typing import Optional, Union
 ADBENCH_URL = "https://github.com/Minqi824/ADBench/archive/refs/heads/main.zip"
 
 
-def download_adbench_tabular_datasets(save_path: Optional[str] = None) -> None:
+def download_adbench_tabular_datasets(save_path: Optional[str, Path] = None) -> None:
     """
     Downloads tabular datasets for ADBench from the specified GitHub repository and saves them to the
     specified path. If no path is provided, it defaults to './data/adbench_tabular_datasets'. If the

@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.14.17"
+__generated_with = "0.14.16"
 app = marimo.App(width="medium")
 
 
@@ -37,6 +37,11 @@ def _(get_row_embeddings_model, torch):
 @app.cell
 def _(mo):
     mo.md(r"""## Grid Stability""")
+    return
+
+
+@app.cell
+def _():
     return
 
 
@@ -104,6 +109,28 @@ def _(result_df):
     import plotly.express as px
 
     px.line(data_frame=result_df, x="neighbor", y="roc_auc_score")
+    return
+
+
+@app.cell
+def _():
+    import numpy as np
+
+    data = np.load("/Users/lkl/PycharmProjects/TabICLExpierments/data/adbench_tabular_datasets/3_backdoor.npz")
+    return (data,)
+
+
+@app.cell
+def _(data):
+    X = data['X']
+
+    y = data['y']
+    return (X,)
+
+
+@app.cell
+def _(X):
+    X
     return
 
 
