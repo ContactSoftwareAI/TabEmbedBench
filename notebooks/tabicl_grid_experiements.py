@@ -31,8 +31,6 @@ def _(get_row_embeddings_model, torch):
 
     row_embedder = get_row_embeddings_model(state_dict=state_dict, config=config)
 
-    row_embedder.eval()
-
     return (row_embedder,)
 
 
