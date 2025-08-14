@@ -31,11 +31,9 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
     """
 
     def __init__(
-        self,
-        tabpfn_clf: TabPFNClassifier,
-        tabpfn_reg: TabPFNRegressor,
-        n_fold: int = 0,
+        self, tabpfn_clf: TabPFNClassifier, tabpfn_reg: TabPFNRegressor, n_fold: int = 0
     ) -> None:
+        super().__init__()
         self.tabpfn_clf = tabpfn_clf
         self.tabpfn_reg = tabpfn_reg
         self.n_fold = n_fold
@@ -133,5 +131,20 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
 
         return embeddings
 
-    def compute_embeddings(self, X: np.ndarray, agg_func: Union[str, EmbAggregation] = "mean") -> list[ndarray]:
+    def compute_embeddings(
+        self, X: np.ndarray, agg_func: Union[str, EmbAggregation] = "mean"
+    ) -> np.ndarray:
+        """
+        Computes the embeddings by aggregating the extracted embeddings using the specified aggregation
+        function.
+
+        Args:
+            X (np.ndarray): Input data for which embeddings are to be computed.
+            agg_func (Union[str, EmbAggregation]): Aggregation function to use for combining the
+                extracted embeddings. Accepted values are a string specifying the function name
+                (e.g., "mean") or an instance of EmbAggregation.
+
+        Returns:
+            ndarray: The aggregated embedding vectors for the input data.
+        """
         return compute_embeddings_aggregation(self.get_embeddings(X), agg_func)

@@ -3,6 +3,7 @@ from typing import Union, Optional, Any, Dict, List
 
 import numpy as np
 
+
 class BaseEmbeddingGenerator(ABC):
     def __init__(self):
         pass

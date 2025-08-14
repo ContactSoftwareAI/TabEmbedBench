@@ -14,11 +14,11 @@ from utils.dataset_utils import download_adbench_tabular_datasets, get_data_desc
 
 def run_outlier_benchmark(
     model: Union[nn.Module, BaseEstimator],
-    dataset_paths: Optional[str,Path] = None,
+    dataset_paths: Optional[str, Path] = None,
     predict_method: str | callable = "predict",
     random_state: int = 42,
     is_tensor: bool = True,
-    device="cpu"
+    device="cpu",
 ) -> pl.DataFrame:
     if dataset_paths is None:
         dataset_paths = Path("data/adbench_tabular_datasets")
@@ -33,14 +33,16 @@ def run_outlier_benchmark(
         print(f"Running benchmark for {dataset_file.name}...")
         dataset = np.load(dataset_file)
 
-        X = dataset['X']
-        y = dataset['y']
+        X = dataset["X"]
+        y = dataset["y"]
 
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=random_state
         )
 
-        dataset_description = get_data_description(dataset["X"], dataset["y"], dataset_file.stem)
+        dataset_description = get_data_description(
+            dataset["X"], dataset["y"], dataset_file.stem
+        )
 
         if is_tensor:
             X_train = torch.from_numpy(X_train).to(device=device).float()
@@ -102,9 +104,7 @@ def compute_metrics(y_true, y_pred):
     raise NotImplementedError
 
 
-def get_embeddings(
-    model, X: Union[torch.Tensor, np.ndarray]
-) -> Any | None:
+def get_embeddings(model, X: Union[torch.Tensor, np.ndarray]) -> Any | None:
     if isinstance(model, nn.Module):
         return model.forward(X)
     elif isinstance(model, BaseEstimator):
@@ -115,7 +115,9 @@ def get_embeddings(
         else:
             raise ValueError("Model is not a valid estimator.")
     else:
-        raise ValueError("Model is not a valid estimator or a valid neural network model.")
+        raise ValueError(
+            "Model is not a valid estimator or a valid neural network model."
+        )
 
 
 def get_unsupervised_outlier_algorithm(unsup_outlier_config):

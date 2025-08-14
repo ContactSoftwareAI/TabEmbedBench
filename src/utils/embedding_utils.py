@@ -6,9 +6,7 @@ from typing import Union
 
 
 def compute_embeddings_aggregation(
-    embeddings: Union[list[np.ndarray],
-    list[torch.Tensor]],
-    agg_func: str = "mean"
+    embeddings: Union[list[np.ndarray], list[torch.Tensor]], agg_func: str = "mean"
 ):
     """
     Aggregates a list of embeddings using the specified aggregation function.
