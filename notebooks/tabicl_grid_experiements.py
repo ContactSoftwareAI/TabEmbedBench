@@ -10,7 +10,7 @@ def _():
     import polars as pl
     import torch
 
-    from utils.tabicl_utils import get_row_embeddings_model
+    from embeddings.tabicl.tabicl_utils import get_row_embeddings_model
     from sklearn.model_selection import train_test_split
 
     return get_row_embeddings_model, mo, pl, torch, train_test_split
