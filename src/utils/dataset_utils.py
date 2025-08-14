@@ -131,5 +131,6 @@ def select_random_combined_datasets(datasets_dir: str) -> list[Union[str, Path]]
     return random_datasets
 
 
-def prepare_data_for_torch(X: np.ndarray, y: np.ndarray):
-    pass
+def prepare_data_for_torch(X: np.ndarray, device: str = "cpu") -> torch.Tensor:
+    X = torch.from_numpy(X).to(device)
+    return X

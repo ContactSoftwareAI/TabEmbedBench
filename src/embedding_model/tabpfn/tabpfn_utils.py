@@ -1,13 +1,17 @@
 import numpy as np
 import pandas as pd
+from numpy import ndarray
 
+from embedding_model.base import BaseEmbeddingGenerator
+from utils.config import EmbAggregation
+from utils.embedding_utils import compute_embeddings_aggregation
 from utils.preprocess_utils import infer_categorical_columns
 from sklearn.model_selection import KFold
 from tabpfn import TabPFNRegressor, TabPFNClassifier
 from typing import Union
 
 
-class UniversalTabPFNEmbedding:
+class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
     """
     UniversalTabPFNEmbedding provides functionality to generate embeddings for tabular
     data using TabPFNClassifier and TabPFNRegressor models.
@@ -128,3 +132,6 @@ class UniversalTabPFNEmbedding:
                 embeddings.append(np.concatenate(tmp_embeddings, axis=1))
 
         return embeddings
+
+    def compute_embeddings(self, X: np.ndarray, agg_func: Union[str, EmbAggregation] = "mean") -> list[ndarray]:
+        return compute_embeddings_aggregation(self.get_embeddings(X), agg_func)

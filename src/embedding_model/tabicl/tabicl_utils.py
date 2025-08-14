@@ -1,6 +1,8 @@
+import numpy as np
 import torch
 import inspect
 
+from embedding_model.base import BaseEmbeddingGenerator
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
@@ -8,7 +10,7 @@ from torch import nn
 from typing import Union, Optional, List
 
 
-class TabICLEmbedding(nn.Module):
+class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
     """
     TabICLEmbedding is a neural network module for tabular data embedding. It is
     based on the TabICL architecture and uses the first two stages of TabICL to
@@ -137,6 +139,24 @@ class TabICLEmbedding(nn.Module):
             column_representations, mgr_config=inference_config.ROW_CONFIG
         )
         return row_representations
+
+    def compute_embeddings(self, X: np.ndarray) -> np.ndarray:
+        """
+        Computes the embeddings for the given input array using the model's forward method.
+
+        The method takes an input array and uses PyTorch to convert it into a tensor, passes
+        it through the forward method of the model, and finally detaches and converts the
+        result back to a NumPy array.
+
+        Args:
+            X (np.ndarray): The input array for which embeddings are to be computed.
+
+        Returns:
+            np.ndarray: The computed embeddings as a NumPy array.
+        """
+        X = torch.from_numpy(X).float()
+        embeddings = self.forward(X).detach().numpy()
+        return embeddings
 
 
 def filter_params_for_class(cls, params_dict):
