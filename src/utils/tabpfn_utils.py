@@ -4,7 +4,7 @@ import pandas as pd
 from utils.preprocess_utils import infer_categorical_columns
 from sklearn.model_selection import KFold
 from tabpfn import TabPFNRegressor, TabPFNClassifier
-from typing import Union
+from typing import Union, Tuple
 
 
 class UniversalTabPFNEmbedding:
@@ -41,25 +41,37 @@ class UniversalTabPFNEmbedding:
         X: Union[np.ndarray, pd.DataFrame],
         cat_cols: list[Union[int, str]] | None = None,
         numeric_cols: list[Union[int, str]] | None = None,
-    ) -> list[np.ndarray]:
+        mixture: bool = True,
+    ) -> Union[list[np.ndarray], Tuple[list[np.ndarray], list[np.ndarray]]]:
         """
-        Generates embeddings for each column of the provided dataset using trained
-        models. The method processes categorical and numeric columns separately
-        based on specified indices or inferred column types.
+        Computes embeddings for the provided dataset based on categorical and numeric columns.
+        If the `mixture` flag is `True`, it computes combined embeddings for both categorical
+        and numeric data together. Otherwise, it separates the embeddings for categorical
+        and numeric data.
 
         Args:
-            X (Union[np.ndarray, pd.DataFrame]): Input dataset, either as a NumPy array
-                or a pandas DataFrame.
-            cat_cols (list[Union[int, str]] | None): List of indices or names (if
-                X is a DataFrame) representing categorical columns. If None,
-                categorical columns will be inferred.
-            numeric_cols (list[Union[int, str]] | None): List of indices or names (if
-                X is a DataFrame) representing numeric columns. If None, numeric columns
-                will be inferred based on categorical column indices.
+            X (Union[np.ndarray, pd.DataFrame]): Input data for which embeddings need to be
+                computed. Can be a NumPy array or a Pandas DataFrame.
+            cat_cols (list[Union[int, str]] | None): List of column indices or names identifying
+                categorical columns. If None, the categorical columns will be inferred
+                automatically from the input data.
+            numeric_cols (list[Union[int, str]] | None): List of column indices or names
+                identifying numeric columns. If None, the numeric columns will be automatically
+                derived based on the categorical columns provided or inferred.
+            mixture (bool): Flag indicating whether to compute mixed embeddings for both
+                categorical and numeric data (`True`), or separate embeddings for each type
+                (`False`).
 
         Returns:
-            list[np.ndarray]: A list where each element is an array containing
-            embeddings for a corresponding column of the dataset.
+            Union[list[np.ndarray], Tuple[list[np.ndarray], list[np.ndarray]]]: If `mixture` is
+                `True`, returns a list of combined embeddings. If `mixture` is `False`, returns
+                a tuple where the first element is a list of embeddings for categorical data and
+                the second element is a list of embeddings for numeric data.
+
+        Raises:
+            NotImplementedError: If `numeric_cols` is None and no categorical columns are
+                provided or inferred, making it impossible to automatically identify numeric
+                columns.
         """
         if cat_cols is None:
             cat_cols_idx = infer_categorical_columns(X)
@@ -82,6 +94,45 @@ class UniversalTabPFNEmbedding:
 
         X = X.to_numpy()
 
+        if mixture:
+            return self._compute_embeddings(X, cat_cols_idx, numeric_cols_idx)
+        else:
+            cat_mask = np.ones(X.shape[-1], dtype=bool)
+            cat_mask[numeric_cols_idx] = False
+            num_mask = np.ones(X.shape[-1], dtype=bool)
+            num_mask[cat_cols_idx] = False
+
+            X_cat = X[:, cat_mask]
+            X_num = X[:, num_mask]
+
+            cat_embeddings = self._compute_embeddings(X_cat, range(X_cat.shape[-1]), [])
+            num_embeddings = self._compute_embeddings(X_num, [], range(X_num.shape[-1]))
+
+            return cat_embeddings, num_embeddings
+
+    def _compute_embeddings(
+        self,
+        X: np.ndarray,
+        cat_cols_idx: Union[list[int], range],
+        numeric_cols_idx: Union[list[int], range],
+    ) -> list[np.ndarray]:
+        """
+        Computes embeddings for each column in the dataset based on categorical or numeric
+        classification, leveraging either classifier or regressor models. Handles datasets with
+        either no folds or cross-validation using k-fold splits.
+
+        Args:
+            X (np.ndarray): The dataset array where each column represents a feature and
+                each row represents a sample.
+            cat_cols_idx (list[int]): The list of indices representing the categorical features
+                in the dataset.
+            numeric_cols_idx (list[int]): The list of indices representing the numeric features
+                in the dataset.
+
+        Returns:
+            list[np.ndarray]: A list of numpy arrays where each element contains the embeddings
+                for the corresponding feature in the dataset.
+        """
         embeddings = []
 
         for col_idx in range(X.shape[-1]):
@@ -89,6 +140,7 @@ class UniversalTabPFNEmbedding:
 
             mask = np.ones(X.shape[-1], dtype=bool)
             mask[col_idx] = False
+
             tmp_embeddings = []
             if self.n_fold == 0:
                 if col_idx in cat_cols_idx:
