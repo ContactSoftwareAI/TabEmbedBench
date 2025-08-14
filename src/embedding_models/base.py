@@ -17,6 +17,7 @@ class BaseEmbeddingGenerator(ABC):
             X: np.ndarray
 
         Returns:
+            np.ndarray: Embeddings for the input data.
 
         """
-        pass
+        raise NotImplementedError

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from numpy import ndarray
 
-from embedding_model.base import BaseEmbeddingGenerator
+from embedding_models.base import BaseEmbeddingGenerator
 from utils.config import EmbAggregation
 from utils.embedding_utils import compute_embeddings_aggregation
 from utils.preprocess_utils import infer_categorical_columns
