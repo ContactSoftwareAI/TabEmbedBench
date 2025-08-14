@@ -107,7 +107,7 @@ class TabICLEmbedding(nn.Module):
     def forward(
         self,
         X: torch.Tensor,
-        feature_shuffle: Optional[List[List[int]]] = None,
+        feature_shuffles: Optional[List[List[int]]] = None,
         inference_config: Optional[InferenceConfig] = None,
     ) -> torch.Tensor:
         """
@@ -117,7 +117,7 @@ class TabICLEmbedding(nn.Module):
 
         Args:
             X (torch.Tensor): The input tensor for the model.
-            feature_shuffle (Optional[List[List[int]]]): Optional feature shuffling
+            feature_shuffles (Optional[List[List[int]]]): Optional feature shuffling
                 configurations to modify input feature representation.
             inference_config (Optional[InferenceConfig]): Configuration for inference
                 detailing how the column and row representations should be generated.
@@ -130,7 +130,7 @@ class TabICLEmbedding(nn.Module):
             inference_config = InferenceConfig()
 
         column_representations = self.col_embedder(
-            X, feature_shuffle=feature_shuffle, mgr_config=inference_config.COL_CONFIG
+            X, feature_shuffles=feature_shuffles, mgr_config=inference_config.COL_CONFIG
         )
 
         row_representations = self.row_interactor(
