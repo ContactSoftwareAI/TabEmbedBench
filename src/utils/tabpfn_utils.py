@@ -146,12 +146,12 @@ class UniversalTabPFNEmbedding:
                 if col_idx in cat_cols_idx:
                     self.tabpfn_clf.fit(X[:, mask], target)
                     tmp_embeddings = self.tabpfn_clf.get_embeddings(
-                        X[:, mask], data_source="test"
+                        X[:, mask]
                     )
                 elif col_idx in numeric_cols_idx:
                     self.tabpfn_reg.fit(X[:, mask], target)
                     tmp_embeddings = self.tabpfn_reg.get_embeddings(
-                        X[:, mask], data_source="test"
+                        X[:, mask]
                     )
                 embeddings.append(tmp_embeddings)
             else:
@@ -166,7 +166,7 @@ class UniversalTabPFNEmbedding:
 
                         tmp_embeddings.append(
                             self.tabpfn_clf.get_embeddings(
-                                X_val_fold, data_source="test"
+                                X_val_fold
                             )
                         )
                     elif col_idx in numeric_cols_idx:
