@@ -1,288 +1,184 @@
 import torch
+import inspect
 
-from utils.config import EmbAggregation
 from tabicl.model.embedding import ColEmbedding
+from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
+from torch import nn
+from typing import Union, Optional, List
 
 
-class DataSetEmbeddings(ColEmbedding):
+class TabICLEmbedding(nn.Module):
     """
-    Provides embeddings for datasets with various aggregation methods.
+    TabICLEmbedding is a neural network module for tabular data embedding. It is
+    based on the TabICL architecture and uses the first two stages of TabICL to
+    generate embeddings for the rows.
 
-    This class inherits from ColEmbedding and is used to generate embeddings for dataset
-    columns with adjustable settings for aggregation methods, transformer blocks, and other
-    embedding parameters. It includes functionality for aggregation using mean, concatenation,
-    or a specified percentile and ensures its parameters are not trainable by default. This
-    class is evaluated in inference mode. It requires the weights from the tabicl model to be
-    loaded before inference.
+    This class combines the column embedding and row interaction modules into a
+    single model for generating row embeddings. It uses the inference forward method
+    from TabICL to generate row representations from the input data. It is not intended
+    for training. It is designed to easily load the state dictionary and config
+    from a trained TabICL model.
 
     Attributes:
-        percentile (float): Percentile value to use for aggregation when the aggregation
-            method is set to `ColEmbAggregation.PERCENTILE`.
-        col_emb_aggregation (ColEmbAggregation): Specifies the method to aggregate column
-            embeddings. Options include MEAN, CONCAT, and PERCENTILE.
+        col_embedder (ColEmbedding): Module responsible for creating embeddings
+            for columns in the input data.
+        row_interactor (RowInteraction): Module responsible for processing the
+            column embeddings and generating the final row-wise representations.
     """
 
     def __init__(
         self,
-        embed_dim: int,
-        num_blocks: int,
-        nhead: int,
-        dim_feedforward: int,
-        num_inds: int,
+        embed_dim: int = 128,
+        col_num_blocks: int = 3,
+        col_nhead: int = 4,
+        col_num_inds: int = 128,
+        row_num_blocks: int = 3,
+        row_nhead: int = 8,
+        row_num_cls: int = 4,
+        row_rope_base: float = 100000,
+        ff_factor: int = 2,
         dropout: float = 0.0,
-        activation: str = "gelu",
+        activation: Union[str, callable] = "gelu",
         norm_first: bool = True,
-        reserve_cls_tokens: int = 4,
-        col_emb_aggregation: EmbAggregation = EmbAggregation.MEAN,
-        percentile: float = 0.75,
+        **kwargs,
     ):
-        super().__init__(
-            embed_dim,
-            num_blocks,
-            nhead=nhead,
-            dim_feedforward=dim_feedforward,
-            num_inds=num_inds,
+        """
+        Initializes the model configuration by setting up the column embedding and row
+        interaction modules with the specified parameters. Configurations are used to
+        define the behavior of each module and the overall model.
+
+        Args:
+            embed_dim (int): Embedding dimension for both column embedding and row
+                interaction modules.
+            col_num_blocks (int): Number of blocks in the column embedding module.
+            col_nhead (int): Number of attention heads in the column embedding module.
+            col_num_inds (int): Number of induced tokens for column embedding.
+            row_num_blocks (int): Number of blocks in the row interaction module.
+            row_nhead (int): Number of attention heads in the row interaction module.
+            row_num_cls (int): Number of classification tokens in the row interaction
+                module.
+            row_rope_base (float): Base value used for rotary position embedding
+                (RoPE) in the row interaction module.
+            ff_factor (int): Feedforward dimension factor used to scale the size of the
+                intermediate layer in both modules.
+            dropout (float): Dropout probability applied within the modules to prevent
+                overfitting.
+            activation (Union[str, callable]): Activation function used in feedforward
+                layers of the modules. Can be a string or a callable function.
+            norm_first (bool): If True, applies layer normalization before other
+                operations in each layer.
+        """
+        super().__init__()
+
+        self.col_embedder = ColEmbedding(
+            embed_dim=embed_dim,
+            num_blocks=col_num_blocks,
+            nhead=col_nhead,
+            num_inds=col_num_inds,
+            dim_feedforward=embed_dim * ff_factor,
             dropout=dropout,
             activation=activation,
             norm_first=norm_first,
-            reserve_cls_tokens=reserve_cls_tokens,
+            reserve_cls_tokens=row_num_cls,
         )
 
-        self.percentile = percentile
+        self.row_interactor = RowInteraction(
+            embed_dim=embed_dim,
+            num_blocks=row_num_blocks,
+            nhead=row_nhead,
+            num_cls=row_num_cls,
+            rope_base=row_rope_base,
+            dim_feedforward=embed_dim * ff_factor,
+            dropout=dropout,
+            activation=activation,
+            norm_first=norm_first,
+        )
 
-        if isinstance(col_emb_aggregation, str):
-            try:
-                self.col_emb_aggregation = EmbAggregation(col_emb_aggregation)
-            except ValueError:
-                valid_values = [e.value for e in EmbAggregation]
-                raise ValueError(
-                    f"Invalid aggregation method: {col_emb_aggregation}. "
-                    f"Valid options are: {valid_values}"
-                )
-        else:
-            self.col_emb_aggregation = col_emb_aggregation
-
-        for param in self.parameters():
+        for param in self.col_embedder.parameters():
             param.requires_grad = False
 
+        for param in self.row_interactor.parameters():
+            param.requires_grad = False
+
+        # Set to eval mode
         self.eval()
 
-    def forward(self, X: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self,
+        X: torch.Tensor,
+        feature_shuffle: Optional[List[List[int]]] = None,
+        inference_config: Optional[InferenceConfig] = None,
+    ) -> torch.Tensor:
         """
-        Computes a forward pass for input embeddings based on the specified column
-        embedding aggregation method. The method processes the input tensor and outputs
-        a tensor based on one of the aggregation strategies: mean, concatenation,
-        percentile, or retaining the original column embeddings.
-
-        If the aggregation method is set to COLUMN, the output shape will be (B, C, D), where
-            - B is the batch size,
-            - C is the number of columns,
-            - D is the embedding dimension.
-        Otherwise, the output shape will be (B, D).
+        Performs the forward pass through the model, generating row representations
+        from the input data. This method applies column embedding followed by row
+        interaction to derive the final tensor output.
 
         Args:
-            X: torch.Tensor
-                The input tensor for the forward pass. It has the shape (B, N, C), where
-                    - B is the batch size,
-                    - N is the number of samples per datasets,
-                    - C is the number of columns/features.
-            **kwargs: dict
-                Additional arguments passed to the method.
+            X (torch.Tensor): The input tensor for the model.
+            feature_shuffle (Optional[List[List[int]]]): Optional feature shuffling
+                configurations to modify input feature representation.
+            inference_config (Optional[InferenceConfig]): Configuration for inference
+                detailing how the column and row representations should be generated.
 
         Returns:
-            torch.Tensor:
-                Processed tensor based on the specified column embedding aggregation
-                method.
+            torch.Tensor: The computed tensor of row representations after applying the
+                prescribed transformations.
         """
-        X = super().forward(X)
+        if inference_config is None:
+            inference_config = InferenceConfig()
 
-        if self.col_emb_aggregation == EmbAggregation.MEAN:
-            return torch.mean(X, dim=1)
-        elif self.col_emb_aggregation == EmbAggregation.CONCAT:
-            return torch.flatten(X, start_dim=1)
-        elif self.col_emb_aggregation == EmbAggregation.PERCENTILE:
-            return torch.quantile(X, q=self.percentile, dim=1)
-        elif self.col_emb_aggregation == EmbAggregation.COLUMN:
-            return X
+        column_representations = self.col_embedder(
+            X, feature_shuffle=feature_shuffle, mgr_config=inference_config.COL_CONFIG
+        )
+
+        row_representations = self.row_interactor(
+            column_representations, mgr_config=inference_config.ROW_CONFIG
+        )
+        return row_representations
 
 
-def get_col_embedding(state_dict, config) -> ColEmbedding:
+def filter_params_for_class(cls, params_dict):
     """
-    Constructs and initializes a column embedding model using the provided state dictionary and configuration.
-
-    This function extracts the relevant state dictionary for the column embedding model by filtering
-    keys that contain "col_embedder". Subsequently, it initializes a `ColEmbedding` model using
-    the provided configuration parameters and loads the filtered state dictionary into the model.
+    Filter parameters dictionary to only include parameters that are accepted
+    by the class constructor.
 
     Args:
-        state_dict (dict): A dictionary containing model state, which includes weights and parameters for
-            all model components.
-        config (dict): A dictionary containing configuration parameters required to initialize
-            the `ColEmbedding` model. Expected keys include:
-            - embed_dim (int): Dimension size for embeddings.
-            - col_num_blocks (int): Number of blocks in the column embedding model.
-            - col_nhead (int): Number of heads for the multi-head attention.
-            - col_num_inds (int): Number of inducing points for attention mechanism.
-            - ff_factor (int): Multiplicative factor for feedforward network dimension.
-            - dropout (float): Dropout rate.
-            - norm_first (bool): Whether to apply normalization before operations in blocks.
-            - activation (str): Type of activation function to use.
-            - row_num_cls (int): Reserved number of CLS token embeddings in a row.
+        cls: The class whose constructor signature to check
+        params_dict: Dictionary of all parameters
 
     Returns:
-        ColEmbedding: The initialized column embedding model with the state dictionary loaded.
+        dict: Filtered dictionary with only valid parameters for the class
     """
-    col_emb_state_dict = {
-        key.replace("col_embedder.", ""): item
-        for key, item in state_dict.items()
-        if "col_embedder" in key
-    }
+    # Get the constructor signature
+    sig = inspect.signature(cls.__init__)
 
-    col_emb_model = ColEmbedding(
-        embed_dim=config["embed_dim"],
-        num_blocks=config["col_num_blocks"],
-        nhead=config["col_nhead"],
-        num_inds=config["col_num_inds"],
-        dim_feedforward=config["embed_dim"] * config["ff_factor"],
-        dropout=config["dropout"],
-        norm_first=config["norm_first"],
-        activation=config["activation"],
-        reserve_cls_tokens=config["row_num_cls"],
-    )
+    # Get parameter names (excluding 'self')
+    valid_params = set(sig.parameters.keys()) - {"self"}
 
-    col_emb_model.load_state_dict(col_emb_state_dict)
+    # Filter the parameters dictionary
+    filtered_params = {k: v for k, v in params_dict.items() if k in valid_params}
 
-    return col_emb_model
-
-
-def get_row_interaction(state_dict, config) -> RowInteraction:
-    """
-    Processes the state dictionary and configuration to initialize a RowInteraction object
-    and loads the appropriate state into it.
-
-    This function creates a subset of the `state_dict` specific to the `row_interactor`
-    by filtering keys that match the expected naming convention. It then initializes
-    the `RowInteraction` object using configuration values and loads the state from the
-    filtered dictionary.
-
-    Args:
-        state_dict (dict): The model's state dictionary containing all parameters
-                           and their respective weights.
-        config (dict): Configuration dictionary with required key-value pairs for
-                       initializing the `RowInteraction` object.
-
-    Returns:
-        RowInteraction: An initialized and state-loaded `RowInteraction` object.
-    """
-    row_int_state_dict = {
-        key.replace("row_interactor.", ""): item
-        for key, item in state_dict.items()
-        if "row_interactor" in key
-    }
-
-    row_interactor = RowInteraction(
-        embed_dim=config["embed_dim"],
-        num_blocks=config["row_num_blocks"],
-        nhead=config["row_nhead"],
-        num_cls=config["row_num_cls"],
-        rope_base=config["row_rope_base"],
-        dim_feedforward=config["embed_dim"] * config["ff_factor"],
-        dropout=config["dropout"],
-        norm_first=config["norm_first"],
-        activation=config["activation"],
-    )
-
-    row_interactor.load_state_dict(row_int_state_dict)
-
-    return row_interactor
-
-
-def combine_col_embedder_row_interactor(
-    col_emb_model: ColEmbedding, row_interactor: RowInteraction
-):
-    """
-    Constructs and returns a sequential model consisting of a column embedding model
-    and a row interaction model. The function combines the two components into a
-    torch.nn.Sequential container, enabling sequential processing of inputs through
-    the column embedding model followed by the row interaction model.
-
-    Args:
-        col_emb_model: A column embedding model that transforms input data into
-            column-wise embeddings.
-        row_interactor: A row interaction model that operates on the output from
-            the column embedding model to generate final row-wise embeddings.
-
-    Returns:
-        torch.nn.Sequential: A sequential container combining the column embedding
-            model and the row interaction model.
-    """
-    return torch.nn.Sequential(col_emb_model, row_interactor)
+    return filtered_params
 
 
 def get_row_embeddings_model(state_dict: dict, config: dict):
     """
-    Builds and returns the row embeddings model by combining the column embeddings
-    model and row interaction model. This function uses given state dictionary and
-    configuration to initialize the column embedder and row interaction models,
-    then combines them to create the final model.
+    Loads a row embedding model using the provided state dictionary and configuration,
+    ensuring compatibility by filtering the configuration for the appropriate class attributes.
 
     Args:
-        state_dict (dict): State dictionary containing model parameters.
-        config (dict): Configuration dictionary containing model settings.
+        state_dict (dict): A dictionary containing model parameters to load into the model.
+        config (dict): A configuration dictionary including parameters for initializing the
+            model. Only parameters that match the expected class attributes will be used.
 
     Returns:
-        object: The combined row embeddings model.
+        TabICLEmbedding: An instance of TabICLEmbedding initialized with the filtered
+            configuration and loaded with the provided state dictionary.
     """
-    col_emb_model = get_col_embedding(state_dict, config)
-    row_interactor = get_row_interaction(state_dict, config)
-    return combine_col_embedder_row_interactor(col_emb_model, row_interactor)
+    filtered_config = filter_params_for_class(TabICLEmbedding, config)
+    row_embedding_model = TabICLEmbedding(**filtered_config)
 
-
-def get_dataset_embeddings(
-    state_dict: dict,
-    config: dict,
-    col_emb_aggregation: EmbAggregation = EmbAggregation.MEAN,
-    percentile: float = 0.75,
-) -> DataSetEmbeddings:
-    """
-    Constructs and initializes a DataSetEmbeddings model using the provided state dictionary and configuration.
-
-    Args:
-        state_dict (dict): A dictionary containing model state, which includes weights and parameters for
-            all model components.
-        config (dict): A dictionary containing configuration parameters required to initialize
-            the DataSetEmbeddings model.
-        col_emb_aggregation (ColEmbAggregation): The aggregation method to use.
-        percentile (float): Percentile value for PERCENTILE aggregation method.
-
-    Returns:
-        DataSetEmbeddings: The initialized model with the state dictionary loaded and training disabled.
-    """
-    col_emb_state_dict = {
-        key.replace("col_embedder.", ""): item
-        for key, item in state_dict.items()
-        if "col_embedder" in key
-    }
-
-    dataset_emb_model = DataSetEmbeddings(
-        embed_dim=config["embed_dim"],
-        num_blocks=config["col_num_blocks"],
-        nhead=config["col_nhead"],
-        num_inds=config["col_num_inds"],
-        dim_feedforward=config["embed_dim"] * config["ff_factor"],
-        dropout=config["dropout"],
-        norm_first=config["norm_first"],
-        activation=config["activation"],
-        reserve_cls_tokens=config["row_num_cls"],
-        col_emb_aggregation=col_emb_aggregation,
-        percentile=percentile,
-    )
-
-    dataset_emb_model.load_state_dict(col_emb_state_dict)
-
-    return dataset_emb_model
-
-
-def prepare_dataset(data):
-    pass
+    row_embedding_model.load_state_dict(state_dict, strict=False)
+    return row_embedding_model
