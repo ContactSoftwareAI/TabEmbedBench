@@ -2,13 +2,14 @@ import inspect
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
+import torch
 from torch import nn
 
 from embedding_models.base import BaseEmbeddingGenerator
+from utils.torch_utils import get_device
 
 
 class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
@@ -141,7 +142,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         )
         return row_representations
 
-    def compute_embeddings(self, X: np.ndarray) -> np.ndarray:
+    def compute_embeddings(self, X: np.ndarray, device: Optional[torch.device] = None) -> np.ndarray:
         """
         Computes the embeddings for the given input array using the model's forward method.
 
@@ -150,12 +151,29 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         result back to a NumPy array.
 
         Args:
-            X (np.ndarray): The input array for which embeddings are to be computed.
+            X (np.ndarray): The input array for which embeddings are to be computed. The array
+                has to have the shape (num_datasets, num_samples, num_features) or
+                (num_samples, num_features). The first dimension is optional.
+            device (Optional[torch.device]): The device to use for computation. If None, uses
+                the `get_default` method to get most suited device.
 
         Returns:
             np.ndarray: The computed embeddings as a NumPy array.
+
+        Raises:
+            ValueError: If the input array is not 2D or 3D.
         """
-        X = torch.from_numpy(X).float()
+        if device is None:
+            device = get_device()
+            self.to(device)
+
+        if len(X.shape) not in [2,3]:
+            raise ValueError("Input must be 2D or 3D array")
+
+        X = torch.from_numpy(X).float().to(device)
+        if len(X.shape) == 2:
+            X = X.unsqueeze(0)
+
         embeddings = self.forward(X).detach().numpy()
         return embeddings
 
