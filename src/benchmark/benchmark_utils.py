@@ -9,12 +9,15 @@ from sklearn.neighbors import LocalOutlierFactor
 
 from embedding_models.base import BaseEmbeddingGenerator
 from utils.dataset_utils import download_adbench_tabular_datasets, get_data_description
+from utils.torch_utils import get_device
 
 
 def run_outlier_benchmark(
     model: BaseEmbeddingGenerator,
     dataset_paths: Optional[str, Path] = None,
     random_state: int = 42,
+    save_embeddings: bool = False,
+    save_path: Optional[str, Path] = None,
 ) -> pl.DataFrame:
     if dataset_paths is None:
         dataset_paths = Path("data/adbench_tabular_datasets")
