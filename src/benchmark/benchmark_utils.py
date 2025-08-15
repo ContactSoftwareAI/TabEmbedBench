@@ -1,13 +1,13 @@
+from pathlib import Path
+from typing import Optional, Union
+
 import numpy as np
 import polars as pl
 import torch
-
-from embedding_models.base import BaseEmbeddingGenerator
-from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import LocalOutlierFactor
-from typing import Union, Optional, Any
 
+from embedding_models.base import BaseEmbeddingGenerator
 from utils.dataset_utils import download_adbench_tabular_datasets, get_data_description
 
 
