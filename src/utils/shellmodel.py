@@ -14,7 +14,7 @@ class ShellModel():
 
 
     def forward(self, data: pd.DataFrame, g_train: graph, g: graph) -> np.array:
-        nodes = g_train.node_list
+        nodes = g.node_list
         input_vectors = torch.tensor(np.array(g_train.random_embeddings(dimension=self.embed_dim), dtype=np.float32))
         emb = {nodes[i]: np.array(input_vectors[i].cpu()) for i in range(len(nodes))}
         row_embeddings = g.get_context_embedding_mean(emb)

@@ -76,8 +76,8 @@ for ind in data.index:
     row_node = "R" + g_train.identifier + "_" + str(ind)
     if row_node in row_embeddings:
         row_embeddings[ind] = row_embeddings.pop(row_node)
-    else:
-        data = data.drop(ind)
+#    else:
+#        data = data.drop(ind)
 data["embeddings"] = row_embeddings
 train_indices = list(data[data.set != "test"].index)
 train_indices_index = {}
