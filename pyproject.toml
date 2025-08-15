@@ -38,3 +38,13 @@ name = "pytorch-cu121"
 url = "https://download.pytorch.org/whl/cu121"
 explicit = true
 
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I"]  # E/W (pycodestyle), F (pyflakes), I (isort)
+
+[tool.ruff.lint.isort]
+known-third-party = []
+
