@@ -3,11 +3,10 @@ import numpy as np
 import sys
 import polars as pl
 import pickle
-from utils.tabicl_utils import get_row_embeddings_model
+from embeddings.tabicl.tabicl_utils import get_row_embeddings_model
 from tabpfn import TabPFNRegressor, TabPFNClassifier
-from utils.tabpfn_utils import UniversalTabPFNEmbedding
+from embeddings.tabpfn.tabpfn_utils import UniversalTabPFNEmbedding
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import roc_auc_score
 sys.path.insert(0,"../../embedding-workflow")

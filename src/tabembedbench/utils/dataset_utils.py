@@ -1,18 +1,17 @@
-import os
 import math
-import numpy as np
 import random
-import requests
-import torch
 import zipfile
-
 from pathlib import Path
 from typing import Optional, Union
+
+import numpy as np
+import requests
+import torch
 
 ADBENCH_URL = "https://github.com/Minqi824/ADBench/archive/refs/heads/main.zip"
 
 
-def download_adbench_tabular_datasets(save_path: Optional[str] = None) -> None:
+def download_adbench_tabular_datasets(save_path: Optional[str, Path] = None) -> None:
     """
     Downloads tabular datasets for ADBench from the specified GitHub repository and saves them to the
     specified path. If no path is provided, it defaults to './data/adbench_tabular_datasets'. If the
@@ -131,5 +130,6 @@ def select_random_combined_datasets(datasets_dir: str) -> list[Union[str, Path]]
     return random_datasets
 
 
-def prepare_data_for_torch(X: np.ndarray, y: np.ndarray):
-    pass
+def prepare_data_for_torch(X: np.ndarray, device: str = "cpu") -> torch.Tensor:
+    X = torch.from_numpy(X).to(device)
+    return X

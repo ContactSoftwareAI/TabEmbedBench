@@ -1,5 +1,5 @@
 [project]
-name = "tabiclexpierments"
+name = "tabembedbench"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.12"
@@ -37,4 +37,14 @@ torchaudio = { index = "pytorch-cu121", marker = "platform_system != 'Darwin'" }
 name = "pytorch-cu121"
 url = "https://download.pytorch.org/whl/cu121"
 explicit = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I"]  # E/W (pycodestyle), F (pyflakes), I (isort)
+
+[tool.ruff.lint.isort]
+known-third-party = []
 

@@ -1,14 +1,18 @@
-import torch
 import inspect
+from typing import List, Optional, Union
 
+import numpy as np
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
+import torch
 from torch import nn
-from typing import Union, Optional, List
+
+from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.utils.torch_utils import get_device
 
 
-class TabICLEmbedding(nn.Module):
+class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
     """
     TabICLEmbedding is a neural network module for tabular data embedding. It is
     based on the TabICL architecture and uses the first two stages of TabICL to
@@ -137,6 +141,41 @@ class TabICLEmbedding(nn.Module):
             column_representations, mgr_config=inference_config.ROW_CONFIG
         )
         return row_representations
+
+    def compute_embeddings(self, X: np.ndarray, device: Optional[torch.device] = None) -> np.ndarray:
+        """
+        Computes the embeddings for the given input array using the model's forward method.
+
+        The method takes an input array and uses PyTorch to convert it into a tensor, passes
+        it through the forward method of the model, and finally detaches and converts the
+        result back to a NumPy array.
+
+        Args:
+            X (np.ndarray): The input array for which embeddings are to be computed. The array
+                has to have the shape (num_datasets, num_samples, num_features) or
+                (num_samples, num_features). The first dimension is optional.
+            device (Optional[torch.device]): The device to use for computation. If None, uses
+                the `get_default` method to get most suited device.
+
+        Returns:
+            np.ndarray: The computed embeddings as a NumPy array.
+
+        Raises:
+            ValueError: If the input array is not 2D or 3D.
+        """
+        if device is None:
+            device = get_device()
+            self.to(device)
+
+        if len(X.shape) not in [2,3]:
+            raise ValueError("Input must be 2D or 3D array")
+
+        X = torch.from_numpy(X).float().to(device)
+        if len(X.shape) == 2:
+            X = X.unsqueeze(0)
+
+        embeddings = self.forward(X).detach().numpy()
+        return embeddings
 
 
 def filter_params_for_class(cls, params_dict):
