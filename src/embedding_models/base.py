@@ -8,7 +8,10 @@ class BaseEmbeddingGenerator(ABC):
         pass
 
     @abstractmethod
-    def compute_embeddings(self, X: np.ndarray) -> np.ndarray:
+    def compute_embeddings(
+        self,
+        X: np.ndarray,
+    ) -> np.ndarray:
         """
         Compute embeddings for the input data.
 
