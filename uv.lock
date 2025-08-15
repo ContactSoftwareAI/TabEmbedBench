@@ -1857,31 +1857,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tabicl"
-version = "0.1.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "einops" },
-    { name = "huggingface-hub" },
-    { name = "joblib" },
-    { name = "numpy" },
-    { name = "psutil" },
-    { name = "scikit-learn" },
-    { name = "scipy" },
-    { name = "torch", version = "2.5.1+cu121", source = { registry = "https://download.pytorch.org/whl/cu121" }, marker = "sys_platform != 'darwin'" },
-    { name = "torch", version = "2.8.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
-    { name = "tqdm" },
-    { name = "transformers" },
-    { name = "wandb" },
-    { name = "xgboost" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/84/8e/52ae8c8f6b1947ced70e397dd34cb34203fdd279aa901ec51002ded0a4b8/tabicl-0.1.3.tar.gz", hash = "sha256:211d96d29847eef64051b664e117117ccf8b3579ed55ff435722a733366bc3c4", size = 1728870, upload-time = "2025-07-08T09:48:28.902Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3b/91/c7a3fa33970928a9384f4ce02957a9a471876b6319885089d32f02b29605/tabicl-0.1.3-py3-none-any.whl", hash = "sha256:b7cf7c504d94bd6e4099ecd22ff7b20b1e6ea580f6e0761f3c1bd0b705b3a797", size = 103933, upload-time = "2025-07-08T09:48:23.869Z" },
-]
-
-[[package]]
-name = "tabiclexpierments"
+name = "tabembedbench"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -1919,6 +1895,30 @@ requires-dist = [
     { name = "torchaudio", marker = "sys_platform == 'darwin'", specifier = ">=2.1.0" },
     { name = "torchvision", marker = "sys_platform != 'darwin'", specifier = ">=0.16.0", index = "https://download.pytorch.org/whl/cu121" },
     { name = "torchvision", marker = "sys_platform == 'darwin'", specifier = ">=0.16.0" },
+]
+
+[[package]]
+name = "tabicl"
+version = "0.1.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "einops" },
+    { name = "huggingface-hub" },
+    { name = "joblib" },
+    { name = "numpy" },
+    { name = "psutil" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+    { name = "torch", version = "2.5.1+cu121", source = { registry = "https://download.pytorch.org/whl/cu121" }, marker = "sys_platform != 'darwin'" },
+    { name = "torch", version = "2.8.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "tqdm" },
+    { name = "transformers" },
+    { name = "wandb" },
+    { name = "xgboost" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/84/8e/52ae8c8f6b1947ced70e397dd34cb34203fdd279aa901ec51002ded0a4b8/tabicl-0.1.3.tar.gz", hash = "sha256:211d96d29847eef64051b664e117117ccf8b3579ed55ff435722a733366bc3c4", size = 1728870, upload-time = "2025-07-08T09:48:28.902Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/91/c7a3fa33970928a9384f4ce02957a9a471876b6319885089d32f02b29605/tabicl-0.1.3-py3-none-any.whl", hash = "sha256:b7cf7c504d94bd6e4099ecd22ff7b20b1e6ea580f6e0761f3c1bd0b705b3a797", size = 103933, upload-time = "2025-07-08T09:48:23.869Z" },
 ]
 
 [[package]]
