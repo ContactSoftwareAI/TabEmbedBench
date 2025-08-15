@@ -132,7 +132,9 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
         return embeddings
 
     def compute_embeddings(
-        self, X: np.ndarray, agg_func: Union[str, EmbAggregation] = "mean"
+        self,
+        X: np.ndarray,
+        agg_func: Union[str, EmbAggregation] = "mean"
     ) -> np.ndarray:
         """
         Computes the embeddings by aggregating the extracted embeddings using the specified aggregation
