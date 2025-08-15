@@ -5,10 +5,10 @@ import pandas as pd
 from sklearn.model_selection import KFold
 from tabpfn import TabPFNClassifier, TabPFNRegressor
 
-from embedding_models.base import BaseEmbeddingGenerator
-from utils.config import EmbAggregation
-from utils.embedding_utils import compute_embeddings_aggregation
-from utils.preprocess_utils import infer_categorical_columns
+from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.utils.config import EmbAggregation
+from tabembedbench.utils.embedding_utils import compute_embeddings_aggregation
+from tabembedbench.utils.preprocess_utils import infer_categorical_columns
 
 
 class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):

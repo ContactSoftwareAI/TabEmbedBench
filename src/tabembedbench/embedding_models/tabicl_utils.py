@@ -8,8 +8,8 @@ from tabicl.model.interaction import RowInteraction
 import torch
 from torch import nn
 
-from embedding_models.base import BaseEmbeddingGenerator
-from utils.torch_utils import get_device
+from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.utils.torch_utils import get_device
 
 
 class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):

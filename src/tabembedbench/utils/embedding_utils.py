@@ -3,7 +3,7 @@ from typing import Union
 import numpy as np
 import torch
 
-from utils.config import EmbAggregation
+from tabembedbench.utils.config import EmbAggregation
 
 
 def compute_embeddings_aggregation(
