@@ -1,13 +1,12 @@
-import os
 import math
-import numpy as np
 import random
-import requests
-import torch
 import zipfile
-
 from pathlib import Path
 from typing import Optional, Union
+
+import numpy as np
+import requests
+import torch
 
 ADBENCH_URL = "https://github.com/Minqi824/ADBench/archive/refs/heads/main.zip"
 

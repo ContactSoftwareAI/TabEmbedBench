@@ -1,8 +1,8 @@
+from typing import List, Optional, Tuple, Union
+
 import numpy as np
 import pandas as pd
 import torch
-
-from typing import Union, List, Tuple, Optional
 
 
 def infer_categorical_columns(
