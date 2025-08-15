@@ -1,8 +1,9 @@
+from typing import Union
+
 import numpy as np
 import torch
 
 from utils.config import EmbAggregation
-from typing import Union
 
 
 def compute_embeddings_aggregation(

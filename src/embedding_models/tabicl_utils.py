@@ -1,13 +1,14 @@
+import inspect
+from typing import List, Optional, Union
+
 import numpy as np
 import torch
-import inspect
-
-from embedding_models.base import BaseEmbeddingGenerator
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
 from torch import nn
-from typing import Union, Optional, List
+
+from embedding_models.base import BaseEmbeddingGenerator
 
 
 class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):

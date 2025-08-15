@@ -1,14 +1,14 @@
+from typing import Union
+
 import numpy as np
 import pandas as pd
-from numpy import ndarray
+from sklearn.model_selection import KFold
+from tabpfn import TabPFNClassifier, TabPFNRegressor
 
 from embedding_models.base import BaseEmbeddingGenerator
 from utils.config import EmbAggregation
 from utils.embedding_utils import compute_embeddings_aggregation
 from utils.preprocess_utils import infer_categorical_columns
-from sklearn.model_selection import KFold
-from tabpfn import TabPFNRegressor, TabPFNClassifier
-from typing import Union
 
 
 class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
