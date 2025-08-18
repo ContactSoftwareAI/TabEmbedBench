@@ -87,11 +87,11 @@ def get_data_description(
             - "Anomaly Ratio (%)": Percentage of anomalies in the dataset.
     """
     des_dict = {}
-    des_dict["Dataset"] = dataset_name
-    des_dict["Samples"] = X.shape[0]
-    des_dict["Features"] = X.shape[1]
-    des_dict["Anomalies"] = sum(y)
-    des_dict["Anomaly Ratio (%)"] = round(sum(y) / len(y) * 100, 2)
+    des_dict["dataset"] = dataset_name
+    des_dict["samples"] = X.shape[0]
+    des_dict["features"] = X.shape[1]
+    des_dict["anomalies"] = sum(y)
+    des_dict["anomaly Ratio (%)"] = round(sum(y) / len(y) * 100, 2)
 
     return des_dict
 
