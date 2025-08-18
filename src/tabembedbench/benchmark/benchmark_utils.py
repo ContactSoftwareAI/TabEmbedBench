@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union
 
@@ -12,6 +13,21 @@ from tabembedbench.utils.dataset_utils import (
     download_adbench_tabular_datasets,
     get_data_description,
 )
+from tabembedbench.utils.logging_utils import setup_logger
+
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+logger = setup_logger(__name__, f'log/benchmark_{timestamp}.log')
+
+IMAGE_CATEGORY = [
+    "1_ALOI.npz",
+    "8_celeba.npz",
+    "17_InternetAds.npz",
+    "20_letter.npz",
+    "24_mnist.npz",
+    "26_optdigits.npz",
+    "28_pendigits.npz",
+    "33_skin.npz",
+]
 
 
 def run_outlier_benchmark(
@@ -20,6 +36,7 @@ def run_outlier_benchmark(
     save_embeddings: bool = False,
     save_embeddings_path: Optional[Union[str, Path]] = None,
     upper_bound_dataset_size: int = 100000,
+    exclude_datasets: Optional[list[str]] = None
 ) -> pl.DataFrame:
     """
     Executes an outlier detection benchmark on provided datasets using a specified model.
@@ -38,33 +55,33 @@ def run_outlier_benchmark(
         save_embeddings_path: Path where embeddings and other intermediate results will be saved, if
             `save_embeddings` is set to True.
         upper_bound_dataset_size:
+        exclude_datasets:
 
     Returns:
         pl.DataFrame: A DataFrame containing the combined benchmark results for all datasets.
     """
-    print("Running outlier benchmark...")
+    logger.info("Running outlier benchmark...")
     if dataset_paths is None:
         dataset_paths = Path("data/adbench_tabular_datasets")
         if not dataset_paths.exists():
-            print("Downloading ADBench tabular datasets...")
+            logger.warning("Downloading ADBench tabular datasets...")
             download_adbench_tabular_datasets(dataset_paths)
     else:
         dataset_paths = Path(dataset_paths)
-    print(f"Dataset paths: {dataset_paths}")
+    logger.info(f"Dataset paths: {dataset_paths}")
 
     if save_embeddings_path is None:
         save_embeddings_path = dataset_paths / "embeddings"
         if save_embeddings:
             save_embeddings_path.mkdir(parents=True, exist_ok=True)
-        print(save_embeddings_path)
 
     npz_files = list(dataset_paths.glob("*.npz"))
-    print(f"Found {len(npz_files)} .npz files: {[f.name for f in npz_files]}")
+    logger.info(f"Found {len(npz_files)} .npz files: {[f.name for f in npz_files]}")
 
     benchmark_result_df = None
 
     for dataset_file in dataset_paths.glob("*.npz"):
-        print(f"Running benchmark for {dataset_file.name}...")
+        logger.info(f"Running benchmark for {dataset_file.name}...")
         dataset = np.load(dataset_file)
 
         X = dataset["X"]
@@ -72,7 +89,7 @@ def run_outlier_benchmark(
 
         with np.load(dataset_file) as dataset:
             if dataset["X"].shape[0] > upper_bound_dataset_size:
-                print(
+                logger.warning(
                     f"Skipping {dataset_file.name} - dataset size {dataset['X'].shape[0]} exceeds limit {upper_bound_dataset_size}"
                 )
                 continue
@@ -84,7 +101,7 @@ def run_outlier_benchmark(
         dataset_description = get_data_description(
             X, y, dataset_file.stem
         )
-        print(f"Samples: {dataset_description['samples']}, Features: {dataset_description['features']}")
+        logger.info(f"Samples: {dataset_description['samples']}, Features: {dataset_description['features']}")
         dataset_df = pl.DataFrame(dataset_description)
 
         result_df = run_experiment(
@@ -107,7 +124,7 @@ def run_outlier_benchmark(
 
         if benchmark_result_df is None:
             raise ValueError("Benchmark result DataFrame is empty.")
-        print("Number of rows added: ", benchmark_result_df.height)
+        logger.info("Number of rows added: ", benchmark_result_df.height)
 
     return benchmark_result_df
 
@@ -128,34 +145,44 @@ def run_experiment(
 
     if save_embeddings:
         save_file_path = Path(save_embeddings_path) / f"{dataset_name}_embeddings.npz"
-        print(f"Save Embeddings in file {save_file_path}")
         np.savez(file=save_file_path, x=X_embed, y=y)
 
     num_neighbors_list = [i for i in range(1, 15)]
-    print("start with neighbors")
-    for num_neighbors in num_neighbors_list:
-        print(f"neighbors: {num_neighbors}")
-        lof = LocalOutlierFactor(
-            n_neighbors=num_neighbors,
-            n_jobs=-1,
-        )
 
-        print("start lof")
-        lof.fit(X_embed)
-        y_pred = lof.fit_predict(X_embed)
+    logger.info(f"Running LocalOutlierFactor for dataset {dataset_name}")
+    try:
+        for num_neighbors in num_neighbors_list:
+            lof = LocalOutlierFactor(
+                n_neighbors=num_neighbors,
+                n_jobs=-1,
+            )
 
-        score_train = compute_metrics(y, y_pred)
+            lof.fit(X_embed)
+            y_pred = lof.fit_predict(X_embed)
 
-        result_dict["algorithm"].append("lof")
-        result_dict["neighbors"].append(num_neighbors)
+            score_train = compute_metrics(y, y_pred)
 
-        for key, item in score_train.items():
-            if key in result_dict.keys():
-                result_dict[key].append(item)
-            else:
-                result_dict[key] = [item]
+            result_dict["algorithm"].append("lof")
+            result_dict["neighbors"].append(num_neighbors)
 
-    result_df = pl.DataFrame(result_dict)
+            for key, item in score_train.items():
+                if key in result_dict.keys():
+                    result_dict[key].append(item)
+                else:
+                    result_dict[key] = [item]
+
+        result_df = pl.DataFrame(result_dict)
+    except Exception as e:
+        logger.error(f"Error in run_experiement for dataset {dataset_name}: {str(e)}", exc_info=True)
+
+        #TODO: better handling of error for different metrics.
+        empty_result = {
+            "algorithm": [],
+            "neighbors": [],
+            "auc_score": []
+        }
+
+        result_df = pl.DataFrame(empty_result)
 
     return result_df
 
