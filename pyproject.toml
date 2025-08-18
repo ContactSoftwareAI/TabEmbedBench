@@ -19,6 +19,7 @@ dependencies = [
     "huggingface-hub>=0.34.4",
     "seaborn>=0.13.2",
     "kaleido>=1.0.0",
+    "umap-learn>=0.5.9.post2",
 ]
 
 [build-system]
