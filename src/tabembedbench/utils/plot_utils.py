@@ -4,22 +4,17 @@ import polars as pl
 
 
 def create_boxplot(result_df: pl.DataFrame, algorithm: str, score: str):
-    filtered_results = (
-        result_df
-        .filter(
-            pl.col("algorithm") == algorithm
-        )
-        .select(
-            ["neighbors", score, "dataset", "samples", "features"]
-        )
+    filtered_results = result_df.filter(pl.col("algorithm") == algorithm).select(
+        ["neighbors", score, "dataset", "samples", "features"]
     )
 
     stats_by_neighbors = (
-        filtered_results
-        .group_by("neighbors")
-        .agg([
-            pl.col(score).mean().alias(f"avg_{score}"),
-        ])
+        filtered_results.group_by("neighbors")
+        .agg(
+            [
+                pl.col(score).mean().alias(f"avg_{score}"),
+            ]
+        )
         .sort("neighbors")
     )
 
@@ -44,11 +39,11 @@ def create_boxplot(result_df: pl.DataFrame, algorithm: str, score: str):
     fig_px.add_scatter(
         x=stats_by_neighbors["neighbors"],
         y=stats_by_neighbors[f"avg_{score}"],
-        mode='lines+markers',
-        name='Average',
-        line=dict(color='black', width=2),
-        marker=dict(color='black', size=6),
-        hovertemplate='Neighbors: %{x}<br>Average: %{y:.3f}<extra></extra>'
+        mode="lines+markers",
+        name="Average",
+        line=dict(color="black", width=2),
+        marker=dict(color="black", size=6),
+        hovertemplate="Neighbors: %{x}<br>Average: %{y:.3f}<extra></extra>",
     )
 
     fig_px.show()
@@ -56,12 +51,12 @@ def create_boxplot(result_df: pl.DataFrame, algorithm: str, score: str):
 
 if __name__ == "__main__":
     sample_dict = {
-        "algorithm": ["lof", "lof", "lof", "lof_with_train_containment"]*50,
-        "neighbors": [i for i in range(1, 21)]*10,
+        "algorithm": ["lof", "lof", "lof", "lof_with_train_containment"] * 50,
+        "neighbors": [i for i in range(1, 21)] * 10,
         "auc_score": np.random.rand(200),
-        "dataset": ["bla", "blurgh", "ba", "gd"]*50,
-        "samples": [100, 120, 30, 10000]*50,
-        "features": [4, 2, 6, 8]*50
+        "dataset": ["bla", "blurgh", "ba", "gd"] * 50,
+        "samples": [100, 120, 30, 10000] * 50,
+        "features": [4, 2, 6, 8] * 50,
     }
 
     result_df = pl.DataFrame(sample_dict)

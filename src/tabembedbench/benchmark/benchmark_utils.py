@@ -16,7 +16,7 @@ from tabembedbench.utils.dataset_utils import (
 from tabembedbench.utils.logging_utils import setup_logger
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-logger = setup_logger(__name__, f'log/benchmark_{timestamp}.log')
+logger = setup_logger(__name__, f"log/benchmark_{timestamp}.log")
 
 IMAGE_CATEGORY = [
     "1_ALOI.npz",
@@ -36,7 +36,7 @@ def run_outlier_benchmark(
     save_embeddings: bool = False,
     save_embeddings_path: Optional[Union[str, Path]] = None,
     upper_bound_dataset_size: int = 100000,
-    exclude_datasets: Optional[list[str]] = None
+    exclude_datasets: Optional[list[str]] = None,
 ) -> pl.DataFrame:
     """
     Executes an outlier detection benchmark on provided datasets using a specified model.
@@ -98,10 +98,10 @@ def run_outlier_benchmark(
             X = dataset["X"]
             y = dataset["y"]
 
-        dataset_description = get_data_description(
-            X, y, dataset_file.stem
+        dataset_description = get_data_description(X, y, dataset_file.stem)
+        logger.info(
+            f"Samples: {dataset_description['samples']}, Features: {dataset_description['features']}"
         )
-        logger.info(f"Samples: {dataset_description['samples']}, Features: {dataset_description['features']}")
         dataset_df = pl.DataFrame(dataset_description)
 
         result_df = run_experiment(
@@ -135,7 +135,7 @@ def run_experiment(
     y: Optional[Union[torch.Tensor, np.ndarray]] = None,
     save_embeddings: bool = False,
     save_embeddings_path: Optional[Union[str, Path]] = None,
-    dataset_name: Optional[str] = None
+    dataset_name: Optional[str] = None,
 ) -> pl.DataFrame:
     result_dict = dict()
     result_dict["algorithm"] = []
@@ -173,14 +173,13 @@ def run_experiment(
 
         result_df = pl.DataFrame(result_dict)
     except Exception as e:
-        logger.error(f"Error in run_experiement for dataset {dataset_name}: {str(e)}", exc_info=True)
+        logger.error(
+            f"Error in run_experiement for dataset {dataset_name}: {str(e)}",
+            exc_info=True,
+        )
 
-        #TODO: better handling of error for different metrics.
-        empty_result = {
-            "algorithm": [],
-            "neighbors": [],
-            "auc_score": []
-        }
+        # TODO: better handling of error for different metrics.
+        empty_result = {"algorithm": [], "neighbors": [], "auc_score": []}
 
         result_df = pl.DataFrame(empty_result)
 

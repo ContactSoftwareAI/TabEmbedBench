@@ -116,15 +116,17 @@ def _(result_df):
 def _():
     import numpy as np
 
-    data = np.load("/Users/lkl/PycharmProjects/TabICLExpierments/data/adbench_tabular_datasets/3_backdoor.npz")
+    data = np.load(
+        "/Users/lkl/PycharmProjects/TabICLExpierments/data/adbench_tabular_datasets/3_backdoor.npz"
+    )
     return (data,)
 
 
 @app.cell
 def _(data):
-    X = data['X']
+    X = data["X"]
 
-    y = data['y']
+    y = data["y"]
     return (X,)
 
 

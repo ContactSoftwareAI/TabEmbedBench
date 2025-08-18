@@ -1,5 +1,6 @@
 import torch
 
+
 def get_device() -> torch.device:
     """
     Determines the appropriate PyTorch device to be used.

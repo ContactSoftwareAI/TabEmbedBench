@@ -1,8 +1,11 @@
 import logging
 from logging.handlers import RotatingFileHandler
+from typing import Union
+
+from pathlib import Path
 
 
-def setup_logger(name: str, log_file: str, level=logging.INFO):
+def setup_logger(name: str, log_file: Union[str, Path], level=logging.INFO):
     """
     Sets up and configures a logger with both file and console handlers. The logger
     includes logging format, log rotation for the file handler, and allows specifying
@@ -19,14 +22,17 @@ def setup_logger(name: str, log_file: str, level=logging.INFO):
         logging.Logger: A configured logger instance with the specified name,
         file handler, and console handler.
     """
+    log_path = Path(log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
     file_handler = RotatingFileHandler(
         log_file,
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=5
+        maxBytes=5 * 1024 * 1024,  # 5MB
+        backupCount=5,
     )
     file_handler.setFormatter(formatter)
 

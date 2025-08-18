@@ -142,7 +142,9 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         )
         return row_representations
 
-    def compute_embeddings(self, X: np.ndarray, device: Optional[torch.device] = None) -> np.ndarray:
+    def compute_embeddings(
+        self, X: np.ndarray, device: Optional[torch.device] = None
+    ) -> np.ndarray:
         """
         Computes the embeddings for the given input array using the model's forward method.
 
@@ -167,7 +169,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
             device = get_device()
             self.to(device)
 
-        if len(X.shape) not in [2,3]:
+        if len(X.shape) not in [2, 3]:
             raise ValueError("Input must be 2D or 3D array")
 
         X = torch.from_numpy(X).float().to(device)

@@ -4,6 +4,7 @@ from sklearn.base import TransformerMixin
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.ensemble import IsolationForest
 
+
 class OutlierDetectionAlgorithm(TransformerMixin, ABC):
     def __init__(self):
         pass
@@ -22,12 +23,7 @@ class OutlierDetectionAlgorithm(TransformerMixin, ABC):
 
 
 class LocalOutlierFactorAlgorithm(OutlierDetectionAlgorithm):
-    def __init__(
-        self,
-        dim_reduction: bool = True,
-        *args,
-        **kwargs
-    ):
+    def __init__(self, dim_reduction: bool = True, *args, **kwargs):
         super().__init__()
         self.local_outlier_algo = LocalOutlierFactor(*args, **kwargs)
         self.dim_reduction = dim_reduction
@@ -52,6 +48,7 @@ class LocalOutlierFactorAlgorithm(OutlierDetectionAlgorithm):
             raise NotImplementedError
         else:
             return self.local_outlier_algo.fit_predict(X)
+
 
 class IsolationForestAlgorithm(OutlierDetectionAlgorithm):
     def __init__(self, dim_reduction: bool = True, *args, **kwargs):
