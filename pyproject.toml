@@ -17,6 +17,8 @@ dependencies = [
     "torchvision>=0.16.0",
     "torchaudio>=2.1.0",
     "huggingface-hub>=0.34.4",
+    "seaborn>=0.13.2",
+    "kaleido>=1.0.0",
 ]
 
 [build-system]
