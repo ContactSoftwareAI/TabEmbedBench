@@ -19,6 +19,31 @@ def run_outlier_benchmark(
     save_embeddings: bool = False,
     save_path: Optional[Union[str, Path]] = None,
 ) -> pl.DataFrame:
+    """
+    Runs an outlier detection benchmark using a given embedding generator model and
+    datasets. The function handles downloading default datasets if none are provided,
+    splitting datasets into training and testing sets, computing descriptions of the
+    datasets, and running the benchmark experiment.
+
+    Args:
+        model (BaseEmbeddingGenerator): The embedding generator model used
+            for the benchmark experiment.
+        dataset_paths (Optional[Union[str, Path]]): Path to the directory containing
+            datasets in .npz format. Defaults to "data/adbench_tabular_datasets".
+        random_state (int): The random state value for reproducibility of
+            train-test splits. Defaults to 42.
+        save_embeddings (bool): Boolean flag indicating whether to save embeddings
+            generated during the experiment. Defaults to False.
+        save_path (Optional[Union[str, Path]]): Path to save the embeddings if
+            `save_embeddings` is True. Defaults to None.
+
+    Returns:
+        pl.DataFrame: A DataFrame containing the results of the benchmark experiment.
+
+    Raises:
+        ValueError: If any of the dataset files are corrupted or incomplete,
+            causing a mismatch in data loading.
+    """
     print("Running outlier benchmark...")
     if dataset_paths is None:
         dataset_paths = Path("data/adbench_tabular_datasets")
@@ -27,6 +52,12 @@ def run_outlier_benchmark(
             download_adbench_tabular_datasets(dataset_paths)
     else:
         dataset_paths = Path(dataset_paths)
+    print(f"Dataset paths: {dataset_paths}")
+
+    npz_files = list(dataset_paths.glob("*.npz"))
+    print(f"Found {len(npz_files)} .npz files: {[f.name for f in npz_files]}")
+
+    benchmark_result_df = None
 
     for dataset_file in dataset_paths.glob("*.npz"):
         print(f"Running benchmark for {dataset_file.name}...")
@@ -34,10 +65,6 @@ def run_outlier_benchmark(
 
         X = dataset["X"]
         y = dataset["y"]
-
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=random_state
-        )
 
         dataset_description = get_data_description(
             dataset["X"], dataset["y"], dataset_file.stem
@@ -47,36 +74,41 @@ def run_outlier_benchmark(
 
         result_df = run_experiment(
             model,
-            X_train,
-            X_test,
-            y_train=y_train,
-            y_test=y_test,
+            X=X,
+            y=y,
             save_embeddings=save_embeddings,
             save_path=save_path,
         )
 
+        dataset_df = dataset_df.join(result_df, how="cross")
+
+        if benchmark_result_df is None:
+            benchmark_result_df = dataset_df
+        else:
+            benchmark_result_df = pl.concat([benchmark_result_df, dataset_df])
+
+        if benchmark_result_df is None:
+            raise ValueError("Benchmark result DataFrame is empty.")
+
+    return benchmark_result_df
+
 
 def run_experiment(
     model: BaseEmbeddingGenerator,
-    X_train: Union[torch.Tensor, np.ndarray],
-    X_test: Union[torch.Tensor, np.ndarray],
-    y_train: Optional[Union[torch.Tensor, np.ndarray]] = None,
-    y_test: Optional[Union[torch.Tensor, np.ndarray]] = None,
+    X: Union[torch.Tensor, np.ndarray],
+    y: Optional[Union[torch.Tensor, np.ndarray]] = None,
     save_embeddings: bool = False,
     save_path: Optional[Union[str, Path]] = None,
 ) -> pl.DataFrame:
     result_dict = dict()
     result_dict["algorithm"] = []
     result_dict["neighbors"] = []
-    result_dict["train_score"] = []
-    # result_dict["test_score"] = []
 
-    num_train_samples = X_train.shape[0]
+    num_train_samples = X.shape[0]
 
-    containment_rate = np.sum(y_train) / num_train_samples
+    containment_rate = np.sum(y) / num_train_samples
 
-    X_train_embed = model.compute_embeddings(X_train)
-    X_test_embed = model.compute_embeddings(X_test)
+    X_embed = model.compute_embeddings(X)
 
     num_neighbors_list = [i for i in range(1, 50)]
 
@@ -85,19 +117,19 @@ def run_experiment(
             n_neighbors=num_neighbors,
             n_jobs=-1,
         )
-        lof.fit(X_train_embed)
-        y_pred_train = lof.fit_predict(X_train_embed)
+        lof.fit(X_embed)
+        y_pred = lof.fit_predict(X_embed)
 
-        score_train = compute_metrics(y_train, y_pred_train)
-
-        # y_pred_test = lof.predict(X_test_embed)
-        #
-        # score_test = compute_metrics(y_test, y_pred_test)
+        score_train = compute_metrics(y, y_pred)
 
         result_dict["algorithm"].append("lof")
         result_dict["neighbors"].append(num_neighbors)
-        result_dict["train_score"].append(score_train["auc_score"])
-        # result_dict["test_score"].append(score_test["auc_score"])
+
+        for key, item in score_train.items():
+            if key in result_dict.keys():
+                result_dict[key].append(item)
+            else:
+                result_dict[key] = [item]
 
         lof_with_train_containment = LocalOutlierFactor(
             n_neighbors=num_neighbors,
@@ -105,27 +137,30 @@ def run_experiment(
             contamination=containment_rate,
         )
 
-        lof_with_train_containment.fit(X_train_embed)
-        y_pred_train = lof_with_train_containment.fit_predict(X_train_embed)
-        score_train = compute_metrics(y_train, y_pred_train)
-        # y_pred_test = lof_with_train_containment.fit_predict(X_test_embed)
-        # score_test = compute_metrics(y_test, y_pred_test)
+        lof_with_train_containment.fit(X_embed)
+        y_pred = lof_with_train_containment.fit_predict(X_embed)
+        score_train = compute_metrics(y, y_pred)
 
         result_dict["algorithm"].append("lof_with_train_containment")
         result_dict["neighbors"].append(num_neighbors)
-        result_dict["train_score"].append(score_train["auc_score"])
-        # result_dict["test_score"].append(score_test["auc_score"])
+        for key, item in score_train.items():
+            result_dict[key].append(item)
 
     result_df = pl.DataFrame(result_dict)
-    #
-    top_5_train_results = result_df.filter(pl.col("algorithm") == "lof").sort("train_score", descending=True).head(5)
-    # top_5_test_results = result_df.sort("test_score", descending=True).head(5)
 
-    # print(top_5_train_results)
-    # print(top_5_test_results)
-    print(result_df)
-    return pl.DataFrame(result_dict)
+    return result_df
 
 
 def compute_metrics(y_true, y_pred):
+    """
+    Compute evaluation metrics based on provided true labels and predicted labels.
+
+    Args:
+        y_true: List or array of true binary labels (0 or 1).
+        y_pred: List or array of predicted probabilities or scores.
+
+    Returns:
+        dict: A dictionary containing the computed AUC score under the key
+        'auc_score'.
+    """
     return {"auc_score": roc_auc_score(y_true, y_pred)}
