@@ -1846,6 +1846,7 @@ name = "tabembedbench"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "huggingface-hub" },
     { name = "liac-arff" },
     { name = "marimo" },
     { name = "mlflow" },
@@ -1865,6 +1866,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "huggingface-hub", specifier = ">=0.34.4" },
     { name = "liac-arff", specifier = "==2.5.0" },
     { name = "marimo", specifier = ">=0.14.16" },
     { name = "mlflow", specifier = ">=3.2.0" },

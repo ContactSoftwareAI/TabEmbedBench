@@ -1,3 +1,4 @@
+from huggingface_hub import hf_hub_download
 from pathlib import Path
 import numpy as np
 import torch
@@ -8,6 +9,12 @@ from tabembedbench.utils.torch_utils import get_device
 
 
 model_ckpt_path = Path("../data/models/tabicl/tabicl-classifier-v1.1-0506.ckpt")
+
+if not model_ckpt_path.exists():
+    model_ckpt_path = hf_hub_download(
+        repo_id="jingang/TabICL-clf",
+        filename="tabicl-classifier-v1.1-0506.ckpt",
+    )
 
 model_ckpt = torch.load(model_ckpt_path)
 
