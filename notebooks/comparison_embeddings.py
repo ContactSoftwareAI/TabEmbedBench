@@ -6,22 +6,20 @@ import pickle
 import os
 import matplotlib.pyplot as plt
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.join(os.path.dirname(current_dir), 'src')
-sys.path.insert(0, src_dir)
-from utils.shellmodel import ShellModel
-from utils.tabicl_utils import get_row_embeddings_model
+from tabembedbench.embedding_models.Schalenmodell import compute_embeddings
+from tabembedbench.utils.shellmodel import ShellModel
+from tabembedbench.embedding_models.tabicl_utils import get_row_embeddings_model
 from tabpfn import TabPFNRegressor, TabPFNClassifier
-from utils.tabpfn_utils import UniversalTabPFNEmbedding
-from utils.embedding_utils import get_embeddings_aggregation
+from tabembedbench.embedding_models.tabpfn_utils import UniversalTabPFNEmbedding
+from tabembedbench.utils.embedding_utils import compute_embeddings_aggregation
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import roc_auc_score
-sys.path.insert(0,"../../embedding-workflow")
+sys.path.insert(0,r"C:\Users\fho\Documents\code\TabData\embedding-workflow")
 import graph, load_data
 
-n_d = 512 # Embedding dimension for shell model
+n_d = 2 # Embedding dimension for shell model
 dataset = "grid_stability"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -69,7 +67,10 @@ tabpfn_model = UniversalTabPFNEmbedding(tabpfn_clf, tabpfn_reg)
 
 ### our universal embeddings
 nodes = g.node_list # same as g_train.node_list
-input_vectors = torch.tensor(np.array(g_train.random_embeddings(dimension=n_d), dtype=np.float32))
+input_vectors = (np.array(g_train.random_embeddings(dimension=n_d), dtype=np.float32))
+#plt.plot(input_vectors[:, 0], input_vectors[:, 1], 'o')
+#plt.show()
+input_vectors = torch.tensor(input_vectors)
 emb = {nodes[i]: np.array(input_vectors[i].cpu()) for i in range(len(nodes))}
 row_embeddings = g.get_context_embedding_mean(emb)
 for ind in data.index:
@@ -86,6 +87,7 @@ for i in range(len(train_indices)):
 test_indices = list(data[data.set == "test"].index)
 
 target_key = list(target.keys())[1]
+print(f"Target key: {target_key}")
 
 data_train = data.loc[train_indices]
 data_test = data.loc[test_indices]
@@ -96,10 +98,7 @@ y_test = data_test[target_key]
 if dataset == "grid_stability":
     data_train_for_tabicl = data_train.drop(['stab', 'stabf', 'embeddings', 'set'], axis=1)
     data_test_for_tabicl = data_test.drop(['stab', 'stabf', 'embeddings', 'set'], axis=1)
-#elif dataset == "synthetic":
-#    print(data_train)
-#    data_train_for_tabicl = data_train.drop(['stab', 'stabf', 'embeddings', 'set'], axis=1)
-#    data_test_for_tabicl = data_test.drop(['stab', 'stabf', 'embeddings', 'set'], axis=1)
+
 
 # Konvertierung zu Tensoren für TabICL
 X_train_tensor = torch.tensor(data_train_for_tabicl.values, dtype=torch.float32).unsqueeze(0).to(device)
@@ -111,9 +110,9 @@ X_test_embed_tabicl = row_embedder(X_test_tensor)
 
 # TabPFN embeddings: embeddings for every column as target
 X_train_embed_tabpfn = tabpfn_model.get_embeddings(data_train_for_tabicl)
-aggregated_emb_train = get_embeddings_aggregation(X_train_embed_tabpfn, agg_func = "mean")
+aggregated_emb_train = compute_embeddings_aggregation(X_train_embed_tabpfn, agg_func = "mean")
 X_test_embed_tabpfn = tabpfn_model.get_embeddings(data_test_for_tabicl)
-aggregated_emb_test = get_embeddings_aggregation(X_test_embed_tabpfn, agg_func = "mean")
+aggregated_emb_test = compute_embeddings_aggregation(X_test_embed_tabpfn, agg_func = "mean")
 
 # Shell model embeddings
 data_train_embeddings = data.loc[train_indices]["embeddings"]
@@ -122,9 +121,14 @@ X_train_embed_shellmodel = np.array(list(data_train_embeddings.values))
 X_test_embed_shellmodel = np.array(list(data_test_embeddings.values))
 
 # Shell model embeddings test
-shellmodel = ShellModel(embed_dim=n_d)
-X_train_embed_shellmodel2 = shellmodel.forward(data_train, g_train, g)
-X_test_embed_shellmodel2 = shellmodel.forward(data_test, g_train, g)
+shellmodel = ShellModel(embed_dim=n_d, g=g)
+#X_combined = np.concatenate([data_train, data_test], axis=0)
+X_combined = data.drop(['stab', 'stabf', 'embeddings', 'set'], axis=1)
+embeddings_schalenmodell = compute_embeddings(data = X_combined, categorical_indices = [], embed_dim=n_d)
+plt.plot(embeddings_schalenmodell[:, 0], embeddings_schalenmodell[:, 1], 'o')
+plt.show()
+X_train_embed_shellmodel2 = embeddings_schalenmodell[train_indices]#shellmodel.forward(data_train)
+X_test_embed_shellmodel2 = embeddings_schalenmodell[test_indices] #shellmodel.forward(data_test)
 
 # Label encoding
 y_train = le.fit_transform(y_train.to_numpy().ravel())
@@ -147,31 +151,57 @@ score_per_neighbors_shellmodel2 = dict()
 score_per_neighbors_shellmodel2["neighbor_shellmodel2"] = []
 score_per_neighbors_shellmodel2["roc_auc_score"] = []
 
+
 # KNN
-for k in range(10):
-    knn = KNeighborsClassifier(n_neighbors=k+1)
-    knn.fit(X_train_embed_tabicl.squeeze().detach().cpu().numpy(), y_train)
-    y_pred = knn.predict(X_test_embed_tabicl.squeeze().detach().cpu().numpy())
+for k in [10]:
+    knn1 = KNeighborsClassifier(n_neighbors=k+1, weights='distance', algorithm='ball_tree')
+    knn1.fit(X_train_embed_tabicl.squeeze().detach().cpu().numpy(), y_train)
+    y_pred = knn1.predict_proba(X_test_embed_tabicl.squeeze().detach().cpu().numpy())
     score_per_neighbors_tabicl["neighbor_tabicl"].append(k+1)
-    score_per_neighbors_tabicl["roc_auc_score"].append(roc_auc_score(y_test, y_pred))
+    score_per_neighbors_tabicl["roc_auc_score"].append(roc_auc_score(y_test, y_pred[:,1]))
 
-    knn = KNeighborsClassifier(n_neighbors=k + 1)
-    knn.fit(X_train_embed_shellmodel, y_train)
-    y_pred = knn.predict(X_test_embed_shellmodel)
+    knn2 = KNeighborsClassifier(n_neighbors=k + 1, weights='distance', algorithm='ball_tree')
+    knn2.fit(X_train_embed_shellmodel, y_train)
+    distances, indices = knn2.kneighbors(X_test_embed_shellmodel)  # Erste 5 Test-Samples
+    print("Distances to nearest neighbors (first 5 test samples):")
+    for i in range(5):
+        print(f"  Sample {i}: {distances[i]}")
+        print(f"  Neighbor classes: {y_train[indices[i]]}")
+    y_pred = knn2.predict_proba(X_test_embed_shellmodel)
     score_per_neighbors_shellmodel["neighbor_shellmodel"].append(k + 1)
-    score_per_neighbors_shellmodel["roc_auc_score"].append(roc_auc_score(y_test, y_pred))
+    score_per_neighbors_shellmodel["roc_auc_score"].append(roc_auc_score(y_test, y_pred[:,1]))
 
-    knn = KNeighborsClassifier(n_neighbors=k + 1)
-    knn.fit(aggregated_emb_train.squeeze(), y_train)
-    y_pred = knn.predict(aggregated_emb_test.squeeze())
+    knn3 = KNeighborsClassifier(n_neighbors=k + 1, weights='distance', algorithm='ball_tree')
+    knn3.fit(aggregated_emb_train.squeeze(), y_train)
+    y_pred = knn3.predict_proba(aggregated_emb_test.squeeze())
     score_per_neighbors_tabpfn["neighbor_tabpfn"].append(k + 1)
-    score_per_neighbors_tabpfn["roc_auc_score"].append(roc_auc_score(y_test, y_pred))
+    score_per_neighbors_tabpfn["roc_auc_score"].append(roc_auc_score(y_test, y_pred[:,1]))
 
-    knn = KNeighborsClassifier(n_neighbors=k + 1)
-    knn.fit(X_train_embed_shellmodel2, y_train)
-    y_pred = knn.predict(X_test_embed_shellmodel2)
+    knn4 = KNeighborsClassifier(n_neighbors=k + 1, weights='distance', algorithm='ball_tree')
+    knn4.fit(X_train_embed_shellmodel2, y_train)
+    # distances, indices = knn4.kneighbors(X_test_embed_shellmodel2)  # Erste 5 Test-Samples
+    # #print("Distances to nearest neighbors (first 5 test samples):")
+    # #for i in range(5):
+    # #    print(f"  Sample {i}: {distances[i]}")
+    # #    print(f"  Neighbor classes: {y_train[indices[i]]}")
+    # y_pred = []
+    # for i in range(len(X_test_embed_shellmodel2)):
+    #     # Gewichte basierend auf inversen Distanzen
+    #     weights = 1 / (distances[i] + 1e-8)  # kleine Konstante um Division durch 0 zu vermeiden
+    #     # Gewichteter Durchschnitt der Nachbar-Labels
+    #     neighbor_labels = np.array(y_train[indices[i]])
+    #     weighted_prediction = np.sum(weights * neighbor_labels) / np.sum(weights)
+    #     y_pred.append(weighted_prediction)
+    #
+    # y_pred = np.array(y_pred)
+    # print(f"y_pred: {y_pred[:5]}")
+    # y_pred = knn4.predict(X_test_embed_shellmodel2)
+    # print(f"y_pred_test: {y_pred_test[:5]}")
+    y_pred = knn4.predict_proba(X_test_embed_shellmodel2)
+    # print(f"y_pred_proba: {y_pred_proba[:5]}")
+    # #y_pred = np.matmul(1/distances, np.array(y_train[indices]))/np.sum(1/distances) #knn4.predict(X_test_embed_shellmodel2)
     score_per_neighbors_shellmodel2["neighbor_shellmodel2"].append(k + 1)
-    score_per_neighbors_shellmodel2["roc_auc_score"].append(roc_auc_score(y_test, y_pred))
+    score_per_neighbors_shellmodel2["roc_auc_score"].append(roc_auc_score(y_test, y_pred[:,1]))
 
 result_df_tabicl = pl.from_dict(score_per_neighbors_tabicl)
 result_df_tabpfn = pl.from_dict(score_per_neighbors_tabpfn)
@@ -183,53 +213,6 @@ print("Dimension 512")
 print(result_df_tabpfn)
 print("Dimension 192")
 print(result_df_shellmodel)
-print("Dimension 512")
+print(f"Dimension {n_d}")
 print(result_df_shellmodel2)
-print("Dimension 512")
-
-
-# Histogramme für die drei Embedding-Methoden
-fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-fig.suptitle('Histogramme der Embedding-Komponenten für alle drei Methoden', fontsize=16)
-
-# 1. TabICL Embeddings
-tabicl_train_flat = X_train_embed_tabicl.squeeze().detach().cpu().numpy().flatten()
-tabicl_test_flat = X_test_embed_tabicl.squeeze().detach().cpu().numpy().flatten()
-tabicl_all = np.concatenate([tabicl_train_flat, tabicl_test_flat])
-
-axes[0].hist(tabicl_all, bins=150, alpha=0.7, color='blue', edgecolor='black')
-axes[0].set_title('TabICL Embeddings')
-axes[0].set_xlabel('Embedding-Werte')
-axes[0].set_ylabel('Häufigkeit')
-axes[0].grid(True, alpha=0.3)
-
-# 2. TabPFN Embeddings
-tabpfn_train_flat = aggregated_emb_train.squeeze().flatten()
-tabpfn_test_flat = aggregated_emb_test.squeeze().flatten()
-tabpfn_all = np.concatenate([tabpfn_train_flat, tabpfn_test_flat])
-
-axes[1].hist(tabpfn_all, bins=150, alpha=0.7, color='red', edgecolor='black')
-axes[1].set_title('TabPFN Embeddings')
-axes[1].set_xlabel('Embedding-Werte')
-axes[1].set_ylabel('Häufigkeit')
-axes[1].grid(True, alpha=0.3)
-
-# 3. Shell Model Embeddings
-shellmodel_train_flat = X_train_embed_shellmodel.squeeze().flatten()
-shellmodel_test_flat = X_test_embed_shellmodel.squeeze().flatten()
-shellmodel_all = np.concatenate([shellmodel_train_flat, shellmodel_test_flat])
-
-axes[2].hist(shellmodel_all, bins=150, alpha=0.7, color='green', edgecolor='black')
-axes[2].set_title('Shell Model Embeddings')
-axes[2].set_xlabel('Embedding-Werte')
-axes[2].set_ylabel('Häufigkeit')
-axes[2].grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.show()
-
-# Zusätzlich: Statistiken für jede Methode ausgeben
-print("\n=== Embedding Statistiken ===")
-print(f"TabICL - Min: {tabicl_all.min():.4f}, Max: {tabicl_all.max():.4f}, Mean: {tabicl_all.mean():.4f}, Std: {tabicl_all.std():.4f}")
-print(f"TabPFN - Min: {tabpfn_all.min():.4f}, Max: {tabpfn_all.max():.4f}, Mean: {tabpfn_all.mean():.4f}, Std: {tabpfn_all.std():.4f}")
-print(f"Shell Model - Min: {shellmodel_all.min():.4f}, Max: {shellmodel_all.max():.4f}, Mean: {shellmodel_all.mean():.4f}, Std: {shellmodel_all.std():.4f}")
+print(f"Dimension {n_d}")
