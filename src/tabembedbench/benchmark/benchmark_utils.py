@@ -76,7 +76,7 @@ def run_experiment(
     X_train_embed = model.compute_embeddings(X_train)
     X_test_embed = model.compute_embeddings(X_test)
 
-    num_neighbors_list = [i+1 for i in range(14)]
+    num_neighbors_list = [i for i in range(1, 50)]
 
     for num_neighbors in num_neighbors_list:
         lof = LocalOutlierFactor(
@@ -116,7 +116,7 @@ def run_experiment(
 
     result_df = pl.DataFrame(result_dict)
     #
-    # top_5_train_results = result_df.filter(pl.col("algorithm") == "lof").sort("train_score", descending=True).head(5)
+    top_5_train_results = result_df.filter(pl.col("algorithm") == "lof").sort("train_score", descending=True).head(5)
     # top_5_test_results = result_df.sort("test_score", descending=True).head(5)
 
     # print(top_5_train_results)
