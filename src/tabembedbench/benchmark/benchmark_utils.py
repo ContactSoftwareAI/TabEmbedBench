@@ -19,9 +19,11 @@ def run_outlier_benchmark(
     save_embeddings: bool = False,
     save_path: Optional[Union[str, Path]] = None,
 ) -> pl.DataFrame:
+    print("Running outlier benchmark...")
     if dataset_paths is None:
         dataset_paths = Path("data/adbench_tabular_datasets")
         if not dataset_paths.exists():
+            print("Downloading ADBench tabular datasets...")
             download_adbench_tabular_datasets(dataset_paths)
     else:
         dataset_paths = Path(dataset_paths)
