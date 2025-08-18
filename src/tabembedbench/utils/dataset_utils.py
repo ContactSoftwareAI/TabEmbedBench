@@ -11,7 +11,7 @@ import torch
 ADBENCH_URL = "https://github.com/Minqi824/ADBench/archive/refs/heads/main.zip"
 
 
-def download_adbench_tabular_datasets(save_path: Optional[str, Path] = None) -> None:
+def download_adbench_tabular_datasets(save_path: Optional[Union[str, Path]] = None) -> None:
     """
     Downloads tabular datasets for ADBench from the specified GitHub repository and saves them to the
     specified path. If no path is provided, it defaults to './data/adbench_tabular_datasets'. If the
@@ -69,7 +69,7 @@ def download_adbench_tabular_datasets(save_path: Optional[str, Path] = None) -> 
 
 def get_data_description(
     X: np.ndarray, y: np.ndarray, dataset_name: str
-) -> dict[str, str | int | float]:
+) -> dict[str, Union[str, int,float]]:
     """
     Provides a summary of the dataset by computing statistical information
     such as the number of samples, features, anomalies, and the anomaly ratio.

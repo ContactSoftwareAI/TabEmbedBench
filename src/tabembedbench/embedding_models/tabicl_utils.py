@@ -174,7 +174,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         if len(X.shape) == 2:
             X = X.unsqueeze(0)
 
-        embeddings = self.forward(X).detach().numpy()
+        embeddings = self.forward(X).cpu().squeeze().numpy()
         return embeddings
 
 

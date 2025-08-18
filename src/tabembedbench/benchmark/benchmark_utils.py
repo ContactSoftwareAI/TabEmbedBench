@@ -14,10 +14,10 @@ from tabembedbench.utils.dataset_utils import download_adbench_tabular_datasets,
 
 def run_outlier_benchmark(
     model: BaseEmbeddingGenerator,
-    dataset_paths: Optional[str, Path] = None,
+    dataset_paths: Optional[Union[str, Path]] = None,
     random_state: int = 42,
     save_embeddings: bool = False,
-    save_path: Optional[str, Path] = None,
+    save_path: Optional[Union[str, Path]] = None,
 ) -> pl.DataFrame:
     if dataset_paths is None:
         dataset_paths = Path("data/adbench_tabular_datasets")
@@ -47,6 +47,8 @@ def run_outlier_benchmark(
             model,
             X_train,
             X_test,
+            y_train=y_train,
+            y_test=y_test,
             save_embeddings=save_embeddings,
             save_path=save_path,
         )
@@ -59,13 +61,13 @@ def run_experiment(
     y_train: Optional[Union[torch.Tensor, np.ndarray]] = None,
     y_test: Optional[Union[torch.Tensor, np.ndarray]] = None,
     save_embeddings: bool = False,
-    save_path: Optional[str, Path] = None,
+    save_path: Optional[Union[str, Path]] = None,
 ) -> pl.DataFrame:
     result_dict = dict()
     result_dict["algorithm"] = []
     result_dict["neighbors"] = []
     result_dict["train_score"] = []
-    result_dict["test_score"] = []
+    # result_dict["test_score"] = []
 
     num_train_samples = X_train.shape[0]
 
@@ -74,9 +76,7 @@ def run_experiment(
     X_train_embed = model.compute_embeddings(X_train)
     X_test_embed = model.compute_embeddings(X_test)
 
-    num_neighbors_list = (
-        num_train_samples*np.array([0.2, 0.02, 0.01, 0.005, 0.001])
-    ).astype(np.int32)
+    num_neighbors_list = [i+1 for i in range(14)]
 
     for num_neighbors in num_neighbors_list:
         lof = LocalOutlierFactor(
@@ -84,18 +84,18 @@ def run_experiment(
             n_jobs=-1,
         )
         lof.fit(X_train_embed)
-        y_pred_train = lof.predict(X_train_embed)
+        y_pred_train = lof.fit_predict(X_train_embed)
 
         score_train = compute_metrics(y_train, y_pred_train)
 
-        y_pred_test = lof.predict(X_test_embed)
-
-        score_test = compute_metrics(y_test, y_pred_test)
+        # y_pred_test = lof.predict(X_test_embed)
+        #
+        # score_test = compute_metrics(y_test, y_pred_test)
 
         result_dict["algorithm"].append("lof")
         result_dict["neighbors"].append(num_neighbors)
         result_dict["train_score"].append(score_train["auc_score"])
-        result_dict["test_score"].append(score_test["auc_score"])
+        # result_dict["test_score"].append(score_test["auc_score"])
 
         lof_with_train_containment = LocalOutlierFactor(
             n_neighbors=num_neighbors,
@@ -104,29 +104,26 @@ def run_experiment(
         )
 
         lof_with_train_containment.fit(X_train_embed)
-        y_pred_train = lof_with_train_containment.predict(X_train_embed)
+        y_pred_train = lof_with_train_containment.fit_predict(X_train_embed)
         score_train = compute_metrics(y_train, y_pred_train)
-        y_pred_test = lof_with_train_containment.predict(X_test_embed)
-        score_test = compute_metrics(y_test, y_pred_test)
+        # y_pred_test = lof_with_train_containment.fit_predict(X_test_embed)
+        # score_test = compute_metrics(y_test, y_pred_test)
 
         result_dict["algorithm"].append("lof_with_train_containment")
         result_dict["neighbors"].append(num_neighbors)
         result_dict["train_score"].append(score_train["auc_score"])
-        result_dict["test_score"].append(score_test["auc_score"])
+        # result_dict["test_score"].append(score_test["auc_score"])
 
     result_df = pl.DataFrame(result_dict)
+    #
+    # top_5_train_results = result_df.filter(pl.col("algorithm") == "lof").sort("train_score", descending=True).head(5)
+    # top_5_test_results = result_df.sort("test_score", descending=True).head(5)
 
-    top_5_train_results = result_df.sort("train_score", descending=True).head(5)
-    top_5_test_results = result_df.sort("test_score", descending=True).head(5)
-
-    print(top_5_train_results)
-    print(top_5_test_results)
-
+    # print(top_5_train_results)
+    # print(top_5_test_results)
+    print(result_df)
     return pl.DataFrame(result_dict)
 
 
 def compute_metrics(y_true, y_pred):
     return {"auc_score": roc_auc_score(y_true, y_pred)}
-
-
-if __name__ == "__main__":
