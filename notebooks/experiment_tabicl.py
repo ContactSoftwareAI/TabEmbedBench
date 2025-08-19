@@ -7,6 +7,7 @@ import torch
 
 from tabembedbench.benchmark.benchmark_utils import run_outlier_benchmark
 from tabembedbench.embedding_models.tabicl_utils import get_row_embeddings_model
+from tabembedbench.embedding_models.spherebasedembedding_utils import SphereBasedEmbedding
 from tabembedbench.utils.torch_utils import get_device
 
 model_ckpt_path = Path("/data/models/tabicl/tabicl-classifier-v1.1-0506.ckpt")
@@ -30,7 +31,16 @@ print(device)
 
 row_embedder = get_row_embeddings_model(state_dict=state_dict, config=config)
 
+row_embedder.name = model_name
+
+sphere_embedder = SphereBasedEmbedding()
+
 row_embedder.to(device)
+
+models = [
+    row_embedder,
+    sphere_embedder
+]
 
 result_df = run_outlier_benchmark(
     model=row_embedder,
@@ -39,6 +49,9 @@ result_df = run_outlier_benchmark(
 
 timestamp_compact = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+result_parquet = Path(f"data/results/results_{timestamp_compact}.parquet")
+result_parquet.parent.mkdir(parents=True, exist_ok=True)
+
 result_df.write_parquet(
-    file=f"data/results/{model_name}_{timestamp_compact}.parquet"
+    file=result_parquet
 )
