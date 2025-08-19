@@ -54,13 +54,13 @@ def compute_embeddings(data: Union[pd.DataFrame, np.ndarray],
         if col_idx in categorical_indices:
             # Kategorische Spalte
             col_embedding = _embed_categorical_column(column_data, embed_dim)
-            plt.plot(col_embedding[:, 0], col_embedding[:, 1], 'o')
-            plt.show()
+            # plt.plot(col_embedding[:, 0], col_embedding[:, 1], 'o')
+            # plt.show()
         else:
             # Numerische Spalte
             col_embedding = _embed_numerical_column(column_data, embed_dim)
-            plt.plot(col_embedding[:, 0], col_embedding[:, 1], 'o')
-            plt.show()
+            # plt.plot(col_embedding[:, 0], col_embedding[:, 1], 'o')
+            # plt.show()
 
         column_embeddings.append(col_embedding)
 
@@ -88,6 +88,8 @@ def _embed_numerical_column(column_data: np.ndarray, embed_dim: int) -> np.ndarr
     Jeder Wert wird auf einer Linie durch den Ursprung eingebettet,
     wobei die Linie durch einen zufälligen Punkt auf der Einheitssphäre definiert wird.
     """
+    column_data = np.asarray(column_data, dtype=np.float64)
+
     # Finde Min, Max und Mitte
     col_min = np.min(column_data)
     col_max = np.max(column_data)
@@ -147,3 +149,14 @@ def _embed_categorical_column(column_data: np.ndarray, embed_dim: int) -> np.nda
         embeddings[i] = category_embeddings[value]
 
     return embeddings
+
+
+if __name__ == "__main__":
+    sample = np.load("/Users/lkl/PycharmProjects/TabEmbedBench/data/adbench_tabular_datasets/32_shuttle.npz")
+
+    X = sample["X"]
+    y = sample["y"]
+
+    cat_indices = infer_categorical_columns(X)
+
+    emb = compute_embeddings(X, cat_indices, 512)

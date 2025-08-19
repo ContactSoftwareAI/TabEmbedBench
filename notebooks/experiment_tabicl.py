@@ -43,7 +43,7 @@ models = [
 ]
 
 result_df = run_outlier_benchmark(
-    model=row_embedder,
+    models=models,
     save_embeddings=True
 )
 
