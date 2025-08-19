@@ -142,6 +142,9 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         )
         return row_representations
 
+    def _get_default_name(self) -> str:
+        return "TabICL"
+
     def compute_embeddings(
         self, X: np.ndarray, device: Optional[torch.device] = None
     ) -> np.ndarray:

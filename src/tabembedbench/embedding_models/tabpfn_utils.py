@@ -38,6 +38,9 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
         self.tabpfn_reg = tabpfn_reg
         self.n_fold = n_fold
 
+    def _get_default_name(self) -> str:
+        return "TabPFN"
+
     def get_embeddings(
         self,
         X: Union[np.ndarray, pd.DataFrame],
