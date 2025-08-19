@@ -1,6 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union, List
+import shutil
 
 import numpy as np
 import polars as pl
@@ -170,7 +171,10 @@ def run_experiment(
 
     if save_embeddings:
         save_file_path = Path(save_embeddings_path) / f"{model.name}" / f"{dataset_name}_embeddings.npz"
-        save_file_path.mkdir(parents=True, exist_ok=True)
+        if save_file_path.exists() and save_file_path.is_dir():
+            shutil.rmtree(save_file_path)
+
+        save_file_path.parent.mkdir(parents=True, exist_ok=True)
         np.savez(file=save_file_path, x=X_embed, y=y)
 
     num_neighbors_list = [i for i in range(1, 15)]
@@ -185,26 +189,18 @@ def run_experiment(
 
             lof.fit(X_embed)
 
-            neg_decision_scores = (-1)*lof.decision_function(X)
             neg_outlier_factor = (-1)*lof.negative_outlier_factor_
 
-            score_decision = compute_metrics(y, neg_decision_scores)
             score_outlier_factor = compute_metrics(y, neg_outlier_factor)
 
             result_dict["algorithm"].append("lof")
             result_dict["neighbors"].append(num_neighbors)
 
-            for key, item in score_decision.items():
-                if key in result_dict.keys():
-                    result_dict[key + "_decision"].append(item)
-                else:
-                    result_dict[key + "_decision"] = [item]
-
             for key, item in score_outlier_factor.items():
                 if key in result_dict.keys():
-                    result_dict[key + "_outlier_factor"].append(item)
+                    result_dict[key].append(item)
                 else:
-                    result_dict[key + "_outlier_factor"] = [item]
+                    result_dict[key] = [item]
 
         result_df = pl.DataFrame(result_dict)
     except Exception as e:
@@ -214,7 +210,7 @@ def run_experiment(
         )
 
         # TODO: better handling of error for different metrics.
-        empty_result = {"algorithm": [], "neighbors": [], "auc_score_decision": [], "auc_score_outlier_factor": []}
+        empty_result = {"algorithm": [], "neighbors": [], "auc_score": []}
 
         result_df = pl.DataFrame(empty_result)
 
