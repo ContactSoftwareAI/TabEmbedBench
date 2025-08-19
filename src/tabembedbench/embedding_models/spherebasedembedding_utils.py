@@ -1,7 +1,23 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from typing import List, Union
+from typing import List, Union, Optional
+
+from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.utils.preprocess_utils import infer_categorical_columns
+
+
+class SphereBasedEmbedding(BaseEmbeddingGenerator):
+    def __init__(self):
+        super().__init__()
+
+    def _get_default_name(self) -> str:
+        return "Schalenmodell"
+
+    def compute_embeddings(self, data: np.ndarray, embed_dim: Optional[int] = 512):
+        cat_indices = infer_categorical_columns(data)
+
+        return compute_embeddings(data, cat_indices, embed_dim)
 
 
 def compute_embeddings(data: Union[pd.DataFrame, np.ndarray],

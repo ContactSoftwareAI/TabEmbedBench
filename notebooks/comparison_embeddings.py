@@ -6,7 +6,7 @@ import pickle
 import os
 import matplotlib.pyplot as plt
 
-from tabembedbench.embedding_models.Schalenmodell import compute_embeddings
+from tabembedbench.embedding_models.spherebasedembedding_utils import compute_embeddings
 from tabembedbench.utils.shellmodel import ShellModel
 from tabembedbench.embedding_models.tabicl_utils import get_row_embeddings_model
 from tabpfn import TabPFNRegressor, TabPFNClassifier
