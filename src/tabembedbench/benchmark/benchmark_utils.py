@@ -124,6 +124,7 @@ def run_outlier_benchmark(
         dataset_df = pl.DataFrame(dataset_description)
 
         for model in models_to_process:
+            logger.info(f"Starting experiment for dataset {dataset_file.stem} with model {model.name}...")
             result_df = run_experiment(
                 model,
                 X=X,
