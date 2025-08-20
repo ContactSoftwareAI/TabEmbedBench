@@ -1,11 +1,13 @@
 from sklearn.base import TransformerMixin
-from typing import List, Union
+from typing import List, Union, Optional
 import numpy as np
 import pandas as pd
 
+from tabembedbench.utils.preprocess_utils import infer_categorical_columns
+
 
 class SphereModel(TransformerMixin):
-    def __init__(self, categorical_indices: List[int], embed_dim: int):
+    def __init__(self, embed_dim: int, categorical_indices: Optional[List[int]] = None):
         self.categorical_indices = categorical_indices
         self.embed_dim = embed_dim
         self.column_properties = []
@@ -37,7 +39,10 @@ class SphereModel(TransformerMixin):
         if isinstance(data, pd.DataFrame):
             data_array = data.values
         else:
-            data_array = data.copy()
+            data_array = data
+
+        if self.categorical_indices is None:
+            self.categorical_indices = infer_categorical_columns(data)
 
         _ , self.n_cols = data_array.shape
 
@@ -86,7 +91,7 @@ class SphereModel(TransformerMixin):
         if isinstance(data, pd.DataFrame):
             data_array = data.values
         else:
-            data_array = data.copy()
+            data_array = data
 
         n_rows, n_cols = data_array.shape
         if n_cols != self.n_cols:
@@ -100,7 +105,7 @@ class SphereModel(TransformerMixin):
             if col_idx in self.categorical_indices:
                 col_embedding = self._embed_categorical_column(column_data, col_idx)
             else:
-                col_embedding,  = self._embed_numerical_column(column_data, col_idx)
+                col_embedding  = self._embed_numerical_column(column_data, col_idx)
 
             column_embeddings.append(col_embedding)
 
