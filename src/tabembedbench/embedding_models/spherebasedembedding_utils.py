@@ -149,14 +149,3 @@ def _embed_categorical_column(column_data: np.ndarray, embed_dim: int) -> np.nda
         embeddings[i] = category_embeddings[value]
 
     return embeddings
-
-
-if __name__ == "__main__":
-    sample = np.load("/Users/lkl/PycharmProjects/TabEmbedBench/data/adbench_tabular_datasets/32_shuttle.npz")
-
-    X = sample["X"]
-    y = sample["y"]
-
-    cat_indices = infer_categorical_columns(X)
-
-    emb = compute_embeddings(X, cat_indices, 512)
