@@ -5,6 +5,7 @@ import numpy as np
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
+from tabicl.sklearn.preprocessing import TransformToNumerical, PreprocessingPipeline
 import torch
 from torch import nn
 
@@ -45,6 +46,8 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         dropout: float = 0.0,
         activation: Union[str, callable] = "gelu",
         norm_first: bool = True,
+        normalize_embeddings: bool = False,
+        preprocess_data: bool = False,
         **kwargs,
     ):
         """
@@ -72,6 +75,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
                 layers of the modules. Can be a string or a callable function.
             norm_first (bool): If True, applies layer normalization before other
                 operations in each layer.
+            normalize_embeddings (bool):
         """
         super().__init__()
 
@@ -106,6 +110,9 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
             param.requires_grad = False
 
         # Set to eval mode
+
+        self.normalize_embeddings = normalize_embeddings
+        self.preprocess_data = preprocess_data
         self.eval()
 
     def forward(
@@ -146,7 +153,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         return "TabICL"
 
     def compute_embeddings(
-        self, X: np.ndarray, device: Optional[torch.device] = None
+        self, X: np.ndarray, device: Optional[torch.device] = None,
     ) -> np.ndarray:
         """
         Computes the embeddings for the given input array using the model's forward method.
@@ -168,6 +175,11 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         Raises:
             ValueError: If the input array is not 2D or 3D.
         """
+        if self.normalize_embeddings:
+            X = TransformToNumerical().fit_transform(X)
+            if self.preprocess_data:
+                X = PreprocessingPipeline().fit_transform(X)
+
         if device is None:
             device = get_device()
             self.to(device)
@@ -207,7 +219,7 @@ def filter_params_for_class(cls, params_dict):
     return filtered_params
 
 
-def get_row_embeddings_model(state_dict: dict, config: dict):
+def get_row_embeddings_model(state_dict: dict, config: dict, preprocess_data: bool = False):
     """
     Loads a row embedding model using the provided state dictionary and configuration,
     ensuring compatibility by filtering the configuration for the appropriate class attributes.
@@ -216,13 +228,19 @@ def get_row_embeddings_model(state_dict: dict, config: dict):
         state_dict (dict): A dictionary containing model parameters to load into the model.
         config (dict): A configuration dictionary including parameters for initializing the
             model. Only parameters that match the expected class attributes will be used.
+        preprocess_data (bool):
 
     Returns:
         TabICLEmbedding: An instance of TabICLEmbedding initialized with the filtered
             configuration and loaded with the provided state dictionary.
     """
     filtered_config = filter_params_for_class(TabICLEmbedding, config)
-    row_embedding_model = TabICLEmbedding(**filtered_config)
+
+    row_embedding_model = TabICLEmbedding(
+        normalize_embeddings=preprocess_data,
+        preprocess_data=preprocess_data,
+        **filtered_config
+    )
 
     row_embedding_model.load_state_dict(state_dict, strict=False)
     return row_embedding_model

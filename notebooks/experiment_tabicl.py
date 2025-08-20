@@ -33,18 +33,25 @@ row_embedder = get_row_embeddings_model(state_dict=state_dict, config=config)
 
 row_embedder.name = model_name
 
+row_embedder_preprocessed = get_row_embeddings_model(state_dict=state_dict, config=config, preprocess_data=True)
+
+row_embedder_preprocessed.name = model_name+"_preprocessed"
+
 sphere_embedder = SphereBasedEmbedding()
 
 row_embedder.to(device)
+row_embedder_preprocessed.to(device)
 
 models = [
+    row_embedder_preprocessed,
     row_embedder,
     sphere_embedder
 ]
 
 result_df = run_outlier_benchmark(
     models=models,
-    save_embeddings=True
+    save_embeddings=True,
+    exclude_datasets=["3_backdoor.npz"],
 )
 
 timestamp_compact = datetime.now().strftime("%Y%m%d_%H%M%S")

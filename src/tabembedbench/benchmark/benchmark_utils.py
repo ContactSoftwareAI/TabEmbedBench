@@ -39,6 +39,7 @@ def run_outlier_benchmark(
     save_embeddings_path: Optional[Union[str, Path]] = None,
     upper_bound_dataset_size: int = 100000,
     exclude_datasets: Optional[list[str]] = None,
+    exclude_image_datasets: bool = False,
 ) -> pl.DataFrame:
     """
     Executes an outlier detection benchmark on provided datasets using a specified model.
@@ -79,6 +80,13 @@ def run_outlier_benchmark(
                 "There is an element within the list of models that does not have a function 'compute_embeddings'."
             )
 
+    if exclude_image_datasets:
+        if exclude_datasets is not None:
+            exclude_datasets.extend(IMAGE_CATEGORY)
+        else:
+            exclude_datasets = IMAGE_CATEGORY
+
+
     logger.info("Running outlier benchmark...")
     if dataset_paths is None:
         dataset_paths = Path("data/adbench_tabular_datasets")
@@ -100,58 +108,63 @@ def run_outlier_benchmark(
     benchmark_result_df = None
 
     for dataset_file in dataset_paths.glob("*.npz"):
-        logger.info(f"Running benchmark for {dataset_file.name}...")
-        dataset = np.load(dataset_file)
+        if dataset_file.name not in exclude_datasets:
+            logger.info(f"Running benchmark for {dataset_file.name}...")
+            dataset = np.load(dataset_file)
 
-        X = dataset["X"]
-        y = dataset["y"]
-
-        with np.load(dataset_file) as dataset:
-            if dataset["X"].shape[0] > upper_bound_dataset_size:
-                logger.warning(
-                    f"Skipping {dataset_file.name} - dataset size {dataset['X'].shape[0]} exceeds limit {upper_bound_dataset_size}"
-                )
-                continue
-
-            # Now load the full data
             X = dataset["X"]
             y = dataset["y"]
 
-        dataset_description = get_data_description(X, y, dataset_file.stem)
-        logger.info(
-            f"Samples: {dataset_description['samples']}, Features: {dataset_description['features']}"
-        )
-        dataset_df = pl.DataFrame(dataset_description)
+            with np.load(dataset_file) as dataset:
+                if dataset["X"].shape[0] > upper_bound_dataset_size:
+                    logger.warning(
+                        f"Skipping {dataset_file.name} - dataset size {dataset['X'].shape[0]} exceeds limit {upper_bound_dataset_size}"
+                    )
+                    continue
 
-        for model in models_to_process:
-            logger.info(f"Starting experiment for dataset {dataset_file.stem} with model {model.name}...")
-            result_df = run_experiment(
-                model,
-                X=X,
-                y=y,
-                save_embeddings=save_embeddings,
-                save_embeddings_path=save_embeddings_path,
-                dataset_name=dataset_file.stem,
+                # Now load the full data
+                X = dataset["X"]
+                y = dataset["y"]
+
+            dataset_description = get_data_description(X, y, dataset_file.stem)
+            logger.info(
+                f"Samples: {dataset_description['samples']}, Features: {dataset_description['features']}"
             )
 
-            dataset_df = dataset_df.join(result_df, how="cross")
+            for model in models_to_process:
+                logger.info(f"Starting experiment for dataset {dataset_file.stem} with model {model.name}...")
 
-            dataset_df = (
-                dataset_df.with_columns(
-                    pl.lit(model.name).alias("embedding_model")
+                dataset_df = pl.DataFrame(dataset_description)
+
+                result_df = run_experiment(
+                    model,
+                    X=X,
+                    y=y,
+                    save_embeddings=save_embeddings,
+                    save_embeddings_path=save_embeddings_path,
+                    dataset_name=dataset_file.stem,
                 )
-            )
 
-            if benchmark_result_df is None:
-                benchmark_result_df = dataset_df
-            else:
-                benchmark_result_df = _align_schemas_and_concat(
-                    benchmark_result_df, dataset_df
+                dataset_df = dataset_df.join(result_df, how="cross")
+
+                dataset_df = (
+                    dataset_df.with_columns(
+                        pl.lit(model.name).alias("embedding_model")
+                    )
                 )
 
-            if benchmark_result_df is None:
-                raise ValueError("Benchmark result DataFrame is empty.")
-            logger.info("Number of rows added: ", benchmark_result_df.height)
+                if benchmark_result_df is None:
+                    benchmark_result_df = dataset_df
+                else:
+                    benchmark_result_df = _align_schemas_and_concat(
+                        benchmark_result_df, dataset_df
+                    )
+
+                if benchmark_result_df is None:
+                    raise ValueError("Benchmark result DataFrame is empty.")
+                logger.info(f"Number of rows added: {benchmark_result_df.height}")
+        else:
+            logger.info(f"Exclude dataset {dataset_file.name}.")
 
     return benchmark_result_df
 
@@ -178,7 +191,7 @@ def run_experiment(
         save_file_path.parent.mkdir(parents=True, exist_ok=True)
         np.savez(file=save_file_path, x=X_embed, y=y)
 
-    num_neighbors_list = [i for i in range(1, 15)]
+    num_neighbors_list = [i for i in range(1, 51)]
 
     logger.info(f"Running LocalOutlierFactor for dataset {dataset_name}")
     try:

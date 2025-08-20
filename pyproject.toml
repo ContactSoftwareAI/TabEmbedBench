@@ -20,6 +20,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "kaleido>=1.0.0",
     "umap-learn>=0.5.9.post2",
+    "streamlit>=1.48.1",
 ]
 
 [build-system]
