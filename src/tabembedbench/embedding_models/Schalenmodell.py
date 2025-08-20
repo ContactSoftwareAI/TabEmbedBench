@@ -38,13 +38,13 @@ def compute_embeddings(data: Union[pd.DataFrame, np.ndarray],
         if col_idx in categorical_indices:
             # Kategorische Spalte
             col_embedding = _embed_categorical_column(column_data, embed_dim)
-            plt.plot(col_embedding[:, 0], col_embedding[:, 1], 'o')
-            plt.show()
+            #plt.plot(col_embedding[:, 0], col_embedding[:, 1], 'o')
+            #plt.show()
         else:
             # Numerische Spalte
             col_embedding = _embed_numerical_column(column_data, embed_dim)
-            plt.plot(col_embedding[:, 0], col_embedding[:, 1], 'o')
-            plt.show()
+            #plt.plot(col_embedding[:, 0], col_embedding[:, 1], 'o')
+            #plt.show()
 
         column_embeddings.append(col_embedding)
 
