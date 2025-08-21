@@ -27,6 +27,25 @@ def run_tabarena_benchmark(
     upper_bound_dataset_size: int = 100000,
     save_embeddings: bool = False,
 ):
+    """
+    Executes the TabArena benchmark across multiple datasets and embedding models. The benchmark suite computes
+    embeddings, evaluates classification/regression tasks using k-NN models, and stores the results in a structured format.
+
+    Args:
+        embedding_models (List[BaseEmbeddingGenerator]): List of embedding models to use for generating embeddings.
+        tabarena_version (str, optional): Version of the TabArena benchmark to run. Defaults to "tabarena-v0.1".
+        tabarena_lite (bool, optional): If True, a lightweight benchmark is executed with reduced repetitions and folds.
+            Defaults to True.
+        upper_bound_dataset_size (int, optional): Maximum allowable dataset size to be included in the benchmark.
+            Datasets larger than this value are skipped. Defaults to 100000.
+        save_embeddings (bool, optional): If True, intermediate embedding files are saved temporarily during the benchmark.
+            Defaults to False.
+
+    Returns:
+        polars.DataFrame: A dataframe containing benchmark results. The results include dataset names, dataset sizes,
+        embedding models, the number of neighbors used in k-NN, evaluation metrics (AUC and MSR), computation times
+        for embeddings, and benchmark type.
+    """
     benchmark_suite = openml.study.get_suite(tabarena_version)
     task_ids = benchmark_suite.tasks
 
