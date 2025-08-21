@@ -153,6 +153,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
     def _get_default_name(self) -> str:
         return "TabICL"
 
+    @property
     def task_only(self) -> bool:
         return False
 

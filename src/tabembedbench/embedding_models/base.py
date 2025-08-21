@@ -12,14 +12,6 @@ class BaseEmbeddingGenerator(ABC):
     @property
     @abstractmethod
     def task_only(self) -> bool:
-        """
-        Indicates whether the implementation supports train-test splits, i.e., it fits and transforms the train data,
-        but only transform the test data on the fitted process. This is an abstract property
-        that must be implemented by subclasses.
-
-        Returns:
-            bool: True if train-test splits are supported, otherwise False.
-        """
         pass
 
     @abstractmethod
@@ -106,6 +98,10 @@ class Dummy(BaseEmbeddingGenerator):
 
     def __init__(self):
         self.name = self._get_default_name()
+
+    @property
+    def task_only(self) -> bool:
+        return False
 
     def _get_default_name(self) -> str:
         return "Dummy"
