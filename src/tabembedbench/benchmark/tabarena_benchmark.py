@@ -1,13 +1,13 @@
 import logging
 import os
 import time
+from typing import List
 
-import mlflow
 import numpy as np
 import openml
+import polars as pl
 from sklearn.metrics import mean_squared_error, roc_auc_score
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
-from typing import List
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 
@@ -29,6 +29,17 @@ def run_tabarena_benchmark(
 ):
     benchmark_suite = openml.study.get_suite(tabarena_version)
     task_ids = benchmark_suite.tasks
+
+    result_tabarena_dict = {
+        "dataset_name": [],
+        "dataset_size": [],
+        "embedding_model": [],
+        "num_neighbors": [],
+        "auc_score": [],
+        "msr_score": [],
+        "time_to_compute_embeddings": [],
+        "benchmark": [],
+    }
 
     for task_id in task_ids:
         task = openml.tasks.get_task(task_id)
@@ -72,83 +83,93 @@ def run_tabarena_benchmark(
                 y_test = y.iloc[test_indices]
 
                 for embedding_model in embedding_models:
-                    with mlflow.start_run(
-                        run_name=f"task_{embedding_model.name}_{dataset.name}",
-                        nested=True,
-                    ):
-                        mlflow.log_param("dataset_name", dataset.name)
-                        mlflow.log_param("task_type", task.task_type)
-                        mlflow.log_param("embedding_model", embedding_model.name)
-                        logger.info(
-                            f"Starting experiment for dataset {dataset.name} with model {embedding_model.name}..."
+                    logger.info(
+                        f"Starting experiment for dataset {dataset.name} with model {embedding_model.name}..."
+                    )
+
+                    X_train = embedding_model.preprocess_data(X_train, train=True)
+
+                    start_time = time.time()
+                    X_train_embed = embedding_model.compute_embeddings(X_train)
+                    compute_embeddings_time = time.time() - start_time
+
+                    X_test = embedding_model.preprocess_data(X_test, train=False)
+                    X_test_embed = embedding_model.compute_embeddings(X_test)
+
+                    if save_embeddings:
+                        embedding_file = (
+                            f"task_{embedding_model.name}_{dataset.name}_embeddings.npz"
+                        )
+                        np.savez(
+                            embedding_file,
+                            x_train=X_train_embed,
+                            y_train=y_train,
+                            x_test=X_test_embed,
+                            y_test=y_test,
                         )
 
-                        X_train = embedding_model.preprocess_data(X_train, train=True)
+                        os.remove(embedding_file)
 
-                        start_time = time.time()
-                        X_train_embed = embedding_model.compute_embeddings(X_train)
-                        compute_embeddings_time = time.time() - start_time
+                    for num_neighbors in range(1, 51):
+                        result_tabarena_dict["dataset_name"].append(dataset.name)
+                        result_tabarena_dict["dataset_size"].append(X_train.shape[0])
+                        result_tabarena_dict["embedding_model"].append(
+                            embedding_model.name
+                        )
+                        result_tabarena_dict["num_neighbors"].append(num_neighbors)
+                        result_tabarena_dict["time_to_compute_embeddings"].append(
+                            compute_embeddings_time
+                        )
+                        result_tabarena_dict["benchmark"].append("tabarena")
 
-                        mlflow.log_param("embed_dim", X_train_embed.shape[-1])
-
-                        if mlflow.active_run():
-                            mlflow.log_metric(
-                                "compute_embedding_time", compute_embeddings_time
+                        if task.task_type == "Supervised Classification":
+                            knn_classifier = KNeighborsClassifier(
+                                n_neighbors=num_neighbors,
+                                n_jobs=-1,
                             )
 
-                        X_test = embedding_model.preprocess_data(X_test, train=False)
-                        X_test_embed = embedding_model.compute_embeddings(X_test)
+                            knn_classifier.fit(X_train_embed, y_train)
 
-                        if save_embeddings:
-                            embedding_file = f"task_{embedding_model.name}_{dataset.name}_embeddings.npz"
-                            np.savez(
-                                embedding_file,
-                                x_train=X_train_embed,
-                                y_train=y_train,
-                                x_test=X_test_embed,
-                                y_test=y_test,
+                            y_pred_proba = knn_classifier.predict_proba(X_test_embed)
+
+                            n_classes = y_pred_proba.shape[1]
+                            if n_classes == 2:
+                                score_auc = roc_auc_score(y_test, y_pred_proba[:, 1])
+                            else:
+                                score_auc = roc_auc_score(
+                                    y_test, y_pred_proba, multi_class="ovr"
+                                )
+
+                            result_tabarena_dict["auc_score"].append(score_auc)
+                            result_tabarena_dict["msr_score"].append(np.inf)
+
+                        elif task.task_type == "Supervised Regression":
+                            knn_regressor = KNeighborsRegressor(
+                                n_neighbors=num_neighbors,
+                                n_jobs=-1,
                             )
 
-                            mlflow.log_artifact(embedding_file)
+                            knn_regressor.fit(X_train_embed, y_train)
 
-                            os.remove(embedding_file)
+                            y_pred = knn_regressor.predict(X_test_embed)
 
-                        for num_neighbors in range(1, 51):
-                            if task.task_type == "Supervised Classification":
-                                knn_classifier = KNeighborsClassifier(
-                                    n_neighbors=num_neighbors,
-                                    n_jobs=-1,
-                                )
+                            score_msr = mean_squared_error(y_test, y_pred)
 
-                                knn_classifier.fit(X_train_embed, y_train)
+                            result_tabarena_dict["msr_score"].append(score_msr)
+                            result_tabarena_dict["auc_score"].append((-1) * np.inf)
 
-                                y_pred_proba = knn_classifier.predict_proba(
-                                    X_test_embed
-                                )
+    result_df = pl.from_dict(
+        result_tabarena_dict,
+        schema={
+            "dataset_name": pl.Categorical,
+            "dataset_size": pl.UInt64,
+            "embedding_model": pl.Categorical,
+            "num_neighbors": pl.UInt64,
+            "auc_score": pl.Float64,
+            "msr_score": pl.Float64,
+            "time_to_compute_embeddings": pl.Float64,
+            "benchmark": pl.Categorical,
+        },
+    )
 
-                                score_auc = roc_auc_score(y_test, y_pred_proba)
-
-                                if mlflow.active_run():
-                                    mlflow.log_metric(
-                                        "auc_score",
-                                        score_auc,
-                                        step=num_neighbors,
-                                    )
-                            elif task.task_type == "Supervised Regression":
-                                knn_regressor = KNeighborsRegressor(
-                                    n_neighbors=num_neighbors,
-                                    n_jobs=-1,
-                                )
-
-                                knn_regressor.fit(X_train_embed, y_train)
-
-                                y_pred = knn_regressor.predict(X_test_embed)
-
-                                score_msr = mean_squared_error(y_test, y_pred)
-
-                                if mlflow.active_run():
-                                    mlflow.log_metric(
-                                        "mean_squared_error",
-                                        score_msr,
-                                        step=num_neighbors,
-                                    )
+    return result_df
