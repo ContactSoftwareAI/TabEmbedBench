@@ -21,6 +21,7 @@ dependencies = [
     "kaleido>=1.0.0",
     "umap-learn>=0.5.9.post2",
     "streamlit>=1.48.1",
+    "openml>=0.15.1",
 ]
 
 [build-system]
