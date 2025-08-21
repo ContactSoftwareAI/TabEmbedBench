@@ -11,7 +11,7 @@ class BaseEmbeddingGenerator(ABC):
 
     @property
     @abstractmethod
-    def supports_train_test_splits(self) -> bool:
+    def task_only(self) -> bool:
         """
         Indicates whether the implementation supports train-test splits, i.e., it fits and transforms the train data,
         but only transform the test data on the fitted process. This is an abstract property
