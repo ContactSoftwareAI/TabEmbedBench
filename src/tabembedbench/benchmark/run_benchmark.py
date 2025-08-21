@@ -5,17 +5,6 @@ import mlflow
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 
-IMAGE_CATEGORY = [
-    "1_ALOI.npz",
-    "8_celeba.npz",
-    "17_InternetAds.npz",
-    "20_letter.npz",
-    "24_mnist.npz",
-    "26_optdigits.npz",
-    "28_pendigits.npz",
-    "33_skin.npz",
-]
-
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
