@@ -79,6 +79,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         """
         super().__init__()
 
+        self.numerical_transformer = None
         self.col_embedder = ColEmbedding(
             embed_dim=embed_dim,
             num_blocks=col_num_blocks,
@@ -152,6 +153,34 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
     def _get_default_name(self) -> str:
         return "TabICL"
 
+    def preprocess_data(self, X: np.ndarray, train: bool = True):
+        """
+        Preprocesses the input data by applying normalization and preprocessing pipelines
+        based on the mode (training or inference). If normalization is enabled, the
+        numerical transformation is applied to the data during training, creating a
+        reusable transformer. During inference, the existing transformer is reused.
+        Additionally, if preprocessing is enabled, a preprocessing pipeline is applied
+        to the data.
+
+        Args:
+            X (np.ndarray): Input data array to be preprocessed.
+            train (bool): A flag indicating whether the data is used in training mode
+                (default: True).
+
+        Returns:
+            np.ndarray: The preprocessed data.
+        """
+        if self.normalize_embeddings:
+            if train:
+                self.numerical_transformer = TransformToNumerical()
+                X = self.numerical_transformer.fit_transform(X)
+            else:
+                X = self.numerical_transformer.transform(X)
+
+            if self.preprocess_data:
+                X = PreprocessingPipeline().fit_transform(X)
+        return X
+
     def compute_embeddings(
         self,
         X: np.ndarray,
@@ -177,11 +206,6 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         Raises:
             ValueError: If the input array is not 2D or 3D.
         """
-        if self.normalize_embeddings:
-            X = TransformToNumerical().fit_transform(X)
-            if self.preprocess_data:
-                X = PreprocessingPipeline().fit_transform(X)
-
         if device is None:
             device = get_device()
             self.to(device)
