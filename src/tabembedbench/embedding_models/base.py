@@ -90,16 +90,17 @@ class Dummy(BaseEmbeddingGenerator):
     Attributes:
         name (str): The name of the embedding generator, set to a default value during initialization.
     """
+
     def __init__(self):
         self.name = self._get_default_name()
 
     def _get_default_name(self) -> str:
         return "Dummy"
 
-    def preprocess_data(self, X: Union[torch.Tensor, np.ndarray], **kwargs) -> np.ndarray:
+    def preprocess_data(
+        self, X: Union[torch.Tensor, np.ndarray], **kwargs
+    ) -> np.ndarray:
         return X
 
-    def compute_embeddings(
-        self, X: Union[torch.Tensor, np.ndarray]
-    ) -> np.ndarray:
+    def compute_embeddings(self, X: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
         return np.random.rand(X.shape[0], 10)
