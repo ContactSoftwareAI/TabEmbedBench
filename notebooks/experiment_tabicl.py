@@ -7,7 +7,9 @@ import torch
 
 from tabembedbench.benchmark.benchmark_utils import run_outlier_benchmark
 from tabembedbench.embedding_models.tabicl_utils import get_row_embeddings_model
-from tabembedbench.embedding_models.spherebasedembedding_utils import SphereBasedEmbedding
+from tabembedbench.embedding_models.spherebasedembedding_utils import (
+    SphereBasedEmbedding,
+)
 from tabembedbench.utils.torch_utils import get_device
 
 model_ckpt_path = Path("/data/models/tabicl/tabicl-classifier-v1.1-0506.ckpt")
@@ -33,20 +35,18 @@ row_embedder = get_row_embeddings_model(state_dict=state_dict, config=config)
 
 row_embedder.name = model_name
 
-row_embedder_preprocessed = get_row_embeddings_model(state_dict=state_dict, config=config, preprocess_data=True)
+row_embedder_preprocessed = get_row_embeddings_model(
+    state_dict=state_dict, config=config, preprocess_data=True
+)
 
-row_embedder_preprocessed.name = model_name+"_preprocessed"
+row_embedder_preprocessed.name = model_name + "_preprocessed"
 
 sphere_embedder = SphereBasedEmbedding()
 
 row_embedder.to(device)
 row_embedder_preprocessed.to(device)
 
-models = [
-    row_embedder_preprocessed,
-    row_embedder,
-    sphere_embedder
-]
+models = [row_embedder_preprocessed, row_embedder, sphere_embedder]
 
 result_df = run_outlier_benchmark(
     models=models,
@@ -59,6 +59,4 @@ timestamp_compact = datetime.now().strftime("%Y%m%d_%H%M%S")
 result_parquet = Path(f"data/results/results_{timestamp_compact}.parquet")
 result_parquet.parent.mkdir(parents=True, exist_ok=True)
 
-result_df.write_parquet(
-    file=result_parquet
-)
+result_df.write_parquet(file=result_parquet)

@@ -20,9 +20,11 @@ class SphereBasedEmbedding(BaseEmbeddingGenerator):
         return compute_embeddings(data, cat_indices, embed_dim)
 
 
-def compute_embeddings(data: Union[pd.DataFrame, np.ndarray],
-            categorical_indices: List[int],
-            embed_dim: int) -> np.ndarray:
+def compute_embeddings(
+    data: Union[pd.DataFrame, np.ndarray],
+    categorical_indices: List[int],
+    embed_dim: int,
+) -> np.ndarray:
     """
     Erstellt Einbettungen für tabellarische Daten mit numerischen und kategorischen Spalten.
 
@@ -35,7 +37,7 @@ def compute_embeddings(data: Union[pd.DataFrame, np.ndarray],
     Returns:
         np.ndarray: Zeileneinbettungen durch Mittelung der Spalteneinbettungen
     """
-    #np.random.seed(random_seed)
+    # np.random.seed(random_seed)
 
     # Konvertiere zu NumPy Array falls DataFrame
     if isinstance(data, pd.DataFrame):

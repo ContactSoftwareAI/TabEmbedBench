@@ -1,8 +1,10 @@
 from datetime import datetime
 from pathlib import Path
+import time
 from typing import Optional, Union, List
 import shutil
 
+import mlflow
 import numpy as np
 import polars as pl
 import torch
@@ -40,6 +42,8 @@ def run_outlier_benchmark(
     upper_bound_dataset_size: int = 100000,
     exclude_datasets: Optional[list[str]] = None,
     exclude_image_datasets: bool = False,
+    mlflow_experiment_name: Optional[str] = None,
+    tracking_uri: Optional[str] = None,
 ) -> pl.DataFrame:
     """
     Executes an outlier detection benchmark on provided datasets using a specified model.
@@ -60,14 +64,27 @@ def run_outlier_benchmark(
             `save_embeddings` is set to True.
         upper_bound_dataset_size:
         exclude_datasets:
+        exclude_image_datasets:
+        mlflow_experiment_name:
+        tracking_uri:
 
     Returns:
         pl.DataFrame: A DataFrame containing the combined benchmark results for all datasets.
     """
+    if tracking_uri is not None:
+        mlflow.set_tracking_uri(tracking_uri)
+
+    if mlflow_experiment_name is None:
+        mlflow_experiment_name = f"outlier_benchmark"
+
+    mlflow.set_experiment(mlflow_experiment_name)
+
     if model is None and models is None:
         raise ValueError("Either model or models must be provided.")
     if model is not None and models is not None:
-        raise ValueError("Only one of the parameters 'model' or 'models' should be provided, not both.")
+        raise ValueError(
+            "Only one of the parameters 'model' or 'models' should be provided, not both."
+        )
 
     if model is not None:
         models_to_process = [model]
@@ -85,7 +102,6 @@ def run_outlier_benchmark(
             exclude_datasets.extend(IMAGE_CATEGORY)
         else:
             exclude_datasets = IMAGE_CATEGORY
-
 
     logger.info("Running outlier benchmark...")
     if dataset_paths is None:
@@ -106,65 +122,79 @@ def run_outlier_benchmark(
     logger.info(f"Found {len(npz_files)} .npz files: {[f.name for f in npz_files]}")
 
     benchmark_result_df = None
+    with mlflow.start_run(run_name=f"outlier_benchmark_{timestamp}"):
+        if exclude_datasets is not None:
+            mlflow.log_param("exclude_datasets", exclude_datasets)
+        for dataset_file in dataset_paths.glob("*.npz"):
+            if dataset_file.name not in exclude_datasets:
+                logger.info(f"Running benchmark for {dataset_file.name}...")
+                dataset = np.load(dataset_file)
 
-    for dataset_file in dataset_paths.glob("*.npz"):
-        if dataset_file.name not in exclude_datasets:
-            logger.info(f"Running benchmark for {dataset_file.name}...")
-            dataset = np.load(dataset_file)
-
-            X = dataset["X"]
-            y = dataset["y"]
-
-            with np.load(dataset_file) as dataset:
-                if dataset["X"].shape[0] > upper_bound_dataset_size:
-                    logger.warning(
-                        f"Skipping {dataset_file.name} - dataset size {dataset['X'].shape[0]} exceeds limit {upper_bound_dataset_size}"
-                    )
-                    continue
-
-                # Now load the full data
                 X = dataset["X"]
                 y = dataset["y"]
 
-            dataset_description = get_data_description(X, y, dataset_file.stem)
-            logger.info(
-                f"Samples: {dataset_description['samples']}, Features: {dataset_description['features']}"
-            )
+                with np.load(dataset_file) as dataset:
+                    if dataset["X"].shape[0] > upper_bound_dataset_size:
+                        logger.warning(
+                            f"Skipping {dataset_file.name} - dataset size {dataset['X'].shape[0]} exceeds limit {upper_bound_dataset_size}"
+                        )
+                        continue
 
-            for model in models_to_process:
-                logger.info(f"Starting experiment for dataset {dataset_file.stem} with model {model.name}...")
+                    # Now load the full data
+                    X = dataset["X"]
+                    y = dataset["y"]
 
-                dataset_df = pl.DataFrame(dataset_description)
-
-                result_df = run_experiment(
-                    model,
-                    X=X,
-                    y=y,
-                    save_embeddings=save_embeddings,
-                    save_embeddings_path=save_embeddings_path,
-                    dataset_name=dataset_file.stem,
+                dataset_description = get_data_description(X, y, dataset_file.stem)
+                logger.info(
+                    f"Samples: {dataset_description['samples']}, Features: {dataset_description['features']}"
                 )
 
-                dataset_df = dataset_df.join(result_df, how="cross")
-
-                dataset_df = (
-                    dataset_df.with_columns(
-                        pl.lit(model.name).alias("embedding_model")
-                    )
-                )
-
-                if benchmark_result_df is None:
-                    benchmark_result_df = dataset_df
-                else:
-                    benchmark_result_df = _align_schemas_and_concat(
-                        benchmark_result_df, dataset_df
+                for model in models_to_process:
+                    logger.info(
+                        f"Starting experiment for dataset {dataset_file.stem} with model {model.name}..."
                     )
 
-                if benchmark_result_df is None:
-                    raise ValueError("Benchmark result DataFrame is empty.")
-                logger.info(f"Number of rows added: {benchmark_result_df.height}")
-        else:
-            logger.info(f"Exclude dataset {dataset_file.name}.")
+                    with mlflow.start_run(
+                        run_name=f"{model.name}_{dataset_file.stem}", nested=True
+                    ):
+                        mlflow.log_param("dataset_name", dataset_file.stem)
+                        mlflow.log_param("embedding_model", model.name)
+                        mlflow.log_param("embedding_model_params", model.get_params())
+                        mlflow.log_param(
+                            "embedding_model_type", model.__class__.__name__
+                        )
+
+                        dataset_df = pl.DataFrame(dataset_description)
+
+                        result_df = run_experiment(
+                            model,
+                            X=X,
+                            y=y,
+                            save_embeddings=save_embeddings,
+                            save_embeddings_path=save_embeddings_path,
+                            dataset_name=dataset_file.stem,
+                        )
+
+                        dataset_df = dataset_df.join(result_df, how="cross")
+
+                        dataset_df = dataset_df.with_columns(
+                            pl.lit(model.name).alias("embedding_model")
+                        )
+
+                        if benchmark_result_df is None:
+                            benchmark_result_df = dataset_df
+                        else:
+                            benchmark_result_df = _align_schemas_and_concat(
+                                benchmark_result_df, dataset_df
+                            )
+
+                        if benchmark_result_df is None:
+                            raise ValueError("Benchmark result DataFrame is empty.")
+                        logger.info(
+                            f"Number of rows added: {benchmark_result_df.height}"
+                        )
+            else:
+                logger.info(f"Exclude dataset {dataset_file.name}.")
 
     return benchmark_result_df
 
@@ -177,14 +207,44 @@ def run_experiment(
     save_embeddings_path: Optional[Union[str, Path]] = None,
     dataset_name: Optional[str] = None,
 ) -> pl.DataFrame:
+    """
+    Executes an experimental workflow using a specified embedding generator model to compute embeddings
+    and evaluates the embeddings using the Local Outlier Factor (LOF) algorithm. Allows for optional saving
+    of the computed embeddings to disk.
+
+    Args:
+        model (BaseEmbeddingGenerator): The embedding generator model used to compute embeddings.
+        X (Union[torch.Tensor, np.ndarray]): The input data to compute embeddings for.
+        y (Optional[Union[torch.Tensor, np.ndarray]]): The labels associated with the input data. Default is None.
+        save_embeddings (bool): Whether to save the computed embeddings to disk. Default is False.
+        save_embeddings_path (Optional[Union[str, Path]]): The path to save the embeddings if save_embeddings is True.
+            Default is None.
+        dataset_name (Optional[str]): The name of the dataset being used, for logging and saving purposes. Default is None.
+
+    Returns:
+        pl.DataFrame: A DataFrame containing the results of the LOF evaluation, including metrics such as AUC score
+        and the number of neighbors for which the algorithm was evaluated.
+
+    Raises:
+        Various exceptions if errors occur during embedding computation, LOF evaluation, or file operations.
+    """
     result_dict = dict()
     result_dict["algorithm"] = []
     result_dict["neighbors"] = []
 
+    start_time = time.time()
     X_embed = model.compute_embeddings(X)
+    compute_embeddings_time = time.time() - start_time
+
+    if mlflow.active_run():
+        mlflow.log_metric("s", compute_embeddings_time)
 
     if save_embeddings:
-        save_file_path = Path(save_embeddings_path) / f"{model.name}" / f"{dataset_name}_embeddings.npz"
+        save_file_path = (
+            Path(save_embeddings_path)
+            / f"{model.name}"
+            / f"{dataset_name}_embeddings.npz"
+        )
         if save_file_path.exists() and save_file_path.is_dir():
             shutil.rmtree(save_file_path)
 
@@ -203,12 +263,19 @@ def run_experiment(
 
             lof.fit(X_embed)
 
-            neg_outlier_factor = (-1)*lof.negative_outlier_factor_
+            neg_outlier_factor = (-1) * lof.negative_outlier_factor_
 
             score_outlier_factor = compute_metrics(y, neg_outlier_factor)
 
             result_dict["algorithm"].append("lof")
             result_dict["neighbors"].append(num_neighbors)
+
+            if mlflow.active_run():
+                mlflow.log_metric(
+                    "lof_auc_score",
+                    score_outlier_factor["auc_score"],
+                    step=num_neighbors,
+                )
 
             for key, item in score_outlier_factor.items():
                 if key in result_dict.keys():

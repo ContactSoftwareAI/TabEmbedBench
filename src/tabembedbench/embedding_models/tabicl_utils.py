@@ -153,7 +153,9 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         return "TabICL"
 
     def compute_embeddings(
-        self, X: np.ndarray, device: Optional[torch.device] = None,
+        self,
+        X: np.ndarray,
+        device: Optional[torch.device] = None,
     ) -> np.ndarray:
         """
         Computes the embeddings for the given input array using the model's forward method.
@@ -219,7 +221,9 @@ def filter_params_for_class(cls, params_dict):
     return filtered_params
 
 
-def get_row_embeddings_model(state_dict: dict, config: dict, preprocess_data: bool = False):
+def get_row_embeddings_model(
+    state_dict: dict, config: dict, preprocess_data: bool = False
+):
     """
     Loads a row embedding model using the provided state dictionary and configuration,
     ensuring compatibility by filtering the configuration for the appropriate class attributes.
@@ -239,7 +243,7 @@ def get_row_embeddings_model(state_dict: dict, config: dict, preprocess_data: bo
     row_embedding_model = TabICLEmbedding(
         normalize_embeddings=preprocess_data,
         preprocess_data=preprocess_data,
-        **filtered_config
+        **filtered_config,
     )
 
     row_embedding_model.load_state_dict(state_dict, strict=False)

@@ -6,20 +6,14 @@ import polars as pl
 
 
 def create_boxplot(
-    result_df: pl.DataFrame,
-    algorithm: str,
-    score: str,
-    embedding_model: str
+    result_df: pl.DataFrame, algorithm: str, score: str, embedding_model: str
 ):
     result_df = result_df.cast({score: pl.Float64, "neighbors": pl.Int64})
 
-    filtered_results = (
-        result_df
-        .filter((pl.col("algorithm") == algorithm) & (pl.col("embedding_model") == embedding_model))
-        .select(
-            ["neighbors", score, "dataset", "samples", "features"]
-        )
-    )
+    filtered_results = result_df.filter(
+        (pl.col("algorithm") == algorithm)
+        & (pl.col("embedding_model") == embedding_model)
+    ).select(["neighbors", score, "dataset", "samples", "features"])
 
     stats_by_neighbors = (
         filtered_results.group_by("neighbors")
@@ -61,16 +55,16 @@ def create_boxplot(
 
     return fig_px
 
-def create_quantile_lines_chart(result_df: pl.DataFrame, algorithm: str, score: str, embedding_model: str):
+
+def create_quantile_lines_chart(
+    result_df: pl.DataFrame, algorithm: str, score: str, embedding_model: str
+):
     result_df = result_df.cast({score: pl.Float64, "neighbors": pl.Int64})
 
-    filtered_results = (
-        result_df
-        .filter((pl.col("algorithm") == algorithm) & (pl.col("embedding_model") == embedding_model))
-        .select(
-            ["neighbors", score, "dataset", "samples", "features"]
-        )
-    )
+    filtered_results = result_df.filter(
+        (pl.col("algorithm") == algorithm)
+        & (pl.col("embedding_model") == embedding_model)
+    ).select(["neighbors", score, "dataset", "samples", "features"])
 
     # Calculate statistics by neighbors
     stats_by_neighbors = (
@@ -89,7 +83,7 @@ def create_quantile_lines_chart(result_df: pl.DataFrame, algorithm: str, score: 
     # Create the base figure
     fig_px = px.line(
         title=f"Statistical Summary of {score} by Number of Neighbors, embedding model: {embedding_model}",
-        labels={"x": "Number of Neighbors", "y": score}
+        labels={"x": "Number of Neighbors", "y": score},
     )
 
     # Add the four lines
@@ -137,13 +131,7 @@ def create_quantile_lines_chart(result_df: pl.DataFrame, algorithm: str, score: 
     fig_px.update_layout(
         xaxis_title="Number of Neighbors",
         yaxis_title=score,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        )
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
 
     return fig_px

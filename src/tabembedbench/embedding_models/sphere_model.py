@@ -44,7 +44,7 @@ class SphereModel(TransformerMixin):
         if self.categorical_indices is None:
             self.categorical_indices = infer_categorical_columns(data)
 
-        _ , self.n_cols = data_array.shape
+        _, self.n_cols = data_array.shape
 
         for col_idx in range(self.n_cols):
             column_data = data_array[:, col_idx]
@@ -67,7 +67,6 @@ class SphereModel(TransformerMixin):
                 col_max = np.max(column_data)
                 sphere_point = self._generate_random_sphere_point()
                 self.column_properties.append([col_min, col_max, sphere_point])
-
 
     def transform(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
@@ -105,7 +104,7 @@ class SphereModel(TransformerMixin):
             if col_idx in self.categorical_indices:
                 col_embedding = self._embed_categorical_column(column_data, col_idx)
             else:
-                col_embedding  = self._embed_numerical_column(column_data, col_idx)
+                col_embedding = self._embed_numerical_column(column_data, col_idx)
 
             column_embeddings.append(col_embedding)
 
@@ -119,8 +118,9 @@ class SphereModel(TransformerMixin):
 
         return row_embeddings
 
-
-    def _embed_numerical_column(self, column_data: np.ndarray, col_idx: int) -> np.ndarray:
+    def _embed_numerical_column(
+        self, column_data: np.ndarray, col_idx: int
+    ) -> np.ndarray:
         """
         Embeds a numerical column into a multidimensional representation based on normalization
         and a pre-calculated sphere point.
@@ -162,7 +162,9 @@ class SphereModel(TransformerMixin):
 
         return embeddings
 
-    def _embed_categorical_column(self, column_data: np.ndarray, col_idx: int) -> np.ndarray:
+    def _embed_categorical_column(
+        self, column_data: np.ndarray, col_idx: int
+    ) -> np.ndarray:
         """
         Embeds a categorical column into a numerical array representation based on predefined
         center points and generates embeddings for unknown categories dynamically.
