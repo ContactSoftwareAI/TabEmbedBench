@@ -1,25 +1,23 @@
+import shutil
+import time
 from datetime import datetime
 from pathlib import Path
-import time
-from typing import Optional, Union, List
-import shutil
+from typing import List, Optional, Union
 
 import mlflow
 import numpy as np
 import polars as pl
 import torch
-from sklearn.metrics import roc_auc_score
-from sklearn.neighbors import LocalOutlierFactor
+from sklearn.metrics import mean_squared_error, roc_auc_score
+from sklearn.neighbors import (
+    LocalOutlierFactor,
+)
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.dataset_utils import (
     download_adbench_tabular_datasets,
     get_data_description,
 )
-from tabembedbench.utils.logging_utils import setup_logger
-
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-logger = setup_logger(__name__, f"log/benchmark_{timestamp}.log")
 
 IMAGE_CATEGORY = [
     "1_ALOI.npz",
@@ -34,8 +32,8 @@ IMAGE_CATEGORY = [
 
 
 def run_outlier_benchmark(
-    model: Optional[BaseEmbeddingGenerator] = None,
-    models: Optional[List[BaseEmbeddingGenerator]] = None,
+    embedding_model: Optional[BaseEmbeddingGenerator] = None,
+    embedding_models: Optional[List[BaseEmbeddingGenerator]] = None,
     dataset_paths: Optional[Union[str, Path]] = None,
     save_embeddings: bool = False,
     save_embeddings_path: Optional[Union[str, Path]] = None,
@@ -51,9 +49,9 @@ def run_outlier_benchmark(
     the detection model, and aggregates the benchmark results.
 
     Args:
-        model: A model implementing the BaseEmbeddingGenerator interface. This model is used
+        embedding_model: A model implementing the BaseEmbeddingGenerator interface. This model is used
             for outlier detection across the datasets.
-        models: A list of models implementing the BaseEmbeddingGenerator interface.
+        embedding_models: A list of models implementing the BaseEmbeddingGenerator interface.
         dataset_paths: Path to the directory containing dataset files in `.npz` format. If no
             path is provided, a default path to ADBench tabular datasets is used. The datasets
             will be downloaded if they do not exist at the default location.
@@ -75,21 +73,21 @@ def run_outlier_benchmark(
         mlflow.set_tracking_uri(tracking_uri)
 
     if mlflow_experiment_name is None:
-        mlflow_experiment_name = f"outlier_benchmark"
+        mlflow_experiment_name = "outlier_benchmark"
 
     mlflow.set_experiment(mlflow_experiment_name)
 
-    if model is None and models is None:
+    if embedding_model is None and embedding_models is None:
         raise ValueError("Either model or models must be provided.")
-    if model is not None and models is not None:
+    if embedding_model is not None and embedding_models is not None:
         raise ValueError(
             "Only one of the parameters 'model' or 'models' should be provided, not both."
         )
 
-    if model is not None:
-        models_to_process = [model]
+    if embedding_model is not None:
+        models_to_process = [embedding_model]
     else:
-        models_to_process = models
+        models_to_process = embedding_models
 
     for model_element in models_to_process:
         if not hasattr(model_element, "compute_embeddings"):
@@ -149,25 +147,28 @@ def run_outlier_benchmark(
                     f"Samples: {dataset_description['samples']}, Features: {dataset_description['features']}"
                 )
 
-                for model in models_to_process:
+                for embedding_model in models_to_process:
                     logger.info(
-                        f"Starting experiment for dataset {dataset_file.stem} with model {model.name}..."
+                        f"Starting experiment for dataset {dataset_file.stem} with model {embedding_model.name}..."
                     )
 
                     with mlflow.start_run(
-                        run_name=f"{model.name}_{dataset_file.stem}", nested=True
+                        run_name=f"{embedding_model.name}_{dataset_file.stem}",
+                        nested=True,
                     ):
                         mlflow.log_param("dataset_name", dataset_file.stem)
-                        mlflow.log_param("embedding_model", model.name)
-                        mlflow.log_param("embedding_model_params", model.get_params())
+                        mlflow.log_param("embedding_model", embedding_model.name)
                         mlflow.log_param(
-                            "embedding_model_type", model.__class__.__name__
+                            "embedding_model_params", embedding_model.get_params()
+                        )
+                        mlflow.log_param(
+                            "embedding_model_type", embedding_model.__class__.__name__
                         )
 
                         dataset_df = pl.DataFrame(dataset_description)
 
                         result_df = run_experiment(
-                            model,
+                            embedding_model,
                             X=X,
                             y=y,
                             save_embeddings=save_embeddings,
@@ -178,7 +179,7 @@ def run_outlier_benchmark(
                         dataset_df = dataset_df.join(result_df, how="cross")
 
                         dataset_df = dataset_df.with_columns(
-                            pl.lit(model.name).alias("embedding_model")
+                            pl.lit(embedding_model.name).alias("embedding_model")
                         )
 
                         if benchmark_result_df is None:
@@ -237,7 +238,7 @@ def run_experiment(
     compute_embeddings_time = time.time() - start_time
 
     if mlflow.active_run():
-        mlflow.log_metric("s", compute_embeddings_time)
+        mlflow.log_metric("compute_embedding_time", compute_embeddings_time)
 
     if save_embeddings:
         save_file_path = (
