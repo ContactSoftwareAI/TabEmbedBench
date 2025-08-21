@@ -153,6 +153,9 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
     def _get_default_name(self) -> str:
         return "TabICL"
 
+    def supports_train_test_splits(self) -> bool:
+        return True
+
     def preprocess_data(self, X: np.ndarray, train: bool = True):
         """
         Preprocesses the input data by applying normalization and preprocessing pipelines

@@ -9,6 +9,19 @@ class BaseEmbeddingGenerator(ABC):
     def __init__(self):
         self._name = self._get_default_name()
 
+    @property
+    @abstractmethod
+    def supports_train_test_splits(self) -> bool:
+        """
+        Indicates whether the implementation supports train-test splits, i.e., it fits and transforms the train data,
+        but only transform the test data on the fitted process. This is an abstract property
+        that must be implemented by subclasses.
+
+        Returns:
+            bool: True if train-test splits are supported, otherwise False.
+        """
+        pass
+
     @abstractmethod
     def _get_default_name(self) -> str:
         """
