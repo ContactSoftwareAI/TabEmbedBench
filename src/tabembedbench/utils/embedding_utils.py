@@ -62,12 +62,14 @@ def embeddings_aggregation(
     list_type, list_shape = validate_input(embeddings)
 
     if list_type == np.ndarray:
+        stacked = np.stack(embeddings)
+
         if agg_func == EmbAggregation.MEAN:
-            return np.mean(embeddings, axis=0)
+            return np.mean(stacked, axis=0)
         elif agg_func == EmbAggregation.CONCAT:
-            return np.concatenate(embeddings, axis=-1)
+            return np.concatenate(embeddings, axis=0)
         elif agg_func == EmbAggregation.PERCENTILE:
-            return np.quantile(embeddings, q=quantile, axis=0)
+            return np.quantile(np.stack(embeddings), q=quantile, axis=0)
         elif agg_func == EmbAggregation.COLUMN:
             return embeddings
     elif list_type == torch.Tensor:
