@@ -1,9 +1,11 @@
-from typing import Union
+import copy
+from typing import Union, Optional
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
 from tabpfn import TabPFNClassifier, TabPFNRegressor
+import torch
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.config import EmbAggregation
@@ -30,20 +32,45 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
             embedding generation.
     """
 
+    @property
+    def task_only(self) -> bool:
+        return False
+
     def __init__(
-        self, tabpfn_clf: TabPFNClassifier, tabpfn_reg: TabPFNRegressor, n_fold: int = 0
+        self, tabpfn_clf: Optional[TabPFNClassifier] = None, tabpfn_reg: Optional[TabPFNRegressor] = None,
     ) -> None:
         super().__init__()
+        if tabpfn_clf is None:
+            tabpfn_clf = TabPFNClassifier()
+        if tabpfn_reg is None:
+            tabpfn_reg = TabPFNRegressor()
+        self.cat_cols = None
         self.tabpfn_clf = tabpfn_clf
         self.tabpfn_reg = tabpfn_reg
-        self.n_fold = n_fold
 
     def _get_default_name(self) -> str:
         return "TabPFN"
 
+    def preprocess_data(self, X: np.ndarray, train: bool = True):
+        if isinstance(X, pd.DataFrame):
+            X = torch.tensor(X.values, dtype=torch.float32)
+        elif isinstance(X, np.ndarray):
+            X = torch.tensor(X, dtype=torch.float32)
+
+        self.X_ = copy.deepcopy(X)
+
+        if isinstance(X, pd.DataFrame):
+            X = X.to_numpy()
+
+        if train:
+            pass
+        else:
+            pass
+        return X
+
     def get_embeddings(
         self,
-        X: Union[np.ndarray, pd.DataFrame],
+        X: Union[np.ndarray, pd.DataFrame, torch.Tensor],
         cat_cols: list[Union[int, str]] | None = None,
         numeric_cols: list[Union[int, str]] | None = None,
     ) -> list[np.ndarray]:
@@ -85,7 +112,7 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
         else:
             numeric_cols_idx = numeric_cols
 
-        X = X.to_numpy()
+        X = X.numpy()
 
         embeddings = []
 
@@ -95,42 +122,19 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
             mask = np.ones(X.shape[-1], dtype=bool)
             mask[col_idx] = False
             tmp_embeddings = []
-            if self.n_fold == 0:
-                if col_idx in cat_cols_idx:
-                    self.tabpfn_clf.fit(X[:, mask], target)
-                    tmp_embeddings = self.tabpfn_clf.get_embeddings(
-                        X[:, mask], data_source="test"
-                    )
-                elif col_idx in numeric_cols_idx:
-                    self.tabpfn_reg.fit(X[:, mask], target)
-                    tmp_embeddings = self.tabpfn_reg.get_embeddings(
-                        X[:, mask], data_source="test"
-                    )
-                embeddings.append(tmp_embeddings)
-            else:
-                kf = KFold(n_splits=self.n_fold, shuffle=False)
-                for train_idx, val_idx in kf.split(X):
-                    X_train_fold = X[train_idx][:, mask]
-                    X_val_fold = X[val_idx][:, mask]
-                    y_train_fold = target[train_idx]
 
-                    if col_idx in cat_cols_idx:
-                        self.tabpfn_clf.fit(X_train_fold, y_train_fold)
+            if col_idx in cat_cols_idx:
+                self.tabpfn_clf.fit(X[:, mask], target)
+                tmp_embeddings = self.tabpfn_clf.get_embeddings(
+                    X[:, mask], data_source="test"
+                )
+            elif col_idx in numeric_cols_idx:
+                self.tabpfn_reg.fit(X[:, mask], target)
+                tmp_embeddings = self.tabpfn_reg.get_embeddings(
+                    X[:, mask], data_source="test"
+                )
+            embeddings.append(tmp_embeddings[0])
 
-                        tmp_embeddings.append(
-                            self.tabpfn_clf.get_embeddings(
-                                X_val_fold, data_source="test"
-                            )
-                        )
-                    elif col_idx in numeric_cols_idx:
-                        self.tabpfn_reg.fit(X_train_fold, y_train_fold)
-
-                        tmp_embeddings.append(
-                            self.tabpfn_reg.get_embeddings(
-                                X_val_fold, data_source="test"
-                            )
-                        )
-                embeddings.append(np.concatenate(tmp_embeddings, axis=1))
 
         return embeddings
 
@@ -150,4 +154,5 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
         Returns:
             ndarray: The aggregated embedding vectors for the input data.
         """
-        return compute_embeddings_aggregation(self.get_embeddings(X), agg_func)
+        X_embed = self.get_embeddings(X)
+        return compute_embeddings_aggregation(X_embed, agg_func)

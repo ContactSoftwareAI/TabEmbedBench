@@ -6,6 +6,19 @@ import torch
 
 
 class BaseEmbeddingGenerator(ABC):
+    """
+    Base class for generating embeddings using various models.
+
+    This class provides an abstract base for embedding models for tabular data. It
+    defines the necessary methods and properties that must be implemented by any
+    specific embedding generator. It includes functionalities for preprocessing data,
+    computing embeddings, managing the embedding model state, and handling naming
+    conventions for specific instances of the embedding generator.
+
+    Attributes:
+        name (str): The name of the embedding generator instance that can be
+                    retrieved or set.
+    """
     def __init__(self):
         self._name = self._get_default_name()
 
@@ -16,54 +29,18 @@ class BaseEmbeddingGenerator(ABC):
 
     @abstractmethod
     def _get_default_name(self) -> str:
-        """
-        Get the default name for this embedding generator.
-        Subclasses must implement this method.
-
-        Returns:
-            str: The default name of the embedding generator.
-        """
         pass
 
     @property
     def name(self) -> str:
-        """
-        Get the name of the embedding generator.
-
-        Returns:
-            str: The name of the embedding generator.
-        """
         return self._name
 
     @name.setter
     def name(self, value: str) -> None:
-        """
-        Set the name of the embedding generator.
-
-        Args:
-            value: The new name for the embedding generator.
-        """
         self._name = value
 
     @abstractmethod
     def preprocess_data(self, X: np.ndarray, train: bool = True) -> np.ndarray:
-        """
-        Preprocesses the input data based on training or inference phase.
-
-        This abstract method is intended to apply necessary preprocessing steps,
-        such as scaling, normalization, or transformations, on the provided
-        input dataset. The processing may differ depending on whether the data
-        is being prepared for training or inference.
-
-        Args:
-            X (np.ndarray): Input data array to be preprocessed.
-            train (bool): Indicates whether the preprocessing is for the
-                training phase (`True`) or inference phase (`False`). Defaults
-                to `True`.
-
-        Returns:
-            np.ndarray: Preprocessed data array.
-        """
         return X
 
     @abstractmethod
@@ -71,16 +48,10 @@ class BaseEmbeddingGenerator(ABC):
         self,
         X: np.ndarray,
     ) -> np.ndarray:
-        """
-        Compute embeddings for the input data.
+        raise NotImplementedError
 
-        Args:
-            X: np.ndarray
-
-        Returns:
-            np.ndarray: Embeddings for the input data.
-
-        """
+    @abstractmethod
+    def reset_embedding_model(self):
         raise NotImplementedError
 
 
@@ -113,3 +84,6 @@ class Dummy(BaseEmbeddingGenerator):
 
     def compute_embeddings(self, X: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
         return np.random.rand(X.shape[0], 10)
+
+    def reset_embedding_model(self):
+        pass

@@ -1,6 +1,7 @@
 import inspect
 from typing import List, Optional, Union
 
+from huggingface_hub import hf_hub_download
 import numpy as np
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
@@ -78,8 +79,6 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
             normalize_embeddings (bool):
         """
         super().__init__()
-
-        self.numerical_transformer = None
         self.col_embedder = ColEmbedding(
             embed_dim=embed_dim,
             num_blocks=col_num_blocks,
@@ -110,10 +109,9 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         for param in self.row_interactor.parameters():
             param.requires_grad = False
 
-        # Set to eval mode
-
         self.normalize_embeddings = normalize_embeddings
         self.preprocess_data = preprocess_data
+        self.preprocess_pipeline = PreprocessingPipeline()
         self.eval()
 
     def forward(
@@ -174,15 +172,12 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         Returns:
             np.ndarray: The preprocessed data.
         """
-        if self.normalize_embeddings:
-            if train:
-                self.numerical_transformer = TransformToNumerical()
-                X = self.numerical_transformer.fit_transform(X)
-            else:
-                X = self.numerical_transformer.transform(X)
-
+        if train and self.preprocess_data:
+            X = self.preprocess_pipeline.fit_transform(X)
+        else:
             if self.preprocess_data:
-                X = PreprocessingPipeline().fit_transform(X)
+                X = self.preprocess_pipeline.transform(X)
+
         return X
 
     def compute_embeddings(
@@ -224,6 +219,9 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         embeddings = self.forward(X).cpu().squeeze().numpy()
         return embeddings
 
+    def reset_embedding_model(self):
+        self.preprocess_pipeline = PreprocessingPipeline()
+
 
 def filter_params_for_class(cls, params_dict):
     """
@@ -250,22 +248,59 @@ def filter_params_for_class(cls, params_dict):
 
 
 def get_row_embeddings_model(
-    state_dict: dict, config: dict, preprocess_data: bool = False
-):
+    model_path: Optional[str] = None,
+    state_dict: Optional[dict] = None,
+    config: Optional[dict] = None,
+    preprocess_data: bool = False
+) -> TabICLEmbedding:
     """
-    Loads a row embedding model using the provided state dictionary and configuration,
-    ensuring compatibility by filtering the configuration for the appropriate class attributes.
+    Loads and prepares a row embeddings model based on the provided model path, state dict, and
+    configuration. The function can also optionally preprocess data for embeddings.
+
+    The function supports two methods of loading the model:
+    1. By specifying a model_path to a pre-trained Torch checkpoint, which provides the state_dict
+       and config. Can also infer the model from a default hub repository if "auto" is given.
+    2. By directly passing the state_dict and config. This allows using a custom or pre-loaded
+       state_dict and config.
+
+    In addition, the function supports preprocessing row-based data embeddings using a specified
+    normalization technique if needed.
 
     Args:
-        state_dict (dict): A dictionary containing model parameters to load into the model.
-        config (dict): A configuration dictionary including parameters for initializing the
-            model. Only parameters that match the expected class attributes will be used.
-        preprocess_data (bool):
+        model_path (Optional[str]): Path to the pre-trained model file. If "auto", the function will
+            download a preconfigured model checkpoint from a defined repository.
+        state_dict (Optional[dict]): Pre-trained PyTorch model weights (state dict) if not using
+            a model path. Must be specified along with the config if model_path is not provided.
+        config (Optional[dict]): Configuration dictionary required to initialize the model. Must
+            be specified along with the state_dict if model_path is not provided.
+        preprocess_data (bool): Boolean flag indicating whether to preprocess the input data
+            (normalize embeddings). Defaults to False.
 
     Returns:
-        TabICLEmbedding: An instance of TabICLEmbedding initialized with the filtered
-            configuration and loaded with the provided state dictionary.
+        TabICLEmbedding: Instance of the TabICLEmbedding class initialized with the provided parameters
+        and model weights.
+
+    Raises:
+        ValueError: Raised if neither model_path nor both state_dict and config are provided.
     """
+    if model_path is not None:
+        state_dict = torch.load(model_path, map_location="cpu")["state_dict"]
+        config = torch.load(model_path, map_location="cpu")["config"]
+    elif model_path == "auto":
+        model_ckpt_path = hf_hub_download(
+            repo_id="jingang/TabICL-clf",
+            filename="tabicl-classifier-v1.1-0506.ckpt",
+        )
+
+        model_ckpt = torch.load(model_ckpt_path)
+
+        state_dict = model_ckpt["state_dict"]
+        config = model_ckpt["config"]
+    else:
+        if state_dict is None or config is None:
+            raise ValueError("Either model_path or state_dict and config must be provided")
+
+
     filtered_config = filter_params_for_class(TabICLEmbedding, config)
 
     row_embedding_model = TabICLEmbedding(
@@ -275,4 +310,5 @@ def get_row_embeddings_model(
     )
 
     row_embedding_model.load_state_dict(state_dict, strict=False)
+
     return row_embedding_model
