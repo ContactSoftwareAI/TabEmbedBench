@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import Optional, Union
 from pathlib import Path
+from typing import Optional, Union
 
 import polars as pl
 
@@ -12,8 +12,8 @@ timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def run_benchmark(
-    embedding_model: Optional[BaseEmbeddingGenerator],
-    embedding_models: Optional[list[BaseEmbeddingGenerator]],
+    embedding_model: Optional[BaseEmbeddingGenerator] = None,
+    embedding_models: Optional[list[BaseEmbeddingGenerator]] = None,
     adbench_dataset_path: Optional[Union[str, Path]] = None,
     exclude_adbench_datasets: Optional[list[str]] = None,
     exclude_adbench_image_datasets: bool = True,
@@ -114,3 +114,14 @@ def run_benchmark(
     )
 
     return combined_results
+
+if __name__ == "__main__":
+    from tabembedbench.embedding_models.tabpfn_embedding import UniversalTabPFNEmbedding
+
+    tabpfn = UniversalTabPFNEmbedding()
+
+    run_benchmark(
+        embedding_model=tabpfn,
+        upper_bound_dataset_size=500,
+        adbench_dataset_path="/Users/lkl/PycharmProjects/TabEmbedBench/data/adbench_tabular_datasets",
+    )

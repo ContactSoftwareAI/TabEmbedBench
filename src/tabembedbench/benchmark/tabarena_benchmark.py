@@ -8,16 +8,15 @@ import openml
 import polars as pl
 from sklearn.metrics import mean_squared_error, roc_auc_score
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+from tabicl.sklearn.preprocessing import TransformToNumerical
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("TabEmbedBench_TabArena")
 
 
 def run_tabarena_benchmark(
@@ -100,6 +99,14 @@ def run_tabarena_benchmark(
                 y_train = y.iloc[train_indices]
                 X_test = X.iloc[test_indices]
                 y_test = y.iloc[test_indices]
+
+                numerical_transformer = TransformToNumerical()
+
+                X_train = numerical_transformer.fit_transform(X_train)
+
+                X_test = numerical_transformer.transform(X_test)
+
+
 
                 for embedding_model in embedding_models:
                     logger.info(

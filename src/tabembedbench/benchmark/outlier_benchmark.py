@@ -19,11 +19,9 @@ from tabembedbench.utils.dataset_utils import (
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("TabEmbedBench_Outlier")
 
 IMAGE_CATEGORY = [
     "1_ALOI.npz",
@@ -50,6 +48,8 @@ def run_outlier_benchmark(
         if not dataset_paths.exists():
             logger.warning("Downloading ADBench tabular datasets...")
             download_adbench_tabular_datasets(dataset_paths)
+    else:
+        dataset_paths = Path(dataset_paths)
 
     if exclude_image_datasets:
         if exclude_datasets is not None:
@@ -124,6 +124,8 @@ def run_outlier_benchmark(
                         compute_embeddings_time
                     )
                     result_outlier_dict["benchmark"].append("outlier")
+
+                embedding_model.reset_embedding_model()
 
     result_df = pl.from_dict(
         result_outlier_dict,
