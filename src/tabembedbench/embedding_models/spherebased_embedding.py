@@ -2,52 +2,60 @@ from sklearn.base import TransformerMixin
 from typing import List, Union, Optional
 import numpy as np
 import pandas as pd
+from tabicl.sklearn.preprocessing import TransformToNumerical
 
+from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.preprocess_utils import infer_categorical_columns
 
 
-class SphereModel(TransformerMixin):
-    def __init__(self, embed_dim: int, categorical_indices: Optional[List[int]] = None):
+class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
+    def __init__(
+            self,
+            embed_dim: int,
+            categorical_indices: Optional[List[int]] = None
+    ) -> None:
         self.categorical_indices = categorical_indices
         self.embed_dim = embed_dim
         self.column_properties = []
         self.n_cols = None
-        pass
+        self._name = self._get_default_name()
+
+    @property
+    def task_only(self) -> bool:
+        return False
+
+    def _get_default_name(self) -> str:
+        return "Schalenmodell"
 
     def _generate_random_sphere_point(self) -> np.ndarray:
-        """Generiert einen zufälligen Punkt auf der Einheitssphäre."""
+        """
+        Generates a random point on the surface of a sphere in an n-dimensional space.
+
+        This method creates a random point in an n-dimensional space, normalizes the
+        point to make it a unit vector, and returns the resulting point that lies on
+        the surface of a sphere.
+
+        Returns:
+            np.ndarray: A unit vector representing a random point on the sphere in
+            an n-dimensional space.
+        """
         point = np.random.randn(self.embed_dim)
+
         return point / np.linalg.norm(point)
 
     def fit(self, data: Union[pd.DataFrame, np.ndarray], y=None):
-        """
-        Fits the provided data by processing each column based on its type (categorical or numerical).
-        For categorical columns, a random embedding is generated for each category. For numerical
-        columns, the minimum, maximum values and a random point on a sphere are stored.
-
-        Parameters:
-            data (pd.DataFrame | np.ndarray): The dataset to be fitted, provided either as a pandas
-                DataFrame or a numpy array.
-            y: Optional additional information, not used in this method.
-
-        Raises:
-            TypeError: Raised if the input data is neither a pandas DataFrame nor a numpy array.
-
-        Returns:
-            None
-        """
         if isinstance(data, pd.DataFrame):
-            data_array = data.values
+            data = data.values
         else:
-            data_array = data
+            data = data
 
         if self.categorical_indices is None:
             self.categorical_indices = infer_categorical_columns(data)
 
-        _, self.n_cols = data_array.shape
+        _, self.n_cols = data.shape
 
         for col_idx in range(self.n_cols):
-            column_data = data_array[:, col_idx]
+            column_data = data[:, col_idx]
 
             if col_idx in self.categorical_indices:
                 unique_categories = np.unique(column_data)
@@ -70,23 +78,24 @@ class SphereModel(TransformerMixin):
 
     def transform(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
-        Transforms the input data into embeddings based on predefined logic for categorical
-        and numerical data. The method can process both pandas DataFrame and NumPy ndarray
-        and produces row-level embeddings by aggregating embeddings of individual columns.
+        Transforms input data into embeddings using appropriate methods for categorical and
+        numerical columns and returns row-wise embeddings.
 
-        Parameters:
-        data (Union[pd.DataFrame, np.ndarray]): Input data to transform. Can be either a pandas
-        DataFrame or a NumPy ndarray.
+        This method processes input data to generate embeddings for each column based on
+        whether the column contains categorical or numerical data. It then calculates
+        row embeddings by averaging the embeddings of all columns for each row.
+
+        Args:
+            data: Input data to be transformed into embeddings. Must be either a Pandas
+                DataFrame or a NumPy ndarray.
 
         Returns:
-        np.ndarray: A NumPy ndarray where each row represents the embedding of the corresponding
-        row in the input data.
+            np.ndarray: A NumPy array containing the row embeddings for the input data.
 
         Raises:
-        ValueError: If the number of columns in the input data does not match the expected
-        number of columns determined during fitting.
+            ValueError: If the number of columns in the input data does not match the
+                number of columns in the fitted data.
         """
-        # Konvertiere zu NumPy Array falls DataFrame
         if isinstance(data, pd.DataFrame):
             data_array = data.values
         else:
@@ -95,7 +104,7 @@ class SphereModel(TransformerMixin):
         n_rows, n_cols = data_array.shape
         if n_cols != self.n_cols:
             raise ValueError("Number of columns in data does not match fitted data.")
-        # Erstelle Einbettungen für jede Spalte
+
         column_embeddings = []
 
         for col_idx in range(n_cols):
@@ -119,7 +128,9 @@ class SphereModel(TransformerMixin):
         return row_embeddings
 
     def _embed_numerical_column(
-        self, column_data: np.ndarray, col_idx: int
+        self,
+        column_data: np.ndarray,
+        col_idx: int
     ) -> np.ndarray:
         """
         Embeds a numerical column into a multidimensional representation based on normalization
@@ -132,11 +143,11 @@ class SphereModel(TransformerMixin):
         at scaled distances along the sphere-point direction.
 
         Parameters:
-        column_data : np.ndarray
-            The input numerical data for the column to be embedded.
-        col_idx : int
-            The index of the column being processed, which is used to retrieve the
-            corresponding column properties.
+            column_data : np.ndarray
+                The input numerical data for the column to be embedded.
+            col_idx : int
+                The index of the column being processed, which is used to retrieve the
+                corresponding column properties.
 
         Returns:
         np.ndarray
@@ -200,3 +211,18 @@ class SphereModel(TransformerMixin):
                 embeddings[i] = unique_category_embeddings[value]
 
         return embeddings
+
+    def preprocess_data(self, data: np.ndarray, train: bool = True):
+        if train:
+            self.fit(data)
+
+        return data
+
+
+    def compute_embeddings(self, data: np.ndarray):
+        return self.transform(data)
+
+    def reset_embedding_model(self):
+        self.column_properties = []
+        self.categorical_indices = None
+        self.n_cols = None
