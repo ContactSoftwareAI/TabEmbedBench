@@ -77,6 +77,10 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
             norm_first (bool): If True, applies layer normalization before other
                 operations in each layer.
             normalize_embeddings (bool):
+
+        References:
+            [1] Qu, J. et al. (2025). Tabicl: A tabular foundation model for in-context learning on large data.
+                arXiv preprint arXiv:2502.05564.
         """
         super().__init__()
         self.col_embedder = ColEmbedding(
@@ -110,7 +114,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
             param.requires_grad = False
 
         self.normalize_embeddings = normalize_embeddings
-        self.preprocess_data = preprocess_data
+        self._preprocess_data = preprocess_data
         self.preprocess_pipeline = PreprocessingPipeline()
         self.eval()
 
@@ -172,13 +176,15 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         Returns:
             np.ndarray: The preprocessed data.
         """
-        if train and self.preprocess_data:
-            X = self.preprocess_pipeline.fit_transform(X)
-        else:
-            if self.preprocess_data:
-                X = self.preprocess_pipeline.transform(X)
+        X_preprocess = X
 
-        return X
+        if train and self._preprocess_data:
+            X_preprocess = self.preprocess_pipeline.fit_transform(X_preprocess)
+        else:
+            if self._preprocess_data:
+                X_preprocess = self.preprocess_pipeline.transform(X_preprocess)
+
+        return X_preprocess
 
     def compute_embeddings(
         self,
@@ -217,6 +223,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
             X = X.unsqueeze(0)
 
         embeddings = self.forward(X).cpu().squeeze().numpy()
+
         return embeddings
 
     def reset_embedding_model(self):
@@ -248,7 +255,7 @@ def filter_params_for_class(cls, params_dict):
 
 
 def get_row_embeddings_model(
-    model_path: Optional[str] = None,
+    model_path: Optional[str] = "auto",
     state_dict: Optional[dict] = None,
     config: Optional[dict] = None,
     preprocess_data: bool = False
@@ -283,10 +290,7 @@ def get_row_embeddings_model(
     Raises:
         ValueError: Raised if neither model_path nor both state_dict and config are provided.
     """
-    if model_path is not None:
-        state_dict = torch.load(model_path, map_location="cpu")["state_dict"]
-        config = torch.load(model_path, map_location="cpu")["config"]
-    elif model_path == "auto":
+    if model_path == "auto":
         model_ckpt_path = hf_hub_download(
             repo_id="jingang/TabICL-clf",
             filename="tabicl-classifier-v1.1-0506.ckpt",
@@ -296,6 +300,9 @@ def get_row_embeddings_model(
 
         state_dict = model_ckpt["state_dict"]
         config = model_ckpt["config"]
+    elif model_path is not None:
+        state_dict = torch.load(model_path)["state_dict"]
+        config = torch.load(model_path)["config"]
     else:
         if state_dict is None or config is None:
             raise ValueError("Either model_path or state_dict and config must be provided")

@@ -4,6 +4,90 @@ import numpy as np
 import pandas as pd
 import torch
 
+def infer_categorical_features(
+    X: np.ndarray,
+    categorical_features: list[int] | None = None,
+) -> list[int]:
+    """Infer the categorical features from the input data.
+
+    Features are identified as categorical if any of these conditions are met:
+    1. The feature index is in the provided categorical_features list AND has few unique values
+    2. The feature has few unique values compared to the dataset size
+    3. The feature has string/object/category data type (pandas DataFrame)
+    4. The feature contains string values (numpy array)
+
+    Parameters:
+        X (np.ndarray or pandas.DataFrame): The input data.
+        categorical_features (list[int], optional): Initial list of categorical feature indices.
+            If None, will start with an empty list.
+
+    Returns:
+        list[int]: The indices of the categorical features.
+    """
+    if categorical_features is None:
+        categorical_features = []
+
+    max_unique_values_as_categorical_feature = 10
+    min_unique_values_as_numerical_feature = 10
+
+    _categorical_features: list[int] = []
+
+    # First detect based on data type (string/object features)
+    is_pandas = hasattr(X, "dtypes")
+
+    if is_pandas:
+        # Handle pandas DataFrame - use pandas' own type detection
+        import pandas as pd
+
+        for i, col_name in enumerate(X.columns):
+            col = X[col_name]
+            # Use pandas' built-in type checks for categorical features
+            if (
+                pd.api.types.is_categorical_dtype(col)
+                or pd.api.types.is_object_dtype(col)
+                or pd.api.types.is_string_dtype(col)
+            ):
+                _categorical_features.append(i)
+    else:
+        # Handle numpy array - check if any columns contain strings
+        for i in range(X.shape[1]):
+            if X.dtype == object:  # Check entire array dtype
+                # Try to access first non-nan value to check its type
+                col = X[:, i]
+                for val in col:
+                    if val is not None and not (
+                        isinstance(val, float) and np.isnan(val)
+                    ):
+                        if isinstance(val, str):
+                            _categorical_features.append(i)
+                            break
+
+    # Then detect based on unique values
+    for i in range(X.shape[-1]):
+        # Skip if already identified as categorical
+        if i in _categorical_features:
+            continue
+
+        # Get unique values - handle differently for pandas and numpy
+        n_unique = X.iloc[:, i].nunique() if is_pandas else len(np.unique(X[:, i]))
+
+        # Filter categorical features, with too many unique values
+        if (
+            i in categorical_features
+            and n_unique <= max_unique_values_as_categorical_feature
+        ):
+            _categorical_features.append(i)
+
+        # Filter non-categorical features, with few unique values
+        elif (
+            i not in categorical_features
+            and n_unique < min_unique_values_as_numerical_feature
+            and X.shape[0] > 100
+        ):
+            _categorical_features.append(i)
+
+    return _categorical_features
+
 
 def infer_categorical_columns(
     X: Union[np.ndarray, torch.Tensor, pd.DataFrame],
