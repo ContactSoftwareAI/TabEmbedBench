@@ -114,14 +114,3 @@ def run_benchmark(
     )
 
     return combined_results
-
-if __name__ == "__main__":
-    from tabembedbench.embedding_models.tabpfn_embedding import UniversalTabPFNEmbedding
-
-    tabpfn = UniversalTabPFNEmbedding()
-
-    run_benchmark(
-        embedding_model=tabpfn,
-        upper_bound_dataset_size=500,
-        adbench_dataset_path="/Users/lkl/PycharmProjects/TabEmbedBench/data/adbench_tabular_datasets",
-    )

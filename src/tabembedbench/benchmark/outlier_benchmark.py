@@ -4,7 +4,6 @@ import os
 import time
 from typing import List, Optional, Union
 
-import mlflow
 import numpy as np
 import polars as pl
 from sklearn.metrics import roc_auc_score
@@ -41,8 +40,43 @@ def run_outlier_benchmark(
     exclude_datasets: Optional[list[str]] = None,
     exclude_image_datasets: bool = False,
     save_embeddings: bool = False,
-    upper_bound_dataset_size: int = 100000,
+    upper_bound_dataset_size: int = 10000,
 ):
+    """
+    Runs an outlier detection benchmark using the provided embedding models and datasets.
+    It uses the tabular datasets from the ADBench benchmark [1] for evaluation.
+
+    This function benchmarks the effectiveness of various embedding models in detecting
+    outliers. It supports the exclusion of specific datasets, exclusion of image datasets,
+    limiting the dataset size, and optionally saving computed embeddings for analysis.
+
+    Args:
+        embedding_models: A list of embedding models to be evaluated. Each embedding
+            model must implement methods for preprocessing data, computing embeddings,
+            and resetting the model.
+        dataset_paths: Optional path to the dataset directory. If not specified, a
+            default directory for tabular datasets will be used, and datasets will
+            be downloaded if missing.
+        exclude_datasets: Optional list of dataset filenames to exclude from the
+            benchmark. Each filename should match a file in the dataset directory.
+        exclude_image_datasets: Boolean flag that indicates whether to exclude image
+            datasets from the benchmark. Defaults to False.
+        save_embeddings: Boolean flag to determine whether computed embeddings
+            should be saved to disk. Defaults to False.
+        upper_bound_dataset_size: Integer specifying the maximum dataset size
+            (in number of samples) to include in the benchmark. Datasets exceeding
+            this size will be skipped. Defaults to 10000.
+
+    Returns:
+        pl.DataFrame: A Polars DataFrame containing the benchmark results, including
+            dataset names, dataset sizes, embedding model names, number of neighbors
+            used for outlier detection, AUC scores, computation times for embeddings,
+            and the benchmark category.
+
+    References:
+        [1] Han, S., et al. (2022). "Adbench: Anomaly detection benchmark."
+            Advances in neural information processing systems, 35, 32142-32159.
+    """
     if dataset_paths is None:
         dataset_paths = Path("data/adbench_tabular_datasets")
         if not dataset_paths.exists():
@@ -80,6 +114,10 @@ def run_outlier_benchmark(
                         f"Skipping {dataset_file.name} - dataset size {dataset['X'].shape[0]} exceeds limit {upper_bound_dataset_size}"
                     )
                     continue
+                else:
+                    logger.info(
+                        f"Running experiments on {dataset_file.stem}. Samples: {dataset['X'].shape[0]}, Features: {dataset['X'].shape[1]}"
+                    )
 
             dataset = np.load(dataset_file)
 
@@ -87,19 +125,19 @@ def run_outlier_benchmark(
             y = dataset["y"]
 
             for embedding_model in embedding_models:
+                print(X.shape)
+
                 X_preprocess = embedding_model.preprocess_data(X, train=True)
 
                 start_time = time.time()
                 X_embed = embedding_model.compute_embeddings(X_preprocess)
                 compute_embeddings_time = time.time() - start_time
-
+                print("X_embed shape: ", X_embed.shape)
                 if save_embeddings:
                     embedding_file = (
                         f"{embedding_model.name}_{dataset_file.stem}_embeddings.npz"
                     )
                     np.savez(embedding_file, x=X_embed, y=y)
-
-                    mlflow.log_artifact(embedding_file)
 
                     os.remove(embedding_file)
 

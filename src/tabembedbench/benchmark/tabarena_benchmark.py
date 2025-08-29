@@ -6,6 +6,7 @@ from typing import List
 import numpy as np
 import openml
 import polars as pl
+from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import mean_squared_error, roc_auc_score
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from tabicl.sklearn.preprocessing import TransformToNumerical
@@ -27,23 +28,33 @@ def run_tabarena_benchmark(
     save_embeddings: bool = False,
 ):
     """
-    Executes the TabArena benchmark across multiple datasets and embedding models. The benchmark suite computes
-    embeddings, evaluates classification/regression tasks using k-NN models, and stores the results in a structured format.
+    Run the TabArena benchmark for a set of embedding models.
+
+    This function evaluates the performance of specified embedding models on a suite
+    of tasks from the TabArena benchmark. Depending on the size of datasets and
+    parameters provided, the function dynamically adjusts the number of repetitions
+    and splits for the benchmark. It evaluates each embedding model on each task
+    and computes the AUC/MSR scores for supervised classification and regression tasks
+    with k-nearest neighbors.
 
     Args:
-        embedding_models (List[BaseEmbeddingGenerator]): List of embedding models to use for generating embeddings.
-        tabarena_version (str, optional): Version of the TabArena benchmark to run. Defaults to "tabarena-v0.1".
-        tabarena_lite (bool, optional): If True, a lightweight benchmark is executed with reduced repetitions and folds.
-            Defaults to True.
-        upper_bound_dataset_size (int, optional): Maximum allowable dataset size to be included in the benchmark.
-            Datasets larger than this value are skipped. Defaults to 100000.
-        save_embeddings (bool, optional): If True, intermediate embedding files are saved temporarily during the benchmark.
-            Defaults to False.
+        embedding_models: List of embedding model instances that inherit from
+            BaseEmbeddingGenerator. Each model will be evaluated for its performance.
+        tabarena_version: The version identifier for the TabArena benchmark study.
+            Defaults to "tabarena-v0.1".
+        tabarena_lite: Boolean indicating whether to run in lite mode. If True, uses fewer
+            splits and repetitions for quicker evaluations. Defaults to True.
+        upper_bound_dataset_size: Integer representing the maximum dataset size to
+            consider for benchmarking. Datasets larger than this value will be skipped.
+            Defaults to 100000.
+        save_embeddings: Boolean indicating whether to save computed embeddings during
+            the benchmark process. Defaults to False.
 
     Returns:
-        polars.DataFrame: A dataframe containing benchmark results. The results include dataset names, dataset sizes,
-        embedding models, the number of neighbors used in k-NN, evaluation metrics (AUC and MSR), computation times
-        for embeddings, and benchmark type.
+        polars.DataFrame: A dataframe summarizing the benchmark results. The columns
+            include dataset information, embedding model names, number of neighbors,
+            metrics such as AUC/MSR scores, embedding computation time, and benchmark
+            type.
     """
     benchmark_suite = openml.study.get_suite(tabarena_version)
     task_ids = benchmark_suite.tasks
@@ -103,10 +114,12 @@ def run_tabarena_benchmark(
                 numerical_transformer = TransformToNumerical()
 
                 X_train = numerical_transformer.fit_transform(X_train)
-
                 X_test = numerical_transformer.transform(X_test)
 
-
+                if task.task_type == "Supervised Classification":
+                    label_encoder = LabelEncoder()
+                    y_train = label_encoder.fit_transform(y_train)
+                    y_test = label_encoder.transform(y_test)
 
                 for embedding_model in embedding_models:
                     logger.info(
@@ -147,7 +160,6 @@ def run_tabarena_benchmark(
                             compute_embeddings_time
                         )
                         result_tabarena_dict["benchmark"].append("tabarena")
-
                         if task.task_type == "Supervised Classification":
                             knn_classifier = KNeighborsClassifier(
                                 n_neighbors=num_neighbors,
@@ -176,13 +188,13 @@ def run_tabarena_benchmark(
                             )
 
                             knn_regressor.fit(X_train_embed, y_train)
-
                             y_pred = knn_regressor.predict(X_test_embed)
-
                             score_msr = mean_squared_error(y_test, y_pred)
 
                             result_tabarena_dict["msr_score"].append(score_msr)
                             result_tabarena_dict["auc_score"].append((-1) * np.inf)
+
+                    embedding_model.reset_embedding_model()
 
     result_df = pl.from_dict(
         result_tabarena_dict,
