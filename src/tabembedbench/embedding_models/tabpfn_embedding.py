@@ -1,19 +1,17 @@
 import logging
-from typing import Union, Optional
 
 import numpy as np
 import pandas as pd
-from tabpfn import TabPFNClassifier, TabPFNRegressor
-from tabpfn.utils import infer_categorical_features
-from tabpfn_extensions.many_class import ManyClassClassifier
+from sklearn.utils.multiclass import unique_labels
 import torch
+from tabpfn import TabPFNClassifier, TabPFNRegressor
+from typing import Optional
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.config import EmbAggregation
 from tabembedbench.utils.embedding_utils import compute_embeddings_aggregation
 from tabembedbench.utils.preprocess_utils import infer_categorical_columns
 from tabembedbench.utils.torch_utils import get_device
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,7 +25,7 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
         tabpfn_clf: Optional[TabPFNClassifier] = None,
         tabpfn_reg: Optional[TabPFNRegressor] = None,
         n_estimators: int = 1,
-        estimator_agg_func: Union[str, EmbAggregation] = "first_element",
+        estimator_agg_func: str | EmbAggregation = "first_element",
     ) -> None:
         super().__init__()
         self.n_estimators = n_estimators
@@ -51,6 +49,7 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
             tabpfn_reg = TabPFNRegressor(**self._init_tabpfn_configs)
 
         self.cat_cols = None
+        self.multi_class = None
         self.tabpfn_clf = tabpfn_clf
         self.tabpfn_reg = tabpfn_reg
 
@@ -77,7 +76,7 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
     def _compute_embeddings_per_column(
         self,
         X: torch.tensor,
-        agg_func: Union[str, EmbAggregation] = "mean",
+        agg_func: str | EmbAggregation = "mean",
     ):
         embs = []
         for column_idx in range(X.shape[1]):
@@ -104,7 +103,7 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
                     model.fit(X_train, y_train)
                 elif "exceeds the maximal number of classes" in str(e):
                     #TODO: Überlegen wie man kategorische Spalten mit mehr als 10 Elemente umgehen muss
-                    logger.info(f"Column {column_idx} exceeds the maximal number of classes. Skipping this column as target.")
+                    logger.warning(f"Column {column_idx} exceeds the maximal number of classes. Skipping this column as target.")
                     continue
                 else:
                     raise ValueError(e)
@@ -121,8 +120,21 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
 
         return compute_embeddings_aggregation(embs, agg_func)
 
+    def _multiclass_codebook_reduction(self, X, y):
+        raise NotImplementedError
+
+    @staticmethod
+    def _generate_codebook(
+        num_estimators,
+        num_classes: int,
+        alphabet_size: int,
+        random_state_instance: np.random.RandomState,
+    ):
+        raise NotImplementedError
+
+
     def compute_embeddings(
-        self, X: torch.Tensor, agg_func: Union[str, EmbAggregation] = "mean"
+        self, X: torch.Tensor, agg_func: str | EmbAggregation = "mean"
     ) -> np.ndarray:
         embeddings = self._compute_embeddings_per_column(
             X
@@ -134,3 +146,4 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
         self.tabpfn_clf = TabPFNClassifier(**self._init_tabpfn_configs)
         self.tabpfn_reg = TabPFNRegressor(**self._init_tabpfn_configs)
         self.cat_cols = None
+        self.multi_class = None
