@@ -125,14 +125,11 @@ def run_outlier_benchmark(
             y = dataset["y"]
 
             for embedding_model in embedding_models:
-                print(X.shape)
-
                 X_preprocess = embedding_model.preprocess_data(X, train=True)
 
                 start_time = time.time()
                 X_embed = embedding_model.compute_embeddings(X_preprocess)
                 compute_embeddings_time = time.time() - start_time
-                print("X_embed shape: ", X_embed.shape)
                 if save_embeddings:
                     embedding_file = (
                         f"{embedding_model.name}_{dataset_file.stem}_embeddings.npz"
@@ -147,7 +144,7 @@ def run_outlier_benchmark(
                         n_jobs=-1,
                     )
 
-                    X = lof.fit_predict(X_embed)
+                    lof.fit_predict(X_embed)
 
                     neg_outlier_factor = (-1) * lof.negative_outlier_factor_
 
