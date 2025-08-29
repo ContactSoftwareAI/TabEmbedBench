@@ -1,17 +1,17 @@
 import logging
 import os
 import time
-from typing import List
 
 import numpy as np
 import openml
 import polars as pl
-from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import mean_squared_error, roc_auc_score
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+from sklearn.preprocessing import LabelEncoder
 from tabicl.sklearn.preprocessing import TransformToNumerical
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,14 +21,13 @@ logger = logging.getLogger("TabEmbedBench_TabArena")
 
 
 def run_tabarena_benchmark(
-    embedding_models: List[BaseEmbeddingGenerator],
+    embedding_models: list[BaseEmbeddingGenerator],
     tabarena_version: str = "tabarena-v0.1",
     tabarena_lite: bool = True,
     upper_bound_dataset_size: int = 100000,
     save_embeddings: bool = False,
 ):
-    """
-    Run the TabArena benchmark for a set of embedding models.
+    """Run the TabArena benchmark for a set of embedding models.
 
     This function evaluates the performance of specified embedding models on a suite
     of tasks from the TabArena benchmark. Depending on the size of datasets and
@@ -195,6 +194,9 @@ def run_tabarena_benchmark(
                             result_tabarena_dict["auc_score"].append((-1) * np.inf)
 
                     embedding_model.reset_embedding_model()
+
+                    if get_device() in ["cuda", "mps"]:
+                        empty_gpu_cache()
 
     result_df = pl.from_dict(
         result_tabarena_dict,

@@ -1,13 +1,12 @@
 import inspect
-from typing import List, Optional, Union
 
-from huggingface_hub import hf_hub_download
 import numpy as np
+import torch
+from huggingface_hub import hf_hub_download
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
 from tabicl.sklearn.preprocessing import PreprocessingPipeline
-import torch
 from torch import nn
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
@@ -15,8 +14,7 @@ from tabembedbench.utils.torch_utils import get_device
 
 
 class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
-    """
-    TabICLEmbedding is a neural network module for tabular data embedding. It is
+    """TabICLEmbedding is a neural network module for tabular data embedding. It is
     based on the TabICL architecture and uses the first two stages of TabICL to
     generate embeddings for the rows.
 
@@ -45,14 +43,13 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         row_rope_base: float = 100000,
         ff_factor: int = 2,
         dropout: float = 0.0,
-        activation: Union[str, callable] = "gelu",
+        activation: str | callable = "gelu",
         norm_first: bool = True,
         normalize_embeddings: bool = False,
         preprocess_data: bool = False,
         **kwargs,
     ):
-        """
-        Initializes the model configuration by setting up the column embedding and row
+        """Initializes the model configuration by setting up the column embedding and row
         interaction modules with the specified parameters. Configurations are used to
         define the behavior of each module and the overall model.
 
@@ -121,11 +118,10 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
     def forward(
         self,
         X: torch.Tensor,
-        feature_shuffles: Optional[List[List[int]]] = None,
-        inference_config: Optional[InferenceConfig] = None,
+        feature_shuffles: list[list[int]] | None = None,
+        inference_config: InferenceConfig | None = None,
     ) -> torch.Tensor:
-        """
-        Performs the forward pass through the model, generating row representations
+        """Performs the forward pass through the model, generating row representations
         from the input data. This method applies column embedding followed by row
         interaction to derive the final tensor output.
 
@@ -160,8 +156,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         return False
 
     def preprocess_data(self, X: np.ndarray, train: bool = True):
-        """
-        Preprocesses the input data by applying normalization and preprocessing pipelines
+        """Preprocesses the input data by applying normalization and preprocessing pipelines
         based on the mode (training or inference). If normalization is enabled, the
         numerical transformation is applied to the data during training, creating a
         reusable transformer. During inference, the existing transformer is reused.
@@ -189,10 +184,9 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
     def compute_embeddings(
         self,
         X: np.ndarray,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ) -> np.ndarray:
-        """
-        Computes the embeddings for the given input array using the model's forward method.
+        """Computes the embeddings for the given input array using the model's forward method.
 
         The method takes an input array and uses PyTorch to convert it into a tensor, passes
         it through the forward method of the model, and finally detaches and converts the
@@ -231,8 +225,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
 
 
 def filter_params_for_class(cls, params_dict):
-    """
-    Filter parameters dictionary to only include parameters that are accepted
+    """Filter parameters dictionary to only include parameters that are accepted
     by the class constructor.
 
     Args:
@@ -255,13 +248,12 @@ def filter_params_for_class(cls, params_dict):
 
 
 def get_row_embeddings_model(
-    model_path: Optional[str] = "auto",
-    state_dict: Optional[dict] = None,
-    config: Optional[dict] = None,
+    model_path: str | None = "auto",
+    state_dict: dict | None = None,
+    config: dict | None = None,
     preprocess_data: bool = False
 ) -> TabICLEmbedding:
-    """
-    Loads and prepares a row embeddings model based on the provided model path, state dict, and
+    """Loads and prepares a row embeddings model based on the provided model path, state dict, and
     configuration. The function can also optionally preprocess data for embeddings.
 
     The function supports two methods of loading the model:

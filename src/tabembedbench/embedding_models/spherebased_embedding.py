@@ -1,8 +1,7 @@
-from sklearn.base import TransformerMixin
-from typing import List, Union, Optional
+
 import numpy as np
 import pandas as pd
-from tabicl.sklearn.preprocessing import TransformToNumerical
+from sklearn.base import TransformerMixin
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.preprocess_utils import infer_categorical_columns
@@ -12,7 +11,7 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
     def __init__(
             self,
             embed_dim: int,
-            categorical_indices: Optional[List[int]] = None
+            categorical_indices: list[int] | None = None
     ) -> None:
         self.categorical_indices = categorical_indices
         self.embed_dim = embed_dim
@@ -28,8 +27,7 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
         return "Schalenmodell"
 
     def _generate_random_sphere_point(self) -> np.ndarray:
-        """
-        Generates a random point on the surface of a sphere in an n-dimensional space.
+        """Generates a random point on the surface of a sphere in an n-dimensional space.
 
         This method creates a random point in an n-dimensional space, normalizes the
         point to make it a unit vector, and returns the resulting point that lies on
@@ -43,7 +41,7 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
 
         return point / np.linalg.norm(point)
 
-    def fit(self, data: Union[pd.DataFrame, np.ndarray], y=None):
+    def fit(self, data: pd.DataFrame | np.ndarray, y=None):
         if isinstance(data, pd.DataFrame):
             data = data.values
         else:
@@ -76,9 +74,8 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
                 sphere_point = self._generate_random_sphere_point()
                 self.column_properties.append([col_min, col_max, sphere_point])
 
-    def transform(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
-        """
-        Transforms input data into embeddings using appropriate methods for categorical and
+    def transform(self, data: pd.DataFrame | np.ndarray) -> np.ndarray:
+        """Transforms input data into embeddings using appropriate methods for categorical and
         numerical columns and returns row-wise embeddings.
 
         This method processes input data to generate embeddings for each column based on
@@ -132,8 +129,7 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
         column_data: np.ndarray,
         col_idx: int
     ) -> np.ndarray:
-        """
-        Embeds a numerical column into a multidimensional representation based on normalization
+        """Embeds a numerical column into a multidimensional representation based on normalization
         and a pre-calculated sphere point.
 
         This method processes a numerical column of data and embeds each value into a
@@ -176,8 +172,7 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
     def _embed_categorical_column(
         self, column_data: np.ndarray, col_idx: int
     ) -> np.ndarray:
-        """
-        Embeds a categorical column into a numerical array representation based on predefined
+        """Embeds a categorical column into a numerical array representation based on predefined
         center points and generates embeddings for unknown categories dynamically.
 
         Parameters
@@ -187,7 +182,7 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
         col_idx : int
             The index of the column in the context of all columns of the data.
 
-        Returns
+        Returns:
         -------
         np.ndarray
             A 2D array representing the embedded numerical values for each category

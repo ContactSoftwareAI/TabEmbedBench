@@ -1,8 +1,9 @@
-from typing import List, Optional, Tuple, Union
+from typing import Union
 
 import numpy as np
 import pandas as pd
 import torch
+
 
 def infer_categorical_features(
     X: np.ndarray,
@@ -75,11 +76,7 @@ def infer_categorical_features(
         if (
             i in categorical_features
             and n_unique <= max_unique_values_as_categorical_feature
-        ):
-            _categorical_features.append(i)
-
-        # Filter non-categorical features, with few unique values
-        elif (
+        ) or (
             i not in categorical_features
             and n_unique < min_unique_values_as_numerical_feature
             and X.shape[0] > 100
@@ -94,9 +91,7 @@ def infer_categorical_columns(
     max_unique_ratio: float = 0.1,
     max_unique_count: int = 200,
     return_split: bool = False,
-) -> Union[
-    List[int], Tuple[Union[np.ndarray, torch.Tensor], Union[np.ndarray, torch.Tensor]]
-]:
+) -> list[int] | tuple[np.ndarray | torch.Tensor, np.ndarray | torch.Tensor]:
     if hasattr(X, "detach"):
         is_tensor = True
         device = X.device
@@ -119,12 +114,9 @@ def infer_categorical_columns(
     if data_np.ndim == 3:
         batch_size, num_samples, num_features = data_np.shape
         data_2d = data_np.reshape(-1, num_features)
-        total_samples = batch_size * num_samples
     else:
         num_samples, num_features = data_np.shape
         data_2d = data_np
-        total_samples = num_samples
-        batch_size = None
 
     categorical_indices = []
 
@@ -205,7 +197,7 @@ def infer_categorical_columns(
 
 
 def _create_empty_array(
-    original_shape: Tuple[int, ...], is_tensor: bool, device: Optional[str], dtype
+    original_shape: tuple[int, ...], is_tensor: bool, device: str | None, dtype
 ) -> Union[np.ndarray, "torch.Tensor"]:
     """Create an empty array with 0 features but maintaining other dimensions."""
     if len(original_shape) == 3:
@@ -215,15 +207,14 @@ def _create_empty_array(
 
     if is_tensor:
         return torch.empty(empty_shape, device=device, dtype=dtype)
-    else:
-        return np.empty(empty_shape, dtype=dtype)
+    return np.empty(empty_shape, dtype=dtype)
 
 
 def _restore_original_format(
     data_np: np.ndarray,
-    original_shape: Tuple[int, ...],
+    original_shape: tuple[int, ...],
     is_tensor: bool,
-    device: Optional[str],
+    device: str | None,
 ) -> Union[np.ndarray, "torch.Tensor"]:
     """Restore data to original tensor format if needed."""
     if is_tensor:

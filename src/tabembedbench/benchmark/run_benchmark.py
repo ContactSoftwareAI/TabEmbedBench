@@ -1,6 +1,5 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
 
 import polars as pl
 
@@ -12,10 +11,10 @@ timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def run_benchmark(
-    embedding_model: Optional[BaseEmbeddingGenerator] = None,
-    embedding_models: Optional[list[BaseEmbeddingGenerator]] = None,
-    adbench_dataset_path: Optional[Union[str, Path]] = None,
-    exclude_adbench_datasets: Optional[list[str]] = None,
+    embedding_model: BaseEmbeddingGenerator | None = None,
+    embedding_models: list[BaseEmbeddingGenerator] | None = None,
+    adbench_dataset_path: str | Path | None = None,
+    exclude_adbench_datasets: list[str] | None = None,
     exclude_adbench_image_datasets: bool = True,
     tabarena_version: str = "tabarena-v0.1",
     tabarena_lite: bool = True,
@@ -24,8 +23,7 @@ def run_benchmark(
     run_outlier: bool = True,
     run_task_specific: bool = True,
 ) -> pl.DataFrame:
-    """
-    Run a benchmark pipeline for embedding models on specified datasets and tasks.
+    """Run a benchmark pipeline for embedding models on specified datasets and tasks.
 
     This function allows evaluating a single embedding model or a list of embedding models over a series
     of predefined datasets and benchmarking tasks. The benchmarking process includes outlier detection
@@ -71,11 +69,7 @@ def run_benchmark(
             raise ValueError(
                 "There is an element within the list of models that does not have a function 'compute_embeddings'."
             )
-        elif not hasattr(model, "name"):
-            raise ValueError(
-                "There is an element within the list of models that does not have a property 'name'."
-            )
-        elif not hasattr(model, "preprocess_data"):
+        if not hasattr(model, "name") or not hasattr(model, "preprocess_data"):
             raise ValueError(
                 "There is an element within the list of models that does not have a property 'name'."
             )

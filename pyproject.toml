@@ -41,9 +41,34 @@ where = ["src"]
 line-length = 88
 target-version = "py312"
 
+[tool.ruff.format]
+quote-style = "double"
+
+
 [tool.ruff.lint]
-select = ["E", "W", "F", "I"]  # E/W (pycodestyle), F (pyflakes), I (isort)
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "D",   # pydocstyle (docstrings)
+    "UP",  # pyupgrade (modern Python syntax)
+    "B",   # flake8-bugbear (common bugs)
+    "S",   # flake8-bandit (security)
+    "C4",  # flake8-comprehensions
+    "PIE", # flake8-pie (unnecessary code)
+    "SIM", # flake8-simplify
+    "RET", # flake8-return
+    "ARG", # flake8-unused-arguments
+]
+ignore = [
+    "D100", "D101", "D102", "D103", "D104", "D105",  # Missing docstrings
+    "S101", # Use of assert
+]
+
+[tool.ruff.pydocstyle]
+convention = "google"
 
 [tool.ruff.lint.isort]
 known-third-party = []
-

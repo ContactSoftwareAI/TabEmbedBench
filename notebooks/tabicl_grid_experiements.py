@@ -9,7 +9,6 @@ def _():
     import marimo as mo
     import polars as pl
     import torch
-
     from embeddings.tabicl.tabicl_utils import get_row_embeddings_model
     from sklearn.model_selection import train_test_split
 
@@ -81,8 +80,8 @@ def _(X_test, X_train, row_embedder):
 
 @app.cell
 def _(X_test_embed, X_train_embed, pl, y_test, y_train):
-    from sklearn.neighbors import KNeighborsClassifier
     from sklearn.metrics import roc_auc_score
+    from sklearn.neighbors import KNeighborsClassifier
 
     score_per_neighbors = dict()
 

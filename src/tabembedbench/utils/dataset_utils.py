@@ -2,7 +2,6 @@ import math
 import random
 import zipfile
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 import requests
@@ -12,10 +11,9 @@ ADBENCH_URL = "https://github.com/Minqi824/ADBench/archive/refs/heads/main.zip"
 
 
 def download_adbench_tabular_datasets(
-    save_path: Optional[Union[str, Path]] = None,
+    save_path: str | Path | None = None,
 ) -> None:
-    """
-    Downloads tabular datasets for ADBench from the specified GitHub repository and saves them to the
+    """Downloads tabular datasets for ADBench from the specified GitHub repository and saves them to the
     specified path. If no path is provided, it defaults to './data/adbench_tabular_datasets'. If the
     directory does not exist, it is created.
 
@@ -71,9 +69,8 @@ def download_adbench_tabular_datasets(
 
 def get_data_description(
     X: np.ndarray, y: np.ndarray, dataset_name: str
-) -> dict[str, Union[str, int, float]]:
-    """
-    Provides a summary of the dataset by computing statistical information
+) -> dict[str, str | int | float]:
+    """Provides a summary of the dataset by computing statistical information
     such as the number of samples, features, anomalies, and the anomaly ratio.
 
     Args:
@@ -98,7 +95,7 @@ def get_data_description(
     return des_dict
 
 
-def read_data(data_path: Union[str, Path]) -> tuple[np.ndarray, np.ndarray]:
+def read_data(data_path: str | Path) -> tuple[np.ndarray, np.ndarray]:
     data = np.load(data_path)
 
     X = data["X"]
@@ -107,9 +104,8 @@ def read_data(data_path: Union[str, Path]) -> tuple[np.ndarray, np.ndarray]:
     return X, y
 
 
-def select_random_combined_datasets(datasets_dir: str) -> list[Union[str, Path]]:
-    """
-    Selects a random subset of dataset files from a given directory.
+def select_random_combined_datasets(datasets_dir: str) -> list[str | Path]:
+    """Selects a random subset of dataset files from a given directory.
 
     This function identifies all files within the provided directory and randomly selects
     a subset of these files. The number of files selected is between 2 and the square root

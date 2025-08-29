@@ -1,8 +1,7 @@
-from pathlib import Path
 import logging
 import os
 import time
-from typing import List, Optional, Union
+from pathlib import Path
 
 import numpy as np
 import polars as pl
@@ -15,6 +14,7 @@ from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.dataset_utils import (
     download_adbench_tabular_datasets,
 )
+from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,15 +35,14 @@ IMAGE_CATEGORY = [
 
 
 def run_outlier_benchmark(
-    embedding_models: List[BaseEmbeddingGenerator],
-    dataset_paths: Optional[Union[str, Path]] = None,
-    exclude_datasets: Optional[list[str]] = None,
+    embedding_models: list[BaseEmbeddingGenerator],
+    dataset_paths: str | Path | None = None,
+    exclude_datasets: list[str] | None = None,
     exclude_image_datasets: bool = False,
     save_embeddings: bool = False,
     upper_bound_dataset_size: int = 10000,
 ):
-    """
-    Runs an outlier detection benchmark using the provided embedding models and datasets.
+    """Runs an outlier detection benchmark using the provided embedding models and datasets.
     It uses the tabular datasets from the ADBench benchmark [1] for evaluation.
 
     This function benchmarks the effectiveness of various embedding models in detecting
@@ -105,7 +104,7 @@ def run_outlier_benchmark(
         if dataset_file.name not in exclude_datasets:
             logger.info(f"Running benchmark for {dataset_file.name}...")
 
-            if not "dataset_name" in result_outlier_dict.keys():
+            if "dataset_name" not in result_outlier_dict:
                 result_outlier_dict["dataset_name"] = []
 
             with np.load(dataset_file) as dataset:
@@ -114,10 +113,9 @@ def run_outlier_benchmark(
                         f"Skipping {dataset_file.name} - dataset size {dataset['X'].shape[0]} exceeds limit {upper_bound_dataset_size}"
                     )
                     continue
-                else:
-                    logger.info(
-                        f"Running experiments on {dataset_file.stem}. Samples: {dataset['X'].shape[0]}, Features: {dataset['X'].shape[1]}"
-                    )
+                logger.info(
+                    f"Running experiments on {dataset_file.stem}. Samples: {dataset['X'].shape[0]}, Features: {dataset['X'].shape[1]}"
+                )
 
             dataset = np.load(dataset_file)
 
@@ -161,6 +159,9 @@ def run_outlier_benchmark(
                     result_outlier_dict["benchmark"].append("outlier")
 
                 embedding_model.reset_embedding_model()
+
+                if get_device() in ["cuda", "mps"]:
+                    empty_gpu_cache()
 
     result_df = pl.from_dict(
         result_outlier_dict,

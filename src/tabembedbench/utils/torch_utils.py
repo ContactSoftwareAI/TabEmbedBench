@@ -2,8 +2,7 @@ import torch
 
 
 def get_device() -> torch.device:
-    """
-    Determines the appropriate PyTorch device to be used.
+    """Determines the appropriate PyTorch device to be used.
 
     This function checks the system's hardware capabilities and returns a PyTorch
     device object to represent the computing device (e.g., GPU or CPU) to be used
@@ -18,15 +17,13 @@ def get_device() -> torch.device:
     """
     if torch.cuda.is_available():
         return torch.device("cuda")
-    elif torch.backends.mps.is_available():
+    if torch.backends.mps.is_available():
         return torch.device("mps")
-    else:
-        return torch.device("cpu")
+    return torch.device("cpu")
 
 
 def empty_gpu_cache(device: torch.device) -> None:
-    """
-    Clears the GPU cache for the specified device.
+    """Clears the GPU cache for the specified device.
 
     This function frees up GPU memory by emptying the cache for the specified
     device. If the device is CUDA, it uses PyTorch's `torch.cuda.empty_cache`.
