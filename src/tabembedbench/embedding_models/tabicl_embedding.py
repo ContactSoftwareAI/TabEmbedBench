@@ -6,7 +6,7 @@ import numpy as np
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
-from tabicl.sklearn.preprocessing import TransformToNumerical, PreprocessingPipeline
+from tabicl.sklearn.preprocessing import PreprocessingPipeline
 import torch
 from torch import nn
 

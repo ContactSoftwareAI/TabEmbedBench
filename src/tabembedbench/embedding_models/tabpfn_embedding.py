@@ -1,49 +1,55 @@
-import copy
+import logging
 from typing import Union, Optional
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold
 from tabpfn import TabPFNClassifier, TabPFNRegressor
+from tabpfn.utils import infer_categorical_features
+from tabpfn_extensions.many_class import ManyClassClassifier
 import torch
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.config import EmbAggregation
 from tabembedbench.utils.embedding_utils import compute_embeddings_aggregation
 from tabembedbench.utils.preprocess_utils import infer_categorical_columns
+from tabembedbench.utils.torch_utils import get_device
 
+
+logging.basicConfig(
+    level=logging.INFO,
+)
+
+logger = logging.getLogger("TabPFN")
 
 class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
-    """
-    UniversalTabPFNEmbedding provides functionality to generate embeddings for tabular
-    data using TabPFNClassifier and TabPFNRegressor models.
-
-    This class is designed to process both categorical and numeric columns in a tabular
-    dataset. It uses k-fold cross-validation to generate feature embeddings for each
-    column by training models on the remaining columns. The embeddings can be used
-    for downstream machine learning tasks such as classification or regression.
-
-    Attributes:
-        tabpfn_clf (TabPFNClassifier): The TabPFNClassifier instance used for generating
-            embeddings for categorical columns.
-        tabpfn_reg (TabPFNRegressor): The TabPFNRegressor instance used for generating
-            embeddings for numeric columns.
-        n_fold (int): The number of folds used in k-fold cross-validation for
-            embedding generation.
-    """
-
-    @property
-    def task_only(self) -> bool:
-        return False
-
     def __init__(
-        self, tabpfn_clf: Optional[TabPFNClassifier] = None, tabpfn_reg: Optional[TabPFNRegressor] = None,
+        self,
+        tabpfn_clf: Optional[TabPFNClassifier] = None,
+        tabpfn_reg: Optional[TabPFNRegressor] = None,
+        n_estimators: int = 1,
+        estimator_agg_func: Union[str, EmbAggregation] = "first_element",
     ) -> None:
         super().__init__()
+        self.n_estimators = n_estimators
+
+        self.device = get_device()
+
+        self._init_tabpfn_configs = {
+            "device": self.device,
+            "n_estimators": self.n_estimators,
+            "ignore_pretraining_limits": True,
+            "inference_config": {
+                "SUBSAMPLE_SAMPLES": 10000
+            }
+        }
+
+        self.estimator_agg_func = estimator_agg_func
+
         if tabpfn_clf is None:
-            tabpfn_clf = TabPFNClassifier()
+            tabpfn_clf = TabPFNClassifier(**self._init_tabpfn_configs)
         if tabpfn_reg is None:
-            tabpfn_reg = TabPFNRegressor()
+            tabpfn_reg = TabPFNRegressor(**self._init_tabpfn_configs)
+
         self.cat_cols = None
         self.tabpfn_clf = tabpfn_clf
         self.tabpfn_reg = tabpfn_reg
@@ -51,108 +57,80 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
     def _get_default_name(self) -> str:
         return "TabPFN"
 
+    @property
+    def task_only(self) -> bool:
+        return False
+
     def preprocess_data(self, X: np.ndarray, train: bool = True):
         if isinstance(X, pd.DataFrame):
             X = torch.tensor(X.values, dtype=torch.float32)
         elif isinstance(X, np.ndarray):
             X = torch.tensor(X, dtype=torch.float32)
 
-        self.X_ = copy.deepcopy(X)
-
-        if isinstance(X, pd.DataFrame):
-            X = X.to_numpy()
-
         if train:
-            pass
+            self.cat_cols = infer_categorical_columns(X)
         else:
             pass
+
         return X
 
-    def get_embeddings(
+    def _compute_embeddings_per_column(
         self,
-        X: Union[np.ndarray, pd.DataFrame, torch.Tensor],
-        cat_cols: list[Union[int, str]] | None = None,
-        numeric_cols: list[Union[int, str]] | None = None,
-    ) -> list[np.ndarray]:
-        """
-        Generates embeddings for each column of the provided dataset using trained
-        models. The method processes categorical and numeric columns separately
-        based on specified indices or inferred column types.
+        X: torch.tensor,
+        agg_func: Union[str, EmbAggregation] = "mean",
+    ):
+        embs = []
+        for column_idx in range(X.shape[1]):
+            mask = torch.zeros_like(X).bool()
+            mask[:, column_idx] = True
+            X_train, y_train = (
+                X[~mask].reshape(X.shape[0], -1),
+                X[mask],
+            )
 
-        Args:
-            X (Union[np.ndarray, pd.DataFrame]): Input dataset, either as a NumPy array
-                or a pandas DataFrame.
-            cat_cols (list[Union[int, str]] | None): List of indices or names (if
-                X is a DataFrame) representing categorical columns. If None,
-                categorical columns will be inferred.
-            numeric_cols (list[Union[int, str]] | None): List of indices or names (if
-                X is a DataFrame) representing numeric columns. If None, numeric columns
-                will be inferred based on categorical column indices.
+            X_pred, _y_pred = X[~mask].reshape(X.shape[0], -1), X[mask]
 
-        Returns:
-            list[np.ndarray]: A list where each element is an array containing
-            embeddings for a corresponding column of the dataset.
-        """
-        if cat_cols is None:
-            cat_cols_idx = infer_categorical_columns(X)
-        elif isinstance(cat_cols[0], str) and isinstance(X, pd.DataFrame):
-            cat_cols_idx = [X.get_loc(col_name) for col_name in cat_cols]
-        else:
-            cat_cols_idx = cat_cols
+            model = (
+                self.tabpfn_clf
+                if column_idx in self.cat_cols
+                else self.tabpfn_reg
+            )
+            try:
+                model.fit(X_train, y_train)
+            except ValueError as e:
+                if "Unknown label type: continuous" in str(e):
+                    logger.info(f"Column {column_idx} is continuous. Reverting to regression.")
+                    model = self.tabpfn_reg
+                    model.fit(X_train, y_train)
+                elif "exceeds the maximal number of classes" in str(e):
+                    #TODO: Überlegen wie man kategorische Spalten mit mehr als 10 Elemente umgehen muss
+                    logger.info(f"Column {column_idx} exceeds the maximal number of classes. Skipping this column as target.")
+                    continue
+                else:
+                    raise ValueError(e)
 
-        if numeric_cols is None:
-            if cat_cols_idx is None:
-                raise NotImplementedError
+            if self.n_estimators > 1:
+                estimator_embs = model.get_embeddings(X_pred)
+
+                if self.estimator_agg_func == "first_element":
+                    embs += [estimator_embs[0]]
+                else:
+                    embs += [compute_embeddings_aggregation(estimator_embs, self.estimator_agg_func)]
             else:
-                numeric_cols_idx = [
-                    idx for idx in range(X.shape[-1]) if idx not in cat_cols_idx
-                ]
-        elif isinstance(numeric_cols[0], str) and isinstance(X, pd.DataFrame):
-            numeric_cols_idx = [X.get_loc(col_name) for col_name in numeric_cols]
-        else:
-            numeric_cols_idx = numeric_cols
+                embs += [model.get_embeddings(X_pred)[0]]
 
-        X = X.numpy()
+        return compute_embeddings_aggregation(embs, agg_func)
 
-        embeddings = []
-
-        for col_idx in range(X.shape[-1]):
-            target = X[:, col_idx]
-
-            mask = np.ones(X.shape[-1], dtype=bool)
-            mask[col_idx] = False
-            tmp_embeddings = []
-
-            if col_idx in cat_cols_idx:
-                self.tabpfn_clf.fit(X[:, mask], target)
-                tmp_embeddings = self.tabpfn_clf.get_embeddings(
-                    X[:, mask], data_source="test"
-                )
-            elif col_idx in numeric_cols_idx:
-                self.tabpfn_reg.fit(X[:, mask], target)
-                tmp_embeddings = self.tabpfn_reg.get_embeddings(
-                    X[:, mask], data_source="test"
-                )
-            embeddings.append(tmp_embeddings[0])
-
+    def compute_embeddings(
+        self, X: torch.Tensor, agg_func: Union[str, EmbAggregation] = "mean"
+    ) -> np.ndarray:
+        embeddings = self._compute_embeddings_per_column(
+            X
+        )
 
         return embeddings
 
-    def compute_embeddings(
-        self, X: np.ndarray, agg_func: Union[str, EmbAggregation] = "mean"
-    ) -> np.ndarray:
-        """
-        Computes the embeddings by aggregating the extracted embeddings using the specified aggregation
-        function.
-
-        Args:
-            X (np.ndarray): Input data for which embeddings are to be computed.
-            agg_func (Union[str, EmbAggregation]): Aggregation function to use for combining the
-                extracted embeddings. Accepted values are a string specifying the function name
-                (e.g., "mean") or an instance of EmbAggregation.
-
-        Returns:
-            ndarray: The aggregated embedding vectors for the input data.
-        """
-        X_embed = self.get_embeddings(X)
-        return compute_embeddings_aggregation(X_embed, agg_func)
+    def reset_embedding_model(self):
+        self.tabpfn_clf = TabPFNClassifier(**self._init_tabpfn_configs)
+        self.tabpfn_reg = TabPFNRegressor(**self._init_tabpfn_configs)
+        self.cat_cols = None
