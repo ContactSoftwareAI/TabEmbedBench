@@ -15,6 +15,7 @@ from tabembedbench.utils.dataset_utils import (
     download_adbench_tabular_datasets,
 )
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
+from tabembedbench.utils.embedding_utils import check_nan
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +42,7 @@ def run_outlier_benchmark(
     exclude_image_datasets: bool = False,
     save_embeddings: bool = False,
     upper_bound_dataset_size: int = 10000,
+    neighbors: int = 51,
 ):
     """Runs an outlier detection benchmark using the provided embedding models and datasets.
     It uses the tabular datasets from the ADBench benchmark [1] for evaluation.
@@ -65,6 +67,7 @@ def run_outlier_benchmark(
         upper_bound_dataset_size: Integer specifying the maximum dataset size
             (in number of samples) to include in the benchmark. Datasets exceeding
             this size will be skipped. Defaults to 10000.
+        neighbors: Integer specifying the number of neighbors to use for outlier
 
     Returns:
         pl.DataFrame: A Polars DataFrame containing the benchmark results, including
@@ -123,6 +126,7 @@ def run_outlier_benchmark(
             y = dataset["y"]
 
             for embedding_model in embedding_models:
+                logger.debug(f"Starting experiment for {embedding_model.name}...")
                 X_preprocess = embedding_model.preprocess_data(X, train=True)
 
                 start_time = time.time()
@@ -136,29 +140,50 @@ def run_outlier_benchmark(
 
                     os.remove(embedding_file)
 
-                for num_neighbors in range(1, 51):
-                    lof = LocalOutlierFactor(
-                        n_neighbors=num_neighbors,
-                        n_jobs=-1,
+                if check_nan(X_embed):
+                    logger.warning(
+                        f"The embeddings for {dataset_file.name} contain NaN values with embedding model {embedding_model.name}. Skipping."
+                    )
+                else:
+                    logger.debug(
+                        f"Start experiment for {embedding_model.name} with Local Outlier Factor."
                     )
 
-                    lof.fit_predict(X_embed)
+                    for num_neighbors in range(1, neighbors):
+                        logger.debug(
+                            f"Starting experiment for {embedding_model.name} with Local Outlier Factor with {num_neighbors} neighbors."
+                        )
+                        lof = LocalOutlierFactor(
+                            n_neighbors=num_neighbors,
+                            n_jobs=-1,
+                        )
+                        try:
+                            lof.fit_predict(X_embed)
 
-                    neg_outlier_factor = (-1) * lof.negative_outlier_factor_
+                            neg_outlier_factor = (-1) * lof.negative_outlier_factor_
 
-                    score_auc = roc_auc_score(y, neg_outlier_factor)
+                            score_auc = roc_auc_score(y, neg_outlier_factor)
 
-                    result_outlier_dict["dataset_name"].append(dataset_file.stem)
-                    result_outlier_dict["dataset_size"].append(X.shape[0])
-                    result_outlier_dict["embedding_model"].append(embedding_model.name)
-                    result_outlier_dict["num_neighbors"].append(num_neighbors)
-                    result_outlier_dict["auc_score"].append(score_auc)
-                    result_outlier_dict["time_to_compute_embeddings"].append(
-                        compute_embeddings_time
+                            result_outlier_dict["dataset_name"].append(dataset_file.stem)
+                            result_outlier_dict["dataset_size"].append(X.shape[0])
+                            result_outlier_dict["embedding_model"].append(
+                                embedding_model.name
+                            )
+                            result_outlier_dict["num_neighbors"].append(num_neighbors)
+                            result_outlier_dict["auc_score"].append(score_auc)
+                            result_outlier_dict["time_to_compute_embeddings"].append(
+                                compute_embeddings_time
+                            )
+                            result_outlier_dict["benchmark"].append("outlier")
+                        except Exception as e:
+                            logger.warning(
+                                f"Error occurred while running experiment for {embedding_model.name} with Local Outlier Factor: {e}"
+                            )
+                            continue
+                    logger.debug(
+                        f"Finished experiment for {embedding_model.name} and resetting the model."
                     )
-                    result_outlier_dict["benchmark"].append("outlier")
-
-                embedding_model.reset_embedding_model()
+                    embedding_model.reset_embedding_model()
 
                 if get_device() in ["cuda", "mps"]:
                     empty_gpu_cache()
