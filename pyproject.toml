@@ -67,7 +67,7 @@ ignore = [
     "S101", # Use of assert
 ]
 
-[tool.ruff.pydocstyle]
+[tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.isort]
