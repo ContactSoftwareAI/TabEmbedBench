@@ -42,30 +42,32 @@ def run_outlier_benchmark(
     exclude_datasets: list[str] | None = None,
     exclude_image_datasets: bool = False,
     save_embeddings: bool = False,
-    upper_bound_dataset_size: int = 10000,
+    upper_bound_num_samples: int = 10000,
     neighbors: int = 51,
 ):
-    """Runs an outlier detection benchmark using the provided embedding models and datasets.
-    It uses the tabular datasets from the ADBench benchmark [1] for evaluation.
+    """Runs an outlier detection benchmark using the provided embedding models
+    and datasets. It uses the tabular datasets from the ADBench benchmark [1]
+    for evaluation.
 
-    This function benchmarks the effectiveness of various embedding models in detecting
-    outliers. It supports the exclusion of specific datasets, exclusion of image datasets,
-    limiting the dataset size, and optionally saving computed embeddings for analysis.
+    This function benchmarks the effectiveness of various embedding models in
+    detecting outliers. It supports the exclusion of specific datasets,
+    exclusion of image datasets, limiting the dataset size, and optionally
+    saving computed embeddings for analysis.
 
     Args:
-        embedding_models: A list of embedding models to be evaluated. Each embedding
-            model must implement methods for preprocessing data, computing embeddings,
-            and resetting the model.
-        dataset_paths: Optional path to the dataset directory. If not specified, a
-            default directory for tabular datasets will be used, and datasets will
-            be downloaded if missing.
+        embedding_models: A list of embedding models to be evaluated. Each
+            embedding model must implement methods for preprocessing data,
+            computing embeddings, and resetting the model.
+        dataset_paths: Optional path to the dataset directory. If not specified,
+            a default directory for tabular datasets will be used,
+            and datasets will be downloaded if missing.
         exclude_datasets: Optional list of dataset filenames to exclude from the
             benchmark. Each filename should match a file in the dataset directory.
-        exclude_image_datasets: Boolean flag that indicates whether to exclude image
-            datasets from the benchmark. Defaults to False.
+        exclude_image_datasets: Boolean flag that indicates whether to exclude
+            image datasets from the benchmark. Defaults to False.
         save_embeddings: Boolean flag to determine whether computed embeddings
             should be saved to disk. Defaults to False.
-        upper_bound_dataset_size: Integer specifying the maximum dataset size
+        upper_bound_num_samples: Integer specifying the maximum size of rows
             (in number of samples) to include in the benchmark. Datasets exceeding
             this size will be skipped. Defaults to 10000.
         neighbors: Integer specifying the number of neighbors to use for outlier
@@ -112,13 +114,19 @@ def run_outlier_benchmark(
                 result_outlier_dict["dataset_name"] = []
 
             with np.load(dataset_file) as dataset:
-                if dataset["X"].shape[0] > upper_bound_dataset_size:
+                num_samples = dataset["X"].shape[0]
+                dataset_name = dataset_file.stem
+                num_features = dataset["X"].shape[1]
+
+                if num_samples > upper_bound_num_samples:
                     logger.warning(
-                        f"Skipping {dataset_file.name} - dataset size {dataset['X'].shape[0]} exceeds limit {upper_bound_dataset_size}"
+                        f"Skipping {dataset_name} - dataset size {num_samples}" 
+                        f"exceeds limit {upper_bound_num_samples}"
                     )
                     continue
                 logger.info(
-                    f"Running experiments on {dataset_file.stem}. Samples: {dataset['X'].shape[0]}, Features: {dataset['X'].shape[1]}"
+                    f"Running experiments on {dataset_name}. Samples: {num_samples}, "
+                    f"Features: {num_features}"
                 )
 
             dataset = np.load(dataset_file)
@@ -135,7 +143,8 @@ def run_outlier_benchmark(
                 compute_embeddings_time = time.time() - start_time
                 if save_embeddings:
                     embedding_file = (
-                        f"{embedding_model.name}_{dataset_file.stem}_embeddings.npz"
+                        f"{embedding_model.name}"
+                        f"_{dataset_file.stem}_embeddings.npz"
                     )
                     np.savez(embedding_file, x=X_embed, y=y)
 
@@ -143,16 +152,20 @@ def run_outlier_benchmark(
 
                 if check_nan(X_embed):
                     logger.warning(
-                        f"The embeddings for {dataset_file.name} contain NaN values with embedding model {embedding_model.name}. Skipping."
+                        f"The embeddings for {dataset_file.name} contain NaN "
+                        f"values with embedding model {embedding_model.name}. "
+                        f"Skipping."
                     )
                 else:
                     logger.debug(
-                        f"Start experiment for {embedding_model.name} with Local Outlier Factor."
+                        f"Start experiment for {embedding_model.name} with "
+                        f"Local Outlier Factor."
                     )
 
                     for num_neighbors in range(1, neighbors):
                         logger.neighbors_progress(
-                            f"Starting experiment for {embedding_model.name} with Local Outlier Factor with {num_neighbors} neighbors."
+                            f"Starting experiment for {embedding_model.name} with "
+                            f"Local Outlier Factor with {num_neighbors} neighbors."
                         )
                         lof = LocalOutlierFactor(
                             n_neighbors=num_neighbors,
@@ -180,11 +193,13 @@ def run_outlier_benchmark(
                             result_outlier_dict["benchmark"].append("outlier")
                         except Exception as e:
                             logger.warning(
-                                f"Error occurred while running experiment for {embedding_model.name} with Local Outlier Factor: {e}"
+                                f"Error occurred while running experiment for "
+                                f"{embedding_model.name} with Local Outlier Factor: {e}"
                             )
                             continue
                     logger.debug(
-                        f"Finished experiment for {embedding_model.name} and resetting the model."
+                        f"Finished experiment for {embedding_model.name} and "
+                        f"resetting the model."
                     )
                     embedding_model.reset_embedding_model()
 

@@ -7,6 +7,7 @@ from tabembedbench.embedding_models.spherebased_embedding import (
     SphereBasedEmbedding,
 )
 from tabembedbench.embedding_models.tabicl_embedding import get_row_embeddings_model
+from tabembedbench.embedding_models.tabvectorizer_embedding import TabVectorizerEmbedding
 from tabembedbench.utils.torch_utils import get_device
 
 device = get_device()
@@ -26,12 +27,18 @@ row_embedder_preprocessed.name = "tabicl-classifier-v1.1-0506" + "_preprocessed"
 row_embedder.to(device)
 row_embedder_preprocessed.to(device)
 
-models = [row_embedder_preprocessed, row_embedder]
+tablevector = TabVectorizerEmbedding()
 
-for n in range(3, 4):
-    sphere_model = SphereBasedEmbedding(embed_dim=n)
-    sphere_model.name = f"sphere-model-d{n}"
+models = [tablevector, row_embedder_preprocessed, row_embedder]
+
+for n in range(5, 10):
+    print(f"n={2**n}")
+    sphere_model = SphereBasedEmbedding(embed_dim=2**n)
+    sphere_model.name = f"sphere-model-d{2**n}"
     models.append(sphere_model)
+
+for model in models:
+    print(model.name)
 
 log_path = Path("data/logs")
 
