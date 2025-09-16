@@ -25,6 +25,7 @@ dependencies = [
     "openml>=0.15.1",
     "skrub>=0.6.1",
     "tabpfn-extensions[all] @ git+https://github.com/PriorLabs/tabpfn-extensions.git",
+    "click>=8.2.1",
 ]
 
 [build-system]
@@ -43,7 +44,6 @@ target-version = "py312"
 
 [tool.ruff.format]
 quote-style = "double"
-
 
 [tool.ruff.lint]
 select = [

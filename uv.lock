@@ -2339,6 +2339,7 @@ wheels = [
 name = "tabembedbench"
 source = { editable = "." }
 dependencies = [
+    { name = "click" },
     { name = "huggingface-hub" },
     { name = "kaleido" },
     { name = "liac-arff" },
@@ -2360,6 +2361,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "click", specifier = ">=8.2.1" },
     { name = "huggingface-hub", specifier = ">=0.34.4" },
     { name = "kaleido", specifier = ">=1.0.0" },
     { name = "liac-arff", specifier = "==2.5.0" },

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -6,8 +7,7 @@ import polars as pl
 from tabembedbench.benchmark.outlier_benchmark import run_outlier_benchmark
 from tabembedbench.benchmark.tabarena_benchmark import run_tabarena_benchmark
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
-
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+from tabembedbench.utils.logging_utils import setup_unified_logging
 
 
 def run_benchmark(
@@ -22,36 +22,74 @@ def run_benchmark(
     save_embeddings: bool = False,
     run_outlier: bool = True,
     run_task_specific: bool = True,
+    save_logs: bool = True,
+    log_dir: str | Path = "log",
+    logging_level: int = logging.INFO,
 ) -> pl.DataFrame:
     """Run a benchmark pipeline for embedding models on specified datasets and tasks.
 
-    This function allows evaluating a single embedding model or a list of embedding models over a series
-    of predefined datasets and benchmarking tasks. The benchmarking process includes outlier detection
-    and task-specific evaluations depending on the parameters provided. It manages embedding creation,
-    task-specific dataset preparation, and result aggregation for further analysis.
+    This function allows evaluating a single embedding model or a list of
+    embedding models over a series of predefined datasets and benchmarking tasks.
+    The benchmarking process includes outlier detection and task-specific evaluations depending
+    on the parameters provided. It manages embedding creation, task-specific dataset preparation,
+    and result aggregation for further analysis.
 
     Args:
-        embedding_model (Optional[BaseEmbeddingGenerator]): A single embedding model to process.
-        embedding_models (Optional[list[BaseEmbeddingGenerator]]): A list of embedding models to process.
-        adbench_dataset_path (Optional[Union[str, Path]]): Path to the ADBench dataset directory.
-        exclude_adbench_datasets (Optional[list[str]]): List of dataset names to exclude from ADBench evaluation.
-        exclude_adbench_image_datasets (bool): Flag indicating whether to exclude image datasets in ADBench.
-        tabarena_version (str): Version identifier for the TabArena framework.
-        tabarena_lite (bool): Flag indicating whether to use TabArena lite mode
-                              for processing smaller datasets.
-        upper_bound_dataset_size (int): Maximum size of dataset entries considered for evaluation.
-        save_embeddings (bool): Flag determining whether to save computed embeddings during evaluations.
-        run_outlier (bool): Flag to toggle the outlier detection benchmark execution.
-        run_task_specific (bool): Flag to toggle task-specific benchmark execution.
+        embedding_model (Optional[BaseEmbeddingGenerator]):
+            A single embedding model to process.
+        embedding_models (Optional[list[BaseEmbeddingGenerator]]):
+            A list of embedding models to process.
+        adbench_dataset_path (Optional[Union[str, Path]]):
+            Path to the ADBench dataset directory.
+        exclude_adbench_datasets (Optional[list[str]]):
+            List of dataset names to exclude from ADBench evaluation.
+        exclude_adbench_image_datasets (bool):
+            Flag indicating whether to exclude image datasets in ADBench.
+        tabarena_version (str):
+            Version identifier for the TabArena framework.
+        tabarena_lite (bool):
+            Flag indicating whether to use TabArena lite mode for processing
+            smaller datasets.
+        upper_bound_dataset_size (int):
+            Maximum size of dataset entries considered for evaluation.
+        save_embeddings (bool):
+            Flag determining whether to save computed embeddings during evaluations.
+        run_outlier (bool):
+            Flag to toggle the outlier detection benchmark execution.
+        run_task_specific (bool):
+            Flag to toggle task-specific benchmark execution.
+        save_logs:
+            Flag to toggle saving logs to disk.
+        log_dir:
+            Directory to save logs to.
+        logging_level:
+            Set the logging level for the main logger.
 
     Returns:
-        pl.DataFrame: A combined dataframe containing the results of the outlier and task-specific benchmarks.
+        pl.DataFrame:
+            A combined dataframe containing the results of the outlier and task-specific benchmarks.
 
     Raises:
-        ValueError: If neither `embedding_model` nor `embedding_models` is provided, or if both are provided.
-        ValueError: If a provided model lacks the `compute_embeddings`, `name`, or `preprocess_data` attributes.
-        ValueError: If no eligible outlier models are available when `run_outlier` is enabled.
+        ValueError:
+            If neither `embedding_model` nor `embedding_models` is provided, or if both are provided.
+        ValueError:
+            If a provided model lacks the `compute_embeddings`, `name`, or `preprocess_data` attributes.
+        ValueError:
+            If no eligible outlier models are available when `run_outlier` is enabled.
     """
+    if save_logs:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        setup_unified_logging(
+            log_dir=log_dir,
+            timestamp=timestamp,
+            logging_level=logging_level,
+            save_logs=save_logs,
+        )
+
+    main_logger = logging.getLogger("TabEmbedBench_Main")
+    main_logger.info(f"Benchmark started at {datetime.now()}")
+
     if embedding_model is None and embedding_models is None:
         raise ValueError("Either model or models must be provided.")
     if embedding_model is not None and embedding_models is not None:
@@ -75,6 +113,7 @@ def run_benchmark(
             )
 
     if run_outlier:
+        main_logger.info("Running outlier detection benchmark...")
         outlier_embedding_models = []
         for model in models_to_process:
             if not model.task_only:
@@ -93,6 +132,7 @@ def run_benchmark(
     else:
         result_outlier_df = pl.DataFrame()
     if run_task_specific:
+        main_logger.info("Running task-specific benchmark...")
         result_tabarena_df = run_tabarena_benchmark(
             embedding_models=models_to_process,
             tabarena_version=tabarena_version,
@@ -102,9 +142,9 @@ def run_benchmark(
         )
     else:
         result_tabarena_df = pl.DataFrame()
+        main_logger.info("Skipping task-specific benchmark.")
 
-    combined_results = pl.concat(
+    return pl.concat(
         [result_outlier_df, result_tabarena_df], how="diagonal"
     )
 
-    return combined_results

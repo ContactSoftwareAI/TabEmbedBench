@@ -2,10 +2,8 @@ import logging
 
 import numpy as np
 import pandas as pd
-from sklearn.utils.multiclass import unique_labels
 import torch
 from tabpfn import TabPFNClassifier, TabPFNRegressor
-from typing import Optional
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.config import EmbAggregation
@@ -23,8 +21,8 @@ logger = logging.getLogger("TabPFN")
 class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
     def __init__(
         self,
-        tabpfn_clf: Optional[TabPFNClassifier] = None,
-        tabpfn_reg: Optional[TabPFNRegressor] = None,
+        tabpfn_clf: TabPFNClassifier | None = None,
+        tabpfn_reg: TabPFNRegressor | None = None,
         n_estimators: int = 1,
         estimator_agg_func: str | EmbAggregation = "first_element",
     ) -> None:

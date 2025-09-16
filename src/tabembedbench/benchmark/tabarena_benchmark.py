@@ -12,12 +12,9 @@ from tabicl.sklearn.preprocessing import TransformToNumerical
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
+from tabembedbench.utils.logging_utils import get_benchmark_logger
 
-logging.basicConfig(
-    level=logging.INFO,
-)
-
-logger = logging.getLogger("TabEmbedBench_TabArena")
+logger = get_benchmark_logger("TabEmbedBench_TabArena")
 
 
 def run_tabarena_benchmark(
@@ -149,6 +146,9 @@ def run_tabarena_benchmark(
                         os.remove(embedding_file)
 
                     for num_neighbors in range(1, 51):
+                        logger.neighbors_progress(
+                            f"Starting experiment for {embedding_model.name} with Local Outlier Factor with {num_neighbors} neighbors."
+                        )
                         result_tabarena_dict["dataset_name"].append(dataset.name)
                         result_tabarena_dict["dataset_size"].append(X_train.shape[0])
                         result_tabarena_dict["embedding_model"].append(

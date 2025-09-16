@@ -1,57 +1,51 @@
+import logging
 from datetime import datetime
-
-from huggingface_hub import hf_hub_download
 from pathlib import Path
-import numpy as np
-import torch
 
-from tabembedbench.benchmark.benchmark_utils import run_outlier_benchmark
-from tabembedbench.embedding_models.tabicl_utils import get_row_embeddings_model
-from tabembedbench.embedding_models.spherebasedembedding_utils import (
+from tabembedbench.benchmark.run_benchmark import run_benchmark
+from tabembedbench.embedding_models.spherebased_embedding import (
     SphereBasedEmbedding,
 )
+from tabembedbench.embedding_models.tabicl_embedding import get_row_embeddings_model
 from tabembedbench.utils.torch_utils import get_device
 
-model_ckpt_path = Path("/data/models/tabicl/tabicl-classifier-v1.1-0506.ckpt")
-
-model_name = model_ckpt_path.stem
-
-print(model_name)
-if not model_ckpt_path.exists():
-    model_ckpt_path = hf_hub_download(
-        repo_id="jingang/TabICL-clf",
-        filename="tabicl-classifier-v1.1-0506.ckpt",
-    )
-
-model_ckpt = torch.load(model_ckpt_path)
-
-state_dict = model_ckpt["state_dict"]
-config = model_ckpt["config"]
-
 device = get_device()
+
 print(device)
 
-row_embedder = get_row_embeddings_model(state_dict=state_dict, config=config)
+row_embedder = get_row_embeddings_model(model_path="auto")
 
-row_embedder.name = model_name
+row_embedder.name = "tabicl-classifier-v1.1-0506"
 
 row_embedder_preprocessed = get_row_embeddings_model(
-    state_dict=state_dict, config=config, preprocess_data=True
+    model_path="auto", preprocess_data=True
 )
 
-row_embedder_preprocessed.name = model_name + "_preprocessed"
-
-sphere_embedder = SphereBasedEmbedding()
+row_embedder_preprocessed.name = "tabicl-classifier-v1.1-0506" + "_preprocessed"
 
 row_embedder.to(device)
 row_embedder_preprocessed.to(device)
 
-models = [row_embedder_preprocessed, row_embedder, sphere_embedder]
+models = [row_embedder_preprocessed, row_embedder]
 
-result_df = run_outlier_benchmark(
-    models=models,
-    save_embeddings=True,
-    exclude_datasets=["3_backdoor.npz"],
+for n in range(3, 4):
+    sphere_model = SphereBasedEmbedding(embed_dim=n)
+    sphere_model.name = f"sphere-model-d{n}"
+    models.append(sphere_model)
+
+log_path = Path("data/logs")
+
+result_df = run_benchmark(
+    embedding_models=models,
+    save_embeddings=False,
+    exclude_adbench_datasets=["3_backdoor.npz"],
+    exclude_adbench_image_datasets=True,
+    upper_bound_dataset_size=100000,
+    run_outlier=True,
+    run_task_specific=True,
+    save_logs=True,
+    log_dir=log_path,
+    logging_level=logging.DEBUG,
 )
 
 timestamp_compact = datetime.now().strftime("%Y%m%d_%H%M%S")

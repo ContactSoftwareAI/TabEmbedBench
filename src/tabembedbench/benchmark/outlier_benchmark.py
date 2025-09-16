@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -14,14 +15,14 @@ from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.dataset_utils import (
     download_adbench_tabular_datasets,
 )
-from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
 from tabembedbench.utils.embedding_utils import check_nan
+from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
+from tabembedbench.utils.logging_utils import get_benchmark_logger
 
-logging.basicConfig(
-    level=logging.INFO,
-)
 
-logger = logging.getLogger("TabEmbedBench_Outlier")
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+logger = get_benchmark_logger("TabEmbedBench_Outlier")
 
 IMAGE_CATEGORY = [
     "1_ALOI.npz",
@@ -150,7 +151,7 @@ def run_outlier_benchmark(
                     )
 
                     for num_neighbors in range(1, neighbors):
-                        logger.debug(
+                        logger.neighbors_progress(
                             f"Starting experiment for {embedding_model.name} with Local Outlier Factor with {num_neighbors} neighbors."
                         )
                         lof = LocalOutlierFactor(

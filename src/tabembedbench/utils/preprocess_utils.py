@@ -6,7 +6,7 @@ import torch
 
 
 def infer_categorical_features(
-    X: np.ndarray,
+    data: np.ndarray,
     categorical_features: list[int] | None = None,
 ) -> list[int]:
     """Infer the categorical features from the input data.
@@ -18,7 +18,7 @@ def infer_categorical_features(
     4. The feature contains string values (numpy array)
 
     Parameters:
-        X (np.ndarray or pandas.DataFrame): The input data.
+        data (np.ndarray or pandas.DataFrame): The input data.
         categorical_features (list[int], optional): Initial list of categorical feature indices.
             If None, will start with an empty list.
 
@@ -34,14 +34,14 @@ def infer_categorical_features(
     _categorical_features: list[int] = []
 
     # First detect based on data type (string/object features)
-    is_pandas = hasattr(X, "dtypes")
+    is_pandas = hasattr(data, "dtypes")
 
     if is_pandas:
         # Handle pandas DataFrame - use pandas' own type detection
         import pandas as pd
 
-        for i, col_name in enumerate(X.columns):
-            col = X[col_name]
+        for i, col_name in enumerate(data.columns):
+            col = data[col_name]
             # Use pandas' built-in type checks for categorical features
             if (
                 pd.api.types.is_categorical_dtype(col)
@@ -51,10 +51,10 @@ def infer_categorical_features(
                 _categorical_features.append(i)
     else:
         # Handle numpy array - check if any columns contain strings
-        for i in range(X.shape[1]):
-            if X.dtype == object:  # Check entire array dtype
+        for i in range(data.shape[1]):
+            if data.dtype == object:  # Check entire array dtype
                 # Try to access first non-nan value to check its type
-                col = X[:, i]
+                col = data[:, i]
                 for val in col:
                     if val is not None and not (
                         isinstance(val, float) and np.isnan(val)
@@ -64,22 +64,22 @@ def infer_categorical_features(
                             break
 
     # Then detect based on unique values
-    for i in range(X.shape[-1]):
+    for i in range(data.shape[-1]):
         # Skip if already identified as categorical
         if i in _categorical_features:
             continue
 
         # Get unique values - handle differently for pandas and numpy
-        n_unique = X.iloc[:, i].nunique() if is_pandas else len(np.unique(X[:, i]))
+        n_unique = data.iloc[:, i].nunique() if is_pandas else len(np.unique(data[:, i]))
 
         # Filter categorical features, with too many unique values
         if (
             i in categorical_features
             and n_unique <= max_unique_values_as_categorical_feature
         ) or (
-            i not in categorical_features
-            and n_unique < min_unique_values_as_numerical_feature
-            and X.shape[0] > 100
+                i not in categorical_features
+                and n_unique < min_unique_values_as_numerical_feature
+                and data.shape[0] > 100
         ):
             _categorical_features.append(i)
 
@@ -87,22 +87,22 @@ def infer_categorical_features(
 
 
 def infer_categorical_columns(
-    X: Union[np.ndarray, torch.Tensor, pd.DataFrame],
+    data: np.ndarray | torch.Tensor | pd.DataFrame,
     max_unique_ratio: float = 0.1,
     max_unique_count: int = 200,
     return_split: bool = False,
 ) -> list[int] | tuple[np.ndarray | torch.Tensor, np.ndarray | torch.Tensor]:
-    if hasattr(X, "detach"):
+    if hasattr(data, "detach"):
         is_tensor = True
-        device = X.device
-        dtype = X.dtype
-        data_np = X.detach().cpu().numpy()
-    elif isinstance(X, np.ndarray):
+        device = data.device
+        dtype = data.dtype
+        data_np = data.detach().cpu().numpy()
+    elif isinstance(data, np.ndarray):
         is_tensor = False
-        data_np = X
-    elif isinstance(X, pd.DataFrame):
+        data_np = data
+    elif isinstance(data, pd.DataFrame):
         is_tensor = False
-        data_np = X.to_numpy()
+        data_np = data.to_numpy()
     else:
         raise ValueError("Input must be numpy array or torch tensor")
 

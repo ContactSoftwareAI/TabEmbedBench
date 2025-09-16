@@ -1,6 +1,6 @@
+
 import numpy as np
 import torch
-from typing import Union
 
 from tabembedbench.utils.config import EmbAggregation
 
@@ -145,14 +145,13 @@ def validate_input(input_list):
 
 
 def check_nan(
-    embeddings: Union[np.ndarray, torch.Tensor] | list[np.ndarray] | list[torch.Tensor],
+    embeddings: np.ndarray | torch.Tensor | list[np.ndarray] | list[torch.Tensor],
 ):
     """Checks if any of the embeddings contain NaN values."""
     if isinstance(embeddings, torch.Tensor):
         return torch.isnan(embeddings).any()
-    elif isinstance(embeddings, np.ndarray):
+    if isinstance(embeddings, np.ndarray):
         return np.isnan(embeddings).any()
-    elif isinstance(embeddings[0], torch.Tensor):
+    if isinstance(embeddings[0], torch.Tensor):
         return all([torch.isnan(embedding).any() for embedding in embeddings])
-    else:
-        return all([np.isnan(embedding).any() for embedding in embeddings])
+    return all([np.isnan(embedding).any() for embedding in embeddings])

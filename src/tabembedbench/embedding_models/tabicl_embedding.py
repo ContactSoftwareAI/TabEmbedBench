@@ -8,7 +8,7 @@ from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
 from tabicl.sklearn.preprocessing import PreprocessingPipeline
 from torch import nn
-from typing import Union
+from typing import Optional, Union
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.torch_utils import get_device
@@ -249,10 +249,10 @@ def filter_params_for_class(cls, params_dict):
 
 
 def get_row_embeddings_model(
-    model_path: str | None = "auto",
-    state_dict: dict | None = None,
-    config: dict | None = None,
-    preprocess_data: bool = False,
+    model_path: Optional[str] = "auto",
+    state_dict: Optional[dict] = None,
+    config: Optional[dict] = None,
+    preprocess_data: Optional[bool] = False,
 ) -> TabICLEmbedding:
     """Loads and prepares a row embeddings model based on the provided model path, state dict, and
     configuration. The function can also optionally preprocess data for embeddings.

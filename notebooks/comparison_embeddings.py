@@ -1,24 +1,20 @@
-import torch
-import numpy as np
-import sys
-import polars as pl
 import pickle
-import os
-import matplotlib.pyplot as plt
+import sys
+
+import numpy as np
+import polars as pl
+import torch
+from sklearn.metrics import roc_auc_score
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+from sklearn.preprocessing import LabelEncoder
+from tabpfn import TabPFNClassifier, TabPFNRegressor
 
 from tabembedbench.embedding_models.spherebasedembedding_utils import compute_embeddings
-from tabembedbench.utils.shellmodel import ShellModel
-from tabembedbench.embedding_models.tabicl_utils import get_row_embeddings_model
-from tabpfn import TabPFNRegressor, TabPFNClassifier
-from tabembedbench.embedding_models.tabpfn_utils import UniversalTabPFNEmbedding
-from tabembedbench.utils.embedding_utils import compute_embeddings_aggregation
-from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
-from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
-from sklearn.metrics import roc_auc_score
+from tabembedbench.embedding_models.tabicl_embedding import get_row_embeddings_model
+from tabembedbench.embedding_models.tabpfn_embedding import UniversalTabPFNEmbedding
 
 sys.path.insert(0, r"C:\Users\fho\Documents\code\TabData\embedding-workflow")
-import graph, load_data
+import load_data
 
 
 def rmspe(y_true, y_pred):
