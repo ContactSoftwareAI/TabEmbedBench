@@ -17,6 +17,7 @@ class BaseEmbeddingGenerator(ABC):
         name (str): The name of the embedding generator instance that can be
                     retrieved or set.
     """
+
     def __init__(self):
         self._name = self._get_default_name()
 
@@ -142,9 +143,7 @@ class Dummy(BaseEmbeddingGenerator):
     def _get_default_name(self) -> str:
         return "Dummy"
 
-    def preprocess_data(
-        self, X: torch.Tensor | np.ndarray, **kwargs
-    ) -> np.ndarray:
+    def preprocess_data(self, X: torch.Tensor | np.ndarray, **kwargs) -> np.ndarray:
         self.name = "DummyPreprocessed"
         return X
 

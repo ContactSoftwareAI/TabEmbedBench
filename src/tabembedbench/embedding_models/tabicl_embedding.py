@@ -8,6 +8,7 @@ from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
 from tabicl.sklearn.preprocessing import PreprocessingPipeline
 from torch import nn
+from typing import Union
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.torch_utils import get_device
@@ -43,7 +44,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         row_rope_base: float = 100000,
         ff_factor: int = 2,
         dropout: float = 0.0,
-        activation: str | callable = "gelu",
+        activation: Union[str, callable] = "gelu",
         norm_first: bool = True,
         normalize_embeddings: bool = False,
         preprocess_data: bool = False,
@@ -251,7 +252,7 @@ def get_row_embeddings_model(
     model_path: str | None = "auto",
     state_dict: dict | None = None,
     config: dict | None = None,
-    preprocess_data: bool = False
+    preprocess_data: bool = False,
 ) -> TabICLEmbedding:
     """Loads and prepares a row embeddings model based on the provided model path, state dict, and
     configuration. The function can also optionally preprocess data for embeddings.
@@ -297,8 +298,9 @@ def get_row_embeddings_model(
         config = torch.load(model_path)["config"]
     else:
         if state_dict is None or config is None:
-            raise ValueError("Either model_path or state_dict and config must be provided")
-
+            raise ValueError(
+                "Either model_path or state_dict and config must be provided"
+            )
 
     filtered_config = filter_params_for_class(TabICLEmbedding, config)
 

@@ -164,7 +164,9 @@ def run_outlier_benchmark(
 
                             score_auc = roc_auc_score(y, neg_outlier_factor)
 
-                            result_outlier_dict["dataset_name"].append(dataset_file.stem)
+                            result_outlier_dict["dataset_name"].append(
+                                dataset_file.stem
+                            )
                             result_outlier_dict["dataset_size"].append(X.shape[0])
                             result_outlier_dict["embedding_model"].append(
                                 embedding_model.name

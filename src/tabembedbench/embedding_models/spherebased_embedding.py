@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 from sklearn.base import TransformerMixin
@@ -9,9 +8,7 @@ from tabembedbench.utils.preprocess_utils import infer_categorical_columns
 
 class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
     def __init__(
-            self,
-            embed_dim: int,
-            categorical_indices: list[int] | None = None
+        self, embed_dim: int, categorical_indices: list[int] | None = None
     ) -> None:
         self.categorical_indices = categorical_indices
         self.embed_dim = embed_dim
@@ -125,9 +122,7 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
         return row_embeddings
 
     def _embed_numerical_column(
-        self,
-        column_data: np.ndarray,
-        col_idx: int
+        self, column_data: np.ndarray, col_idx: int
     ) -> np.ndarray:
         """Embeds a numerical column into a multidimensional representation based on normalization
         and a pre-calculated sphere point.
@@ -212,7 +207,6 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
             self.fit(data)
 
         return data
-
 
     def compute_embeddings(self, data: np.ndarray):
         return self.transform(data)

@@ -19,6 +19,7 @@ logging.basicConfig(
 
 logger = logging.getLogger("TabPFN")
 
+
 class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
     def __init__(
         self,
@@ -36,9 +37,7 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
             "device": self.device,
             "n_estimators": self.n_estimators,
             "ignore_pretraining_limits": True,
-            "inference_config": {
-                "SUBSAMPLE_SAMPLES": 10000
-            }
+            "inference_config": {"SUBSAMPLE_SAMPLES": 10000},
         }
 
         self.estimator_agg_func = estimator_agg_func
@@ -89,21 +88,21 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
 
             X_pred, _y_pred = X[~mask].reshape(X.shape[0], -1), X[mask]
 
-            model = (
-                self.tabpfn_clf
-                if column_idx in self.cat_cols
-                else self.tabpfn_reg
-            )
+            model = self.tabpfn_clf if column_idx in self.cat_cols else self.tabpfn_reg
             try:
                 model.fit(X_train, y_train)
             except ValueError as e:
                 if "Unknown label type: continuous" in str(e):
-                    logger.info(f"Column {column_idx} is continuous. Reverting to regression.")
+                    logger.info(
+                        f"Column {column_idx} is continuous. Reverting to regression."
+                    )
                     model = self.tabpfn_reg
                     model.fit(X_train, y_train)
                 elif "exceeds the maximal number of classes" in str(e):
-                    #TODO: Überlegen wie man kategorische Spalten mit mehr als 10 Elemente umgehen muss
-                    logger.warning(f"Column {column_idx} exceeds the maximal number of classes. Skipping this column as target.")
+                    # TODO: Überlegen wie man kategorische Spalten mit mehr als 10 Elemente umgehen muss
+                    logger.warning(
+                        f"Column {column_idx} exceeds the maximal number of classes. Skipping this column as target."
+                    )
                     continue
                 else:
                     raise ValueError(e)
@@ -114,7 +113,11 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
                 if self.estimator_agg_func == "first_element":
                     embs += [estimator_embs[0]]
                 else:
-                    embs += [compute_embeddings_aggregation(estimator_embs, self.estimator_agg_func)]
+                    embs += [
+                        compute_embeddings_aggregation(
+                            estimator_embs, self.estimator_agg_func
+                        )
+                    ]
             else:
                 embs += [model.get_embeddings(X_pred)[0]]
 
@@ -132,13 +135,10 @@ class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
     ):
         raise NotImplementedError
 
-
     def compute_embeddings(
         self, X: torch.Tensor, agg_func: str | EmbAggregation = "mean"
     ) -> np.ndarray:
-        embeddings = self._compute_embeddings_per_column(
-            X
-        )
+        embeddings = self._compute_embeddings_per_column(X)
 
         return embeddings
 

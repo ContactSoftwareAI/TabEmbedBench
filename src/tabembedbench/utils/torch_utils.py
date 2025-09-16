@@ -22,7 +22,7 @@ def get_device() -> torch.device:
     return torch.device("cpu")
 
 
-def empty_gpu_cache(device: torch.device) -> None:
+def empty_gpu_cache(device: torch.device):
     """Clears the GPU cache for the specified device.
 
     This function frees up GPU memory by emptying the cache for the specified
@@ -33,9 +33,6 @@ def empty_gpu_cache(device: torch.device) -> None:
     Args:
         device (torch.device): The target GPU device for which the memory
             cache needs to be cleared.
-
-    Returns:
-        None
     """
     if device == "cuda":
         torch.cuda.empty_cache()

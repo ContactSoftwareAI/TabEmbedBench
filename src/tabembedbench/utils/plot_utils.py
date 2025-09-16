@@ -138,8 +138,7 @@ def create_quantile_lines_chart(
 def create_multi_model_quantile_lines_chart(
     result_df: pl.DataFrame, algorithm: str, score: str
 ):
-    """Create a chart with four lines (avg, median, Q1, Q3) for each embedding model.
-    """
+    """Create a chart with four lines (avg, median, Q1, Q3) for each embedding model."""
     result_df = result_df.cast({score: pl.Float64, "neighbors": pl.Int64})
 
     filtered_results = result_df.filter(pl.col("algorithm") == algorithm).select(
