@@ -1,6 +1,4 @@
-import logging
 import os
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -16,9 +14,9 @@ from tabembedbench.utils.dataset_utils import (
     download_adbench_tabular_datasets,
 )
 from tabembedbench.utils.embedding_utils import check_nan
-from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
 from tabembedbench.utils.logging_utils import get_benchmark_logger
-
+from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
+from tabembedbench.utils.tracking_utils import update_result_dict
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -44,6 +42,8 @@ def run_outlier_benchmark(
     save_embeddings: bool = False,
     upper_bound_num_samples: int = 10000,
     neighbors: int = 51,
+    neighbors_step: int = 5,
+    distance_metrics: list[str] = ["euclidean", "cosine"],
 ):
     """Runs an outlier detection benchmark using the provided embedding models
     and datasets. It uses the tabular datasets from the ADBench benchmark [1]
@@ -71,6 +71,10 @@ def run_outlier_benchmark(
             (in number of samples) to include in the benchmark. Datasets exceeding
             this size will be skipped. Defaults to 10000.
         neighbors: Integer specifying the number of neighbors to use for outlier
+        neighbors_step: Integer specifying the step size for neighbors.
+            Defaults to 5.
+        distance_metrics: List of distance metrics to use for outlier detection.
+            Defaults to ["euclidean", "cosine"].
 
     Returns:
         pl.DataFrame: A Polars DataFrame containing the benchmark results, including
@@ -104,6 +108,8 @@ def run_outlier_benchmark(
         "auc_score": [],
         "time_to_compute_embeddings": [],
         "benchmark": [],
+        "distance_metric": [],
+        "task": []
     }
 
     for dataset_file in dataset_paths.glob("*.npz"):
@@ -120,12 +126,14 @@ def run_outlier_benchmark(
 
                 if num_samples > upper_bound_num_samples:
                     logger.warning(
-                        f"Skipping {dataset_name} - dataset size {num_samples}" 
+                        f"Skipping {dataset_name} "
+                        f"- dataset size {num_samples}"
                         f"exceeds limit {upper_bound_num_samples}"
                     )
                     continue
                 logger.info(
-                    f"Running experiments on {dataset_name}. Samples: {num_samples}, "
+                    f"Running experiments on {dataset_name}. "
+                    f"Samples: {num_samples}, "
                     f"Features: {num_features}"
                 )
 
@@ -135,12 +143,12 @@ def run_outlier_benchmark(
             y = dataset["y"]
 
             for embedding_model in embedding_models:
-                logger.debug(f"Starting experiment for {embedding_model.name}...")
-                X_preprocess = embedding_model.preprocess_data(X, train=True)
+                logger.debug(f"Starting experiment for "
+                             f"{embedding_model.name}..."
+                             f"Compute Embeddings.")
 
-                start_time = time.time()
-                X_embed = embedding_model.compute_embeddings(X_preprocess)
-                compute_embeddings_time = time.time() - start_time
+                X_embed, compute_embeddings_time = embedding_model.compute_embeddings(X)
+
                 if save_embeddings:
                     embedding_file = (
                         f"{embedding_model.name}"
@@ -158,45 +166,40 @@ def run_outlier_benchmark(
                     )
                 else:
                     logger.debug(
-                        f"Start experiment for {embedding_model.name} with "
-                        f"Local Outlier Factor."
+                        f"Start Outlier Detection for {embedding_model.name} "
+                        f"with Local Outlier Factor."
                     )
 
-                    for num_neighbors in range(1, neighbors):
-                        logger.neighbors_progress(
-                            f"Starting experiment for {embedding_model.name} with "
-                            f"Local Outlier Factor with {num_neighbors} neighbors."
-                        )
-                        lof = LocalOutlierFactor(
-                            n_neighbors=num_neighbors,
-                            n_jobs=-1,
-                        )
-                        try:
-                            lof.fit_predict(X_embed)
+                    for num_neighbors in range(1, neighbors, neighbors_step):
+                        for distance_metric in distance_metrics:
+                            score_auc, exception = (
+                                _evaluate_local_outlier_factor(
+                                num_neighbors=num_neighbors,
+                                X_embed=X_embed,
+                                y_true=y,
+                                distance_metric=distance_metric,
+                            ))
 
-                            neg_outlier_factor = (-1) * lof.negative_outlier_factor_
+                            if exception is not None:
+                                logger.warning(
+                                    f"Error occurred while running experiment for "
+                                    f"{embedding_model.name} with "
+                                    f"Local Outlier Factor: {exception}"
+                                )
+                                continue
 
-                            score_auc = roc_auc_score(y, neg_outlier_factor)
-
-                            result_outlier_dict["dataset_name"].append(
-                                dataset_file.stem
+                            update_result_dict(
+                                result_dict=result_outlier_dict,
+                                dataset_name=dataset_file.stem,
+                                dataset_size=X.shape[0],
+                                embedding_model_name=embedding_model.name,
+                                num_neighbors=num_neighbors,
+                                compute_time=compute_embeddings_time,
+                                task="Outlier Detection",
+                                auc_score=score_auc,
+                                distance_metric=distance_metric,
+                                outlier_benchmark=True
                             )
-                            result_outlier_dict["dataset_size"].append(X.shape[0])
-                            result_outlier_dict["embedding_model"].append(
-                                embedding_model.name
-                            )
-                            result_outlier_dict["num_neighbors"].append(num_neighbors)
-                            result_outlier_dict["auc_score"].append(score_auc)
-                            result_outlier_dict["time_to_compute_embeddings"].append(
-                                compute_embeddings_time
-                            )
-                            result_outlier_dict["benchmark"].append("outlier")
-                        except Exception as e:
-                            logger.warning(
-                                f"Error occurred while running experiment for "
-                                f"{embedding_model.name} with Local Outlier Factor: {e}"
-                            )
-                            continue
                     logger.debug(
                         f"Finished experiment for {embedding_model.name} and "
                         f"resetting the model."
@@ -216,7 +219,57 @@ def run_outlier_benchmark(
             "auc_score": pl.Float64,
             "time_to_compute_embeddings": pl.Float64,
             "benchmark": pl.Categorical,
+            "distance_metric": pl.Categorical,
+            "task": pl.Categorical,
         },
     )
 
     return result_df
+
+
+def _evaluate_local_outlier_factor(
+    num_neighbors: int,
+    X_embed: np.ndarray,
+    y_true: np.ndarray,
+    distance_metric: str = "euclidean",
+):
+    """
+    Evaluates the Local Outlier Factor (LOF) model to identify outlier detection
+    performance by computing the Area Under the Receiver Operating Characteristic
+    (AUROC) score for given input data.
+
+    This function utilizes the Local Outlier Factor algorithm to compute the
+    outlier factor for each data point in the provided dataset. It then evaluates
+    the performance of the outlier detection by calculating the ROC AUC score
+    against the ground-truth labels.
+
+    Args:
+        num_neighbors (int): The number of neighbors to use for LOF calculation.
+        X_embed (np.ndarray): The embedded feature space data used for LOF
+            computation.
+        y_true (np.ndarray): Ground-truth binary labels indicating which data
+            points are outliers.
+        distance_metric (str): The distance metric to use for nearest neighbor
+            computation. Defaults to "euclidean".
+
+    Returns:
+        tuple: A tuple consisting of the following:
+            - float: The computed ROC AUC score indicating model performance, or
+              None in case of an error.
+            - Exception: An exception object if an error occurred during calculation,
+              otherwise None.
+    """
+    try:
+        lof = LocalOutlierFactor(
+            n_neighbors=num_neighbors,
+            n_jobs=-1,
+            metric=distance_metric,
+        )
+
+        lof.fit_predict(X_embed)
+        neg_outlier_factor = (-1) * lof.negative_outlier_factor_
+        score_auc = roc_auc_score(y_true, neg_outlier_factor)
+
+        return score_auc, None
+    except Exception as e:
+        return None, e

@@ -20,33 +20,52 @@ def setup_unified_logging(
     log_dir="log",
     timestamp=timestamp,
     logging_level=logging.INFO,
+    capture_warnings=True,
 ):
+    """
+    Sets up unified logging for the application.
+
+    This function configures logging with both console and optional file handlers.
+    It applies a specific logging format, sets logging levels for various loggers,
+    and optionally captures warnings as part of the logging process.
+
+    Args:
+        save_logs: Determines whether logs should be saved to a file.
+        log_dir: Specifies the directory where log files will be stored.
+        timestamp: Provides a timestamp to include in the log filename for uniqueness.
+        logging_level: Indicates the logging level to be applied to all configured loggers.
+        capture_warnings: Specifies whether to capture Python warnings as part of logging.
+
+    Returns:
+        str: The file path of the log file if save_logs is True, otherwise None.
+    """
     handlers = [logging.StreamHandler()]
     log_file = None
 
     if save_logs:
-        # Create log directory if it doesn't exist
         log_path = Path(log_dir)
         log_path.mkdir(exist_ok=True)
 
-        # Create comprehensive log file
         log_file = log_path / f"benchmark_complete_{timestamp}.log"
         handlers.append(logging.FileHandler(log_file))
 
-    # Configure root logger to capture all loggers
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s",
+        format=("%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%("
+                "lineno)d - %(message)s"),
         handlers=handlers,
-        force=True,  # Override any existing configuration
+        force=True,
     )
 
-    # Get references to all your benchmark loggers
+    if capture_warnings:
+        logging.captureWarnings(True)
+        warnings_logger = logging.getLogger("py.warnings")
+        warnings_logger.setLevel(logging_level)
+
     outlier_logger = logging.getLogger("TabEmbedBench_Outlier")
     tabarena_logger = logging.getLogger("TabEmbedBench_TabArena")
     main_logger = logging.getLogger("TabEmbedBench_Main")
 
-    # Ensure they all use the same handlers and level
     for logger in [outlier_logger, tabarena_logger, main_logger]:
         logger.setLevel(logging_level)
 

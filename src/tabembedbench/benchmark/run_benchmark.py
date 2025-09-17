@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Dict
 
 import polars as pl
 
@@ -22,9 +23,10 @@ def run_benchmark(
     save_embeddings: bool = False,
     run_outlier: bool = True,
     run_task_specific: bool = True,
+    data_dir: str | Path = "data",
     save_logs: bool = True,
-    log_dir: str | Path = "log",
     logging_level: int = logging.INFO,
+    save_result_dataframe: bool = True,
 ) -> pl.DataFrame:
     """
     Runs benchmarks for outlier detection and task-specific embedding tasks using the
@@ -60,11 +62,14 @@ def run_benchmark(
             Defaults to True.
         run_task_specific (bool): Whether to perform task-specific benchmarks.
             Defaults to True.
+        data_dir (str | Path): Directory where results and logs should be saved.
+            Defaults to `"data"`.
         save_logs (bool): Whether to save logs for the benchmarking process. Defaults
             to True.
-        log_dir (str | Path): Directory where logs should be saved. Defaults to `"log"`.
         logging_level (int): Logging verbosity level. Higher values indicate less logging.
             Defaults to `logging.INFO`.
+        save_result_dataframe (bool): Whether to save the benchmarking results as a
+            Polars DataFrame as a parquet file on drive. Defaults to True.
 
     Returns:
         pl.DataFrame: Combined benchmarking results in a Polars DataFrame, containing the
@@ -78,9 +83,18 @@ def run_benchmark(
             or methods needed for benchmarking.
         ValueError: If `run_outlier` is True but no valid outlier models are provided.
     """
-    if save_logs:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+    if data_dir is not None:
+        data_dir = Path(data_dir)
+        data_dir.mkdir(exist_ok=True)
+        log_dir = data_dir / Path("logs")
+    else:
+        data_dir = Path("data")
+        data_dir.mkdir(exist_ok=True)
+        log_dir = data_dir / Path("logs")
+
+    if save_logs:
         setup_unified_logging(
             log_dir=log_dir,
             timestamp=timestamp,
@@ -105,12 +119,12 @@ def run_benchmark(
         models_to_process = embedding_models
 
     for model in models_to_process:
-        if not hasattr(model, "compute_embeddings"):
+        if not hasattr(model, "_compute_embeddings"):
             raise ValueError(
                 "There is an element within the list of models "
-                "that does not have a function 'compute_embeddings'."
+                "that does not have a function '_compute_embeddings'."
             )
-        if not hasattr(model, "name") or not hasattr(model, "preprocess_data"):
+        if not hasattr(model, "name") or not hasattr(model, "_preprocess_data"):
             raise ValueError(
                 "There is an element within the list of models "
                 "that does not have a property 'name'."
@@ -122,7 +136,10 @@ def run_benchmark(
         for model in models_to_process:
             if not model.task_only:
                 outlier_embedding_models.append(model)
+        main_logger.debug(f"Outlier embedding models:"
+                         f" {[outlier_embedding_model.name for outlier_embedding_model in outlier_embedding_models]}")
         if len(outlier_embedding_models) > 0:
+            main_logger.debug("Start outlier detection function")
             result_outlier_df = run_outlier_benchmark(
                 embedding_models=outlier_embedding_models,
                 dataset_paths=adbench_dataset_path,
@@ -136,7 +153,7 @@ def run_benchmark(
     else:
         result_outlier_df = pl.DataFrame()
     if run_task_specific:
-        main_logger.info("Running task-specific benchmark...")
+        main_logger.info("Running task-specific benchmark (TabArena Lite)...")
         result_tabarena_df = run_tabarena_benchmark(
             embedding_models=models_to_process,
             tabarena_version=tabarena_version,
@@ -148,6 +165,19 @@ def run_benchmark(
         result_tabarena_df = pl.DataFrame()
         main_logger.info("Skipping task-specific benchmark.")
 
-    return pl.concat(
+    result_df = pl.concat(
         [result_outlier_df, result_tabarena_df], how="diagonal"
     )
+
+    if save_result_dataframe:
+        main_logger.info("Saving results...")
+        result_path = data_dir / "results"
+        result_path.mkdir(exist_ok=True)
+
+        result_file = result_path / f"results_{timestamp}.parquet"
+
+        result_df.write_parquet(
+            result_file
+        )
+
+    return result_df
