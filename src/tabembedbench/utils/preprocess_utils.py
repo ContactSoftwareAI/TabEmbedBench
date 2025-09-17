@@ -1,29 +1,108 @@
-from typing import List, Optional, Tuple, Union
+from typing import Union
 
 import numpy as np
 import pandas as pd
 import torch
 
 
+def infer_categorical_features(
+    data: np.ndarray,
+    categorical_features: list[int] | None = None,
+) -> list[int]:
+    """Infer the categorical features from the input data.
+
+    Features are identified as categorical if any of these conditions are met:
+    1. The feature index is in the provided categorical_features list AND has few unique values
+    2. The feature has few unique values compared to the dataset size
+    3. The feature has string/object/category data type (pandas DataFrame)
+    4. The feature contains string values (numpy array)
+
+    Parameters:
+        data (np.ndarray or pandas.DataFrame): The input data.
+        categorical_features (list[int], optional): Initial list of categorical feature indices.
+            If None, will start with an empty list.
+
+    Returns:
+        list[int]: The indices of the categorical features.
+    """
+    if categorical_features is None:
+        categorical_features = []
+
+    max_unique_values_as_categorical_feature = 10
+    min_unique_values_as_numerical_feature = 10
+
+    _categorical_features: list[int] = []
+
+    # First detect based on data type (string/object features)
+    is_pandas = hasattr(data, "dtypes")
+
+    if is_pandas:
+        # Handle pandas DataFrame - use pandas' own type detection
+        import pandas as pd
+
+        for i, col_name in enumerate(data.columns):
+            col = data[col_name]
+            # Use pandas' built-in type checks for categorical features
+            if (
+                pd.api.types.is_categorical_dtype(col)
+                or pd.api.types.is_object_dtype(col)
+                or pd.api.types.is_string_dtype(col)
+            ):
+                _categorical_features.append(i)
+    else:
+        # Handle numpy array - check if any columns contain strings
+        for i in range(data.shape[1]):
+            if data.dtype == object:  # Check entire array dtype
+                # Try to access first non-nan value to check its type
+                col = data[:, i]
+                for val in col:
+                    if val is not None and not (
+                        isinstance(val, float) and np.isnan(val)
+                    ):
+                        if isinstance(val, str):
+                            _categorical_features.append(i)
+                            break
+
+    # Then detect based on unique values
+    for i in range(data.shape[-1]):
+        # Skip if already identified as categorical
+        if i in _categorical_features:
+            continue
+
+        # Get unique values - handle differently for pandas and numpy
+        n_unique = data.iloc[:, i].nunique() if is_pandas else len(np.unique(data[:, i]))
+
+        # Filter categorical features, with too many unique values
+        if (
+            i in categorical_features
+            and n_unique <= max_unique_values_as_categorical_feature
+        ) or (
+                i not in categorical_features
+                and n_unique < min_unique_values_as_numerical_feature
+                and data.shape[0] > 100
+        ):
+            _categorical_features.append(i)
+
+    return _categorical_features
+
+
 def infer_categorical_columns(
-    X: Union[np.ndarray, torch.Tensor, pd.DataFrame],
+    data: np.ndarray | torch.Tensor | pd.DataFrame,
     max_unique_ratio: float = 0.1,
     max_unique_count: int = 200,
     return_split: bool = False,
-) -> Union[
-    List[int], Tuple[Union[np.ndarray, torch.Tensor], Union[np.ndarray, torch.Tensor]]
-]:
-    if hasattr(X, "detach"):
+) -> list[int] | tuple[np.ndarray | torch.Tensor, np.ndarray | torch.Tensor]:
+    if hasattr(data, "detach"):
         is_tensor = True
-        device = X.device
-        dtype = X.dtype
-        data_np = X.detach().cpu().numpy()
-    elif isinstance(X, np.ndarray):
+        device = data.device
+        dtype = data.dtype
+        data_np = data.detach().cpu().numpy()
+    elif isinstance(data, np.ndarray):
         is_tensor = False
-        data_np = X
-    elif isinstance(X, pd.DataFrame):
+        data_np = data
+    elif isinstance(data, pd.DataFrame):
         is_tensor = False
-        data_np = X.to_numpy()
+        data_np = data.to_numpy()
     else:
         raise ValueError("Input must be numpy array or torch tensor")
 
@@ -35,12 +114,9 @@ def infer_categorical_columns(
     if data_np.ndim == 3:
         batch_size, num_samples, num_features = data_np.shape
         data_2d = data_np.reshape(-1, num_features)
-        total_samples = batch_size * num_samples
     else:
         num_samples, num_features = data_np.shape
         data_2d = data_np
-        total_samples = num_samples
-        batch_size = None
 
     categorical_indices = []
 
@@ -121,7 +197,7 @@ def infer_categorical_columns(
 
 
 def _create_empty_array(
-    original_shape: Tuple[int, ...], is_tensor: bool, device: Optional[str], dtype
+    original_shape: tuple[int, ...], is_tensor: bool, device: str | None, dtype
 ) -> Union[np.ndarray, "torch.Tensor"]:
     """Create an empty array with 0 features but maintaining other dimensions."""
     if len(original_shape) == 3:
@@ -131,15 +207,14 @@ def _create_empty_array(
 
     if is_tensor:
         return torch.empty(empty_shape, device=device, dtype=dtype)
-    else:
-        return np.empty(empty_shape, dtype=dtype)
+    return np.empty(empty_shape, dtype=dtype)
 
 
 def _restore_original_format(
     data_np: np.ndarray,
-    original_shape: Tuple[int, ...],
+    original_shape: tuple[int, ...],
     is_tensor: bool,
-    device: Optional[str],
+    device: str | None,
 ) -> Union[np.ndarray, "torch.Tensor"]:
     """Restore data to original tensor format if needed."""
     if is_tensor:

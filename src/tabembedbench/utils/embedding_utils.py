@@ -1,5 +1,3 @@
-from typing import Union
-
 import numpy as np
 import torch
 
@@ -7,10 +5,9 @@ from tabembedbench.utils.config import EmbAggregation
 
 
 def compute_embeddings_aggregation(
-    embeddings: Union[list[np.ndarray], list[torch.Tensor]], agg_func: str = "mean"
+    embeddings: list[np.ndarray] | list[torch.Tensor], agg_func: str = "mean"
 ):
-    """
-    Aggregates a list of embeddings using the specified aggregation function.
+    """Aggregates a list of embeddings using the specified aggregation function.
 
     This function takes a list of embeddings, which can be NumPy arrays or PyTorch tensors,
     and applies the specified aggregation function to them. The default aggregation function
@@ -30,13 +27,12 @@ def compute_embeddings_aggregation(
 
 
 def embeddings_aggregation(
-    embeddings: Union[list[np.ndarray], list[torch.Tensor]],
+    embeddings: list[np.ndarray] | list[torch.Tensor],
     agg_func: EmbAggregation,
     axis: int = 0,
     quantile: float = 0.75,
-) -> Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]]:
-    """
-    Aggregates embeddings using the specified aggregation function. The function supports various
+) -> np.ndarray | torch.Tensor | list[np.ndarray] | list[torch.Tensor]:
+    """Aggregates embeddings using the specified aggregation function. The function supports various
     aggregation methods such as mean, concatenation, percentile, and column-wise operations.
 
     Args:
@@ -62,30 +58,31 @@ def embeddings_aggregation(
     list_type, list_shape = validate_input(embeddings)
 
     if list_type == np.ndarray:
+        stacked = np.stack(embeddings)
+
         if agg_func == EmbAggregation.MEAN:
-            return np.mean(embeddings, axis=0)
-        elif agg_func == EmbAggregation.CONCAT:
-            return np.concatenate(embeddings, axis=-1)
-        elif agg_func == EmbAggregation.PERCENTILE:
-            return np.quantile(embeddings, q=quantile, axis=0)
-        elif agg_func == EmbAggregation.COLUMN:
+            return np.mean(stacked, axis=0)
+        if agg_func == EmbAggregation.CONCAT:
+            return np.concatenate(embeddings, axis=0)
+        if agg_func == EmbAggregation.PERCENTILE:
+            return np.quantile(np.stack(embeddings), q=quantile, axis=0)
+        if agg_func == EmbAggregation.COLUMN:
             return embeddings
     elif list_type == torch.Tensor:
         if agg_func == EmbAggregation.MEAN:
             return torch.mean(torch.stack(embeddings), dim=0)
-        elif agg_func == EmbAggregation.CONCAT:
+        if agg_func == EmbAggregation.CONCAT:
             return torch.flatten(embeddings, start_dim=-1)
-        elif agg_func == EmbAggregation.PERCENTILE:
+        if agg_func == EmbAggregation.PERCENTILE:
             return torch.quantile(torch.stack(embeddings), q=quantile, dim=0)
-        elif agg_func == EmbAggregation.COLUMN:
+        if agg_func == EmbAggregation.COLUMN:
             return embeddings
     else:
         raise ValueError("embeddings must be a list of numpy arrays or torch tensors.")
 
 
-def check_emb_aggregation(agg_func: Union[EmbAggregation, str]):
-    """
-    Validates and converts the input aggregation function to an EmbAggregation instance if
+def check_emb_aggregation(agg_func: EmbAggregation | str):
+    """Validates and converts the input aggregation function to an EmbAggregation instance if
     it is provided as a string. Also ensures the input is a valid aggregation method.
 
     Args:
@@ -115,8 +112,7 @@ def check_emb_aggregation(agg_func: Union[EmbAggregation, str]):
 
 
 def validate_input(input_list):
-    """
-    Determines the data type of elements within a list if all elements are of the
+    """Determines the data type of elements within a list if all elements are of the
     same type.
 
     This function inspects all elements in the input list, checks if they belong
@@ -142,7 +138,19 @@ def validate_input(input_list):
         item.shape == first_shape for item in input_list
     ):
         return first_type, first_shape
-    else:
-        raise ValueError(
-            "All elements in the input list must be of the same type and have the same shape."
-        )
+    raise ValueError(
+        "All elements in the input list must be of the same type and have the same shape."
+    )
+
+
+def check_nan(
+    embeddings: np.ndarray | torch.Tensor | list[np.ndarray] | list[torch.Tensor],
+):
+    """Checks if any of the embeddings contain NaN values."""
+    if isinstance(embeddings, torch.Tensor):
+        return torch.isnan(embeddings).any()
+    if isinstance(embeddings, np.ndarray):
+        return np.isnan(embeddings).any()
+    if isinstance(embeddings[0], torch.Tensor):
+        return all([torch.isnan(embedding).any() for embedding in embeddings])
+    return all([np.isnan(embedding).any() for embedding in embeddings])
