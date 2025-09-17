@@ -29,9 +29,17 @@ The `BaseEmbeddingGenerator` is an abstract base class that provides the foundat
 
 - `task_only` (property): Indicates whether the model is restricted to task-specific functionality
 - `_get_default_name()`: Returns the default name for the model
-- `preprocess_data(X, train=True)`: Preprocesses input data for training or inference
-- `compute_embeddings(X)`: Generates embeddings for the input data
+- `_preprocess_data(X, train=True)`: Preprocesses input data for training or 
+  inference
+- `_compute_embeddings(X)`: Generates embeddings for the input data
 - `reset_embedding_model()`: Resets the model state after processing a dataset
+
+#### Optional Methods (can be implemented by subclasses):
+- `compute_embeddings(X_train, X_test)`: Wrapper method for 
+  `_compute_embeddings()` that computes embeddings for training data and 
+  measures the computation time for the embeddings creation. If test data is 
+  provided, the method also computes embeddings for the test data. It is 
+  used within the benchmarking framework.
 
 #### Properties:
 
