@@ -200,6 +200,9 @@ def run_outlier_benchmark(
                                 distance_metric=distance_metric,
                                 outlier_benchmark=True
                             )
+
+                    #TODO: Isolation Foest Implementation
+
                     logger.debug(
                         f"Finished experiment for {embedding_model.name} and "
                         f"resetting the model."
