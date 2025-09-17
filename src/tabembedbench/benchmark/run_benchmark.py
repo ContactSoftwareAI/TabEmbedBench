@@ -147,6 +147,9 @@ def run_benchmark(
                 exclude_datasets=exclude_adbench_datasets,
                 exclude_image_datasets=exclude_adbench_image_datasets,
                 upper_bound_num_samples=upper_bound_dataset_size,
+                data_dir=data_dir,
+                save_result_dataframe=save_result_dataframe,
+                timestamp=timestamp,
             )
         else:
             raise ValueError("No outlier models provided.")
@@ -160,6 +163,9 @@ def run_benchmark(
             tabarena_lite=tabarena_lite,
             upper_bound_dataset_size=upper_bound_dataset_size,
             save_embeddings=save_embeddings,
+            timestamp=timestamp,
+            data_dir=data_dir,
+            save_result_dataframe=save_result_dataframe
         )
     else:
         result_tabarena_df = pl.DataFrame()

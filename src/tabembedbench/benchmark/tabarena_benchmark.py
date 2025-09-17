@@ -1,6 +1,8 @@
 import os
 import time
 from typing import Dict, Tuple
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import openml
@@ -16,6 +18,8 @@ from tabembedbench.utils.logging_utils import get_benchmark_logger
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
 from tabembedbench.utils.tracking_utils import update_result_dict
 
+TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+
 logger = get_benchmark_logger("TabEmbedBench_TabArena")
 
 
@@ -28,6 +32,9 @@ def run_tabarena_benchmark(
     neighbors: int = 51,
     neighbors_step: int = 5,
     distance_metrics=None,
+    save_result_dataframe: bool = True,
+    data_dir: str | Path = "data",
+    timestamp: str = TIMESTAMP,
 ):
     """Run the TabArena benchmark for a set of embedding models.
 
@@ -250,6 +257,15 @@ def run_tabarena_benchmark(
             "task": pl.Categorical,
         },
     )
+
+    if save_result_dataframe:
+        logger.info("Saving results...")
+        result_path = data_dir / "results"
+        result_path.mkdir(exist_ok=True)
+
+        result_file = result_path / f"results_tabarena_{timestamp}.parquet"
+
+        result_df.write_parquet(result_file)
 
     return result_df
 

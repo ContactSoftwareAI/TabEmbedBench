@@ -18,7 +18,7 @@ from tabembedbench.utils.logging_utils import get_benchmark_logger
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
 from tabembedbench.utils.tracking_utils import update_result_dict
 
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 logger = get_benchmark_logger("TabEmbedBench_Outlier")
 
@@ -44,6 +44,9 @@ def run_outlier_benchmark(
     neighbors: int = 51,
     neighbors_step: int = 5,
     distance_metrics: list[str] = ["euclidean", "cosine"],
+    save_result_dataframe: bool = True,
+    data_dir: str | Path = "data",
+    timestamp: str = TIMESTAMP,
 ):
     """Runs an outlier detection benchmark using the provided embedding models
     and datasets. It uses the tabular datasets from the ADBench benchmark [1]
@@ -226,6 +229,17 @@ def run_outlier_benchmark(
             "task": pl.Categorical,
         },
     )
+
+    if save_result_dataframe:
+        logger.info("Saving results...")
+        result_path = data_dir / "results"
+        result_path.mkdir(exist_ok=True)
+
+        result_file = result_path / f"results_outlier_{TIMESTAMP}.parquet"
+
+        result_df.write_parquet(
+            result_file
+        )
 
     return result_df
 

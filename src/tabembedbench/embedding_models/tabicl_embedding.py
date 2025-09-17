@@ -47,7 +47,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         activation: Union[str, callable] = "gelu",
         norm_first: bool = True,
         normalize_embeddings: bool = False,
-        preprocess_data: bool = False,
+        preprocess_tabicl_data: bool = False,
         **kwargs,
     ):
         """Initializes the model configuration by setting up the column embedding and row
@@ -112,7 +112,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
             param.requires_grad = False
 
         self.normalize_embeddings = normalize_embeddings
-        self._preprocess_data = preprocess_data
+        self._preprocess_tabicl_data = preprocess_tabicl_data
         self.preprocess_pipeline = PreprocessingPipeline()
         self.eval()
 
@@ -174,10 +174,10 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         """
         X_preprocess = X
 
-        if train and self._preprocess_data:
+        if train and self._preprocess_tabicl_data:
             X_preprocess = self.preprocess_pipeline.fit_transform(X_preprocess)
         else:
-            if self._preprocess_data:
+            if self._preprocess_tabicl_data:
                 X_preprocess = self.preprocess_pipeline.transform(X_preprocess)
 
         return X_preprocess
@@ -306,7 +306,7 @@ def get_tabicl_embedding_model(
 
     row_embedding_model = TabICLEmbedding(
         normalize_embeddings=preprocess_data,
-        preprocess_data=preprocess_data,
+        preprocess_tabicl_data=preprocess_data,
         **filtered_config,
     )
 
