@@ -89,10 +89,14 @@ def run_benchmark(
         data_dir = Path(data_dir)
         data_dir.mkdir(exist_ok=True)
         log_dir = data_dir / Path("logs")
+        result_path = data_dir / Path("results")
+        result_path.mkdir(exist_ok=True)
     else:
         data_dir = Path("data")
         data_dir.mkdir(exist_ok=True)
         log_dir = data_dir / Path("logs")
+        result_path = data_dir / Path("results")
+        result_path.mkdir(exist_ok=True)
 
     if save_logs:
         setup_unified_logging(
@@ -151,6 +155,14 @@ def run_benchmark(
                 save_result_dataframe=save_result_dataframe,
                 timestamp=timestamp,
             )
+            if save_result_dataframe:
+                main_logger.info("Saving results for outlier detection...")
+
+                result_outlier_file = result_path / (f"results_outlier"
+                                             f"_{timestamp}.parquet")
+
+                result_outlier_df.write_parquet(result_outlier_file)
+
         else:
             raise ValueError("No outlier models provided.")
     else:
@@ -167,6 +179,14 @@ def run_benchmark(
             data_dir=data_dir,
             save_result_dataframe=save_result_dataframe
         )
+        if save_result_dataframe:
+            main_logger.info("Saving results for task-specific benchmark...")
+
+            result_tabarena_file = result_path / (f"results_tabarena"
+                                           f"_{timestamp}.parquet")
+
+            result_outlier_df.write_parquet(result_tabarena_file)
+
     else:
         result_tabarena_df = pl.DataFrame()
         main_logger.info("Skipping task-specific benchmark.")
@@ -177,8 +197,6 @@ def run_benchmark(
 
     if save_result_dataframe:
         main_logger.info("Saving results...")
-        result_path = data_dir / "results"
-        result_path.mkdir(exist_ok=True)
 
         result_file = result_path / f"results_{timestamp}.parquet"
 

@@ -8,6 +8,7 @@ from tabembedbench.embedding_models.tabicl_embedding import get_tabicl_embedding
 from tabembedbench.embedding_models.tabvectorizer_embedding import TabVectorizerEmbedding
 from tabembedbench.utils.torch_utils import get_device
 
+
 device = get_device()
 
 tabicl_wo_preproccessing = get_tabicl_embedding_model(model_path="auto")
@@ -38,7 +39,7 @@ result_df = run_benchmark(
     save_embeddings=False,
     exclude_adbench_datasets=["3_backdoor.npz"],
     exclude_adbench_image_datasets=True,
-    upper_bound_dataset_size=200,
+    upper_bound_dataset_size=50000,
     run_outlier=True,
     run_task_specific=True,
     save_logs=True,

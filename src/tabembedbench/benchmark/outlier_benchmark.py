@@ -230,17 +230,6 @@ def run_outlier_benchmark(
         },
     )
 
-    if save_result_dataframe:
-        logger.info("Saving results...")
-        result_path = data_dir / "results"
-        result_path.mkdir(exist_ok=True)
-
-        result_file = result_path / f"results_outlier_{TIMESTAMP}.parquet"
-
-        result_df.write_parquet(
-            result_file
-        )
-
     return result_df
 
 
