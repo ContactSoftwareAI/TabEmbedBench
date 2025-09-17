@@ -175,19 +175,19 @@ def run_outlier_benchmark(
 
                     for num_neighbors in range(1, neighbors, neighbors_step):
                         for distance_metric in distance_metrics:
-                            score_auc, exception = (
+                            score_auc, exception_message = (
                                 _evaluate_local_outlier_factor(
                                 num_neighbors=num_neighbors,
                                 X_embed=X_embed,
                                 y_true=y,
                                 distance_metric=distance_metric,
                             ))
-                            logger.debug(f"AUC Score: {score_auc}")
-                            if exception is not None:
+
+                            if exception_message is not None:
                                 logger.warning(
                                     f"Error occurred while running experiment for "
                                     f"{embedding_model.name} with "
-                                    f"Local Outlier Factor: {exception}"
+                                    f"Local Outlier Factor: {exception_message}"
                                 )
                                 continue
 
