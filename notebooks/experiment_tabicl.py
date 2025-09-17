@@ -6,7 +6,7 @@ from tabembedbench.benchmark.run_benchmark import run_benchmark
 from tabembedbench.embedding_models.spherebased_embedding import (
     SphereBasedEmbedding,
 )
-from tabembedbench.embedding_models.tabicl_embedding import get_row_embeddings_model
+from tabembedbench.embedding_models.tabicl_embedding import get_tabicl_embedding_model
 from tabembedbench.embedding_models.tabvectorizer_embedding import TabVectorizerEmbedding
 from tabembedbench.utils.torch_utils import get_device
 
@@ -14,11 +14,11 @@ device = get_device()
 
 print(device)
 
-row_embedder = get_row_embeddings_model(model_path="auto")
+row_embedder = get_tabicl_embedding_model(model_path="auto")
 
 row_embedder.name = "tabicl-classifier-v1.1-0506"
 
-row_embedder_preprocessed = get_row_embeddings_model(
+row_embedder_preprocessed = get_tabicl_embedding_model(
     model_path="auto", preprocess_data=True
 )
 

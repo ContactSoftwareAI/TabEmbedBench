@@ -52,9 +52,76 @@ Alternatively, you can run commands directly with UV without activating:
 ``` bash
    uv run python your_script.py
 ```
-## GPU Support
-The project includes PyTorch with CUDA 12.1 support for non-Darwin (non-macOS) systems. 
-On macOS, the CPU version will be installed automatically.
+## Quick Start
+
+```Python
+from tabembedbench.benchmark.run_benchmark import run_benchmark
+from tabembedbench.embedding_models.tabicl_embedding import (
+    get_tabicl_embedding_model,
+)
+
+# Create embedding model instances
+models = [get_tabicl_embedding_model(preprocess_data=True)]
+
+# Run comprehensive benchmark
+results_df = run_benchmark(
+    embedding_models=models,
+    run_outlier=True,
+    run_task_specific=True,
+    save_result_dataframe=True
+)
+
+# Results are saved to data/results/ and returned as Polars DataFrame
+print(results_df.head())
+```
+
+
+## Project Structure
+``` 
+tabembedbench/
+├── src/
+│   └── tabembedbench/
+│       ├── benchmark/           # Benchmarking framework
+│       │   ├── run_benchmark.py      # Main benchmark orchestrator
+│       │   ├── outlier_benchmark.py  # ADBench outlier detection
+│       │   └── tabarena_benchmark.py # TabArena task evaluation
+│       ├── embedding_models/    # Embedding model implementations
+│       │   ├── base.py               # BaseEmbeddingGenerator abstract class
+│       │   ├── tabicl_embedding.py   # TabICL wrapper
+│       │   ├── tabpfn_embedding.py   # TabPFN wrapper
+│       │   ├── spherebased_embedding.py # Geometric embeddings
+│       │   └── tabvectorizer_embedding.py # TabVectorizer wrapper
+│       └── utils/               # Utility functions
+│           ├── dataset_utils.py      # Dataset handling
+│           ├── embedding_utils.py    # Embedding utilities
+│           ├── plot_utils.py         # Visualization tools
+│           └── ...
+├── example/                         # Usage examples
+└── pyproject.toml                  # Project configuration
+```
+## Available Embedding Models
+All models implement the interface: `BaseEmbeddingGenerator`
+- **TabICL**: Uses TabICL to extract embeddings from tabular data with the 
+  first two parts of the TabICL architecture.
+- **Sphere-based Embedding**: Geometric embedding using spherical projections
+- **TabVectorizer**: Standard implementation of TabVectorizer from skrub.
+
+### WIP:
+- **TabPFN**
+
+## Benchmarking Framework
+### Outlier Detection Benchmark
+- Uses ADBench tabular datasets
+- Evaluates with Local Outlier Factor (LOF)
+- Multiple distance metrics and neighbor counts
+- Returns AUC scores and computation times
+
+### Task-specific Benchmark
+- Uses OpenML's TabArena suite
+- Classification and regression tasks
+- KNN-based evaluation
+- Supports both full and lite modes
+
 ## Development Tools
 The project includes several development tools configured in : `pyproject.toml`
 - **Ruff**: For code linting and formatting
@@ -62,13 +129,13 @@ The project includes several development tools configured in : `pyproject.toml`
   uv run ruff check .      # Check for issues
   uv run ruff format .     # Format code
 ```
+## Contributing
+When adding new embedding models:
+1. Inherit from `BaseEmbeddingGenerator`
+2. Implement all abstract methods (, , , , ) `task_only``_get_default_name``_preprocess_data``_compute_embeddings``reset_embedding_model`
+3. Follow the established naming conventions
+4. Test integration with the benchmarking framework
 
-## Project Structure
-``` 
-tabembedbench/
-├── src/                 # Source code
-├── pyproject.toml      # Project configuration
-└── README.md          # This file
-```
-
-
+## Authors
+- Lars Kleinemeier
+- Frederik Hoppe

@@ -248,7 +248,7 @@ def filter_params_for_class(cls, params_dict):
     return filtered_params
 
 
-def get_row_embeddings_model(
+def get_tabicl_embedding_model(
     model_path: Optional[str] = "auto",
     state_dict: Optional[dict] = None,
     config: Optional[dict] = None,
