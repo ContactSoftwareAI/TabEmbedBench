@@ -176,7 +176,7 @@ def run_tabarena_benchmark(
                     for num_neighbors in range(1, neighbors, neighbors_step):
                         for distance_metric in distance_metrics:
                             if task.task_type == "Supervised Classification":
-                                score_auc, exception = (
+                                score_auc, exception_message = (
                                     _evaluate_classification(
                                     X_train_embed,
                                     X_test_embed,
@@ -186,11 +186,11 @@ def run_tabarena_benchmark(
                                     distance_metric=distance_metric,
                                 ))
 
-                                if exception is not None:
+                                if exception_message is not None:
                                     logger.warning(
                                         f"Error occurred while running experiment for "
                                         f"{embedding_model.name} with "
-                                        f"KNN: {exception}"
+                                        f"KNN: {exception_message}"
                                     )
                                     continue
 
@@ -207,7 +207,7 @@ def run_tabarena_benchmark(
                                 )
 
                             elif task.task_type == "Supervised Regression":
-                                score_msr, _ = _evaluate_regression(
+                                score_msr, exception_message = _evaluate_regression(
                                     X_train_embed,
                                     X_test_embed,
                                     y_train,
@@ -216,11 +216,11 @@ def run_tabarena_benchmark(
                                     distance_metric=distance_metric,
                                 )
 
-                                if exception is not None:
+                                if exception_message is not None:
                                     logger.warning(
                                         f"Error occurred while running experiment for "
                                         f"{embedding_model.name} with "
-                                        f"KNN: {exception}"
+                                        f"KNN: {exception_message}"
                                     )
                                     continue
 

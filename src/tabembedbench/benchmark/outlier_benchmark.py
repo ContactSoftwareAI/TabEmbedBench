@@ -182,7 +182,7 @@ def run_outlier_benchmark(
                                 y_true=y,
                                 distance_metric=distance_metric,
                             ))
-
+                            logger.debug(f"AUC Score: {score_auc}")
                             if exception is not None:
                                 logger.warning(
                                     f"Error occurred while running experiment for "
