@@ -156,7 +156,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
     def task_only(self) -> bool:
         return False
 
-    def preprocess_data(self, X: np.ndarray, train: bool = True):
+    def _preprocess_data(self, X: np.ndarray, train: bool = True):
         """Preprocesses the input data by applying normalization and preprocessing pipelines
         based on the mode (training or inference). If normalization is enabled, the
         numerical transformation is applied to the data during training, creating a
@@ -182,7 +182,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
 
         return X_preprocess
 
-    def compute_embeddings(
+    def _compute_embeddings(
         self,
         X: np.ndarray,
         device: torch.device | None = None,

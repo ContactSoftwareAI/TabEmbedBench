@@ -155,8 +155,14 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
                 # Alle Werte sind gleich - verwende Mittelpunkt
                 radius = 1.0
             else:
+                col_max_64 = np.float64(col_max)
+                value_64 = np.float64(value)
+                col_min_64 = np.float64(col_min)
+                range_val_64 = col_max_64 - col_min_64
+
                 # Normiere Wert auf Radius zwischen 0.5 und 1.5
-                normalized_value = (value - col_min) / (col_max - col_min)  # 0 bis 1
+                normalized_value = (value_64 - col_min_64) / range_val_64 
+                # 0 bis 1
                 radius = 0.5 + normalized_value * 1.0  # 0.5 bis 1.5
 
             # Platziere Punkt auf der Linie durch den Ursprung
@@ -202,13 +208,13 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
 
         return embeddings
 
-    def preprocess_data(self, data: np.ndarray, train: bool = True):
+    def _preprocess_data(self, data: np.ndarray, train: bool = True):
         if train:
             self.fit(data)
 
         return data
 
-    def compute_embeddings(self, data: np.ndarray):
+    def _compute_embeddings(self, data: np.ndarray):
         return self.transform(data)
 
     def reset_embedding_model(self):

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import time
 
 import numpy as np
 import torch
@@ -69,7 +70,7 @@ class BaseEmbeddingGenerator(ABC):
         self._name = value
 
     @abstractmethod
-    def preprocess_data(self, X: np.ndarray, train: bool = True) -> np.ndarray:
+    def _preprocess_data(self, X: np.ndarray, train: bool = True) -> np.ndarray:
         """Preprocess the input data for training or inference.
 
         This method is designed to perform preprocessing operations on the
@@ -88,7 +89,7 @@ class BaseEmbeddingGenerator(ABC):
         return X
 
     @abstractmethod
-    def compute_embeddings(
+    def _compute_embeddings(
         self,
         X: np.ndarray,
     ) -> np.ndarray:
@@ -120,6 +121,39 @@ class BaseEmbeddingGenerator(ABC):
             raise this error if accessed directly.
         """
         raise NotImplementedError
+
+    def compute_embeddings(
+        self,
+        X_train: np.ndarray,
+        X_test: np.ndarray = None,
+    ):
+        """
+        Computes embeddings for training and optionally test data. The embeddings are preprocessed
+        and transformed, and the computation time required for embeddings is tracked.
+
+        Args:
+            X_train (np.ndarray): Data for training.
+            X_test (np.ndarray, optional): Data for testing. Default is None.
+
+        Returns:
+            tuple: If `X_test` is provided, returns a tuple containing embeddings of
+                training data, embeddings of test data, and the time taken to compute
+                embeddings. Otherwise, returns a tuple containing embeddings of training
+                data and the time taken to compute embeddings.
+        """
+        X_train = self._preprocess_data(X_train, train=True)
+
+        start_time = time.time()
+        X_train_embed = self._compute_embeddings(X_train)
+        compute_embeddings_time = time.time() - start_time
+
+        if X_test is not None:
+            X_test = self._preprocess_data(X_test, train=False)
+            X_test_embed = self._compute_embeddings(X_test)
+
+            return X_train_embed, X_test_embed, compute_embeddings_time
+        else:
+            return X_train_embed, compute_embeddings_time
 
 
 class Dummy(BaseEmbeddingGenerator):
