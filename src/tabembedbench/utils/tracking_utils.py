@@ -11,7 +11,7 @@ RESULT_DF_SCHEMA = {
     "embedding_model": pl.Categorical,
     "num_neighbors": pl.UInt64,
     "auc_score": pl.Float64,
-    "msr_score": pl.Float64,
+    "mse_score": pl.Float64,
     "time_to_compute_embeddings": pl.Float64,
     "benchmark": pl.Categorical,
     "distance_metric": pl.Categorical,
@@ -25,7 +25,7 @@ EMPTY_BATCH_DICT = {
         "embedding_model": [],
         "num_neighbors": [],
         "auc_score": [],
-        "msr_score": [],
+        "mse_score": [],
         "task": [],
         "time_to_compute_embeddings": [],
         "benchmark": [],
@@ -68,7 +68,7 @@ def update_batch_dict(
     task: str,
     algorithm: str,
     auc_score: float = None,
-    msr_score: float = None,
+    mse_score: float = None,
     distance_metric: str = "euclidean",
 ):
     """
@@ -89,7 +89,7 @@ def update_batch_dict(
         algorithm (str): The algorithm used for the benchmark task.
         auc_score (float, optional): The AUC (Area Under Curve) score achieved
             during evaluation. Defaults to None.
-        msr_score (float, optional): The MSR (Mean Square Residual) score achieved
+        mse_score (float, optional): The MSR (Mean Square Residual) score achieved
             during evaluation. Defaults to None.
         distance_metric (str, optional): The distance metric used, such as
             "euclidean" or "cosine". Defaults to "euclidean".
@@ -106,10 +106,10 @@ def update_batch_dict(
 
     if auc_score is not None:
         batch_dict["auc_score"].append(auc_score)
-        batch_dict["msr_score"].append(np.inf)
+        batch_dict["mse_score"].append(np.inf)
     else:
         batch_dict["auc_score"].append((-1) * np.inf)
-        batch_dict["msr_score"].append(msr_score)
+        batch_dict["mse_score"].append(mse_score)
 
 
 def update_result_df(
@@ -182,11 +182,6 @@ def save_result_df(
 
     parquet_file = output_file.with_suffix(".parquet")
     csv_file = output_file.with_suffix(".csv")
-
-    if parquet_file.exists():
-        parquet_file.unlink()
-    if csv_file.exists():
-        csv_file.unlink()
 
     result_df.write_parquet(parquet_file)
     result_df.write_csv(csv_file)
