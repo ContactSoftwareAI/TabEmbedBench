@@ -4,3 +4,6 @@
 /src/tabembedbench.egg-info/
 
 .idea/
+
+/.coverage_reports/
+/.coverage/

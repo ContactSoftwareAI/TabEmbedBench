@@ -26,6 +26,7 @@ dependencies = [
     "skrub>=0.6.1",
     "tabpfn-extensions[all] @ git+https://github.com/PriorLabs/tabpfn-extensions.git",
     "click>=8.2.1",
+    "coverage>=7.10.6",
 ]
 
 [build-system]
