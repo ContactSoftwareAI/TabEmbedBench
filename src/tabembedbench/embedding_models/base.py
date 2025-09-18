@@ -147,6 +147,9 @@ class BaseEmbeddingGenerator(ABC):
         X_train_embed = self._compute_embeddings(X_train)
         compute_embeddings_time = time.time() - start_time
 
+        if self.check_emb_shape(X_train_embed):
+            raise ValueError("The shape of the embeddings is not correct")
+
         if X_test is not None:
             X_test = self._preprocess_data(X_test, train=False)
             X_test_embed = self._compute_embeddings(X_test)
@@ -154,6 +157,12 @@ class BaseEmbeddingGenerator(ABC):
             return X_train_embed, X_test_embed, compute_embeddings_time
         else:
             return X_train_embed, compute_embeddings_time
+
+    def check_emb_shape(self, X_train_embed):
+        if len(X_train_embed.shape) != 2:
+            return True
+        else:
+            return False
 
 
 class Dummy(BaseEmbeddingGenerator):
