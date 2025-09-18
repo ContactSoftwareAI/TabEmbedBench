@@ -2,6 +2,7 @@ import os
 from typing import Dict, Tuple
 from datetime import datetime
 from pathlib import Path
+import time
 
 import numpy as np
 import openml
@@ -144,7 +145,8 @@ def run_tabarena_benchmark(
                         f"with model {embedding_model.name}..."
                     )
 
-                    X_train_embed, X_test_embed, compute_embeddings_time = (
+                    (X_train_embed, X_test_embed, compute_embeddings_time,
+                     compute_test_embeddings_time) = (
                         embedding_model.compute_embeddings(X_train, X_test)
                     )
 
@@ -188,7 +190,7 @@ def run_tabarena_benchmark(
                             continue
                         for distance_metric in distance_metrics:
                             if task.task_type == "Supervised Classification":
-                                score_auc, exception_message = (
+                                score_auc, predict_time, exception_message = (
                                     _evaluate_classification(
                                     X_train_embed,
                                     X_test_embed,
@@ -206,29 +208,32 @@ def run_tabarena_benchmark(
                                     )
                                     continue
 
-                                update_batch_dict(
+                                batch_dict = update_batch_dict(
                                     batch_dict,
                                     dataset_name=dataset.name,
                                     dataset_size=X_train.shape[0],
                                     embedding_model_name=embedding_model.name,
                                     num_neighbors=num_neighbors,
-                                    compute_time=compute_embeddings_time,
+                                    time_to_compute_train_embeddings=compute_embeddings_time,
                                     auc_score=score_auc,
                                     distance_metric=distance_metric,
                                     task=task.task_type,
                                     algorithm="KNNClassifier",
-                                    embedding_dimension=embedding_dim
+                                    embedding_dimension=embedding_dim,
+                                    prediction_time=predict_time,
+                                    time_to_compute_test_embeddings=compute_test_embeddings_time,
                                 )
 
                             elif task.task_type == "Supervised Regression":
-                                score_mse, exception_message = _evaluate_regression(
+                                score_mse, predict_time, exception_message = (
+                                    _evaluate_regression(
                                     X_train_embed,
                                     X_test_embed,
                                     y_train,
                                     y_test,
                                     num_neighbors,
                                     distance_metric=distance_metric,
-                                )
+                                ))
 
                                 if exception_message is not None:
                                     logger.warning(
@@ -238,18 +243,20 @@ def run_tabarena_benchmark(
                                     )
                                     continue
 
-                                update_batch_dict(
+                                batch_dict = update_batch_dict(
                                     batch_dict,
                                     dataset_name=dataset.name,
                                     dataset_size=X_train.shape[0],
                                     embedding_model_name=embedding_model.name,
                                     num_neighbors=num_neighbors,
-                                    compute_time=compute_embeddings_time,
+                                    time_to_compute_train_embeddings=compute_embeddings_time,
                                     mse_score=score_mse,
                                     distance_metric=distance_metric,
                                     task=task.task_type,
                                     algorithm="KNNRegressor",
                                     embedding_dimension=embedding_dim,
+                                    prediction_time=predict_time,
+                                    time_to_compute_test_embeddings=compute_test_embeddings_time,
                                 )
                     logger.debug(
                         f"Finished experiment for {embedding_model.name} and "
@@ -281,7 +288,7 @@ def _evaluate_classification(
     y_test: np.ndarray,
     num_neighbors: int,
     distance_metric: str = "euclidean",
-) -> Tuple[float, Exception]:
+):
     """Evaluate classification task with KNN Classifier from scikit-learn.."""
     try:
         knn_params = {"n_neighbors": num_neighbors, "n_jobs": -1}
@@ -289,8 +296,11 @@ def _evaluate_classification(
             knn_params["metric"] = distance_metric
 
         knn_classifier = KNeighborsClassifier(**knn_params)
+
+        start_predict_time = time.time()
         knn_classifier.fit(X_train_embed, y_train)
         y_pred_proba = knn_classifier.predict_proba(X_test_embed)
+        predict_time = time.time() - start_predict_time
 
         n_classes = y_pred_proba.shape[1]
         if n_classes == 2:
@@ -298,9 +308,9 @@ def _evaluate_classification(
         else:
             score_auc = roc_auc_score(y_test, y_pred_proba, multi_class="ovr")
 
-        return score_auc, None
+        return score_auc, predict_time, None
     except Exception as e:
-        return None, e
+        return None, None, e
 
 
 def _evaluate_regression(
@@ -310,7 +320,7 @@ def _evaluate_regression(
     y_test: np.ndarray,
     num_neighbors: int,
     distance_metric: str = "euclidean",
-) -> Tuple[float, Exception]:
+):
     """Evaluate regression task with KNN Regressor from scikit-learn."""
     try:
         knn_params = {"n_neighbors": num_neighbors, "n_jobs": -1}
@@ -318,13 +328,17 @@ def _evaluate_regression(
             knn_params["metric"] = distance_metric
 
         knn_regressor = KNeighborsRegressor(**knn_params)
+
+        start_predict_time = time.time()
         knn_regressor.fit(X_train_embed, y_train)
         y_pred = knn_regressor.predict(X_test_embed)
+        predict_time = time.time() - start_predict_time
+
         score_mse = mean_squared_error(y_test, y_pred)
 
-        return score_mse, None
+        return score_mse, predict_time, None
     except Exception as e:
-        return None, e
+        return None, None, e
 
 
 def _get_task_configuration(dataset, tabarena_lite: bool, task) -> Tuple[int, int]:

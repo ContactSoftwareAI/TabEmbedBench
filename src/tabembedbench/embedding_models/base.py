@@ -152,9 +152,12 @@ class BaseEmbeddingGenerator(ABC):
 
         if X_test is not None:
             X_test = self._preprocess_data(X_test, train=False)
-            X_test_embed = self._compute_embeddings(X_test)
 
-            return X_train_embed, X_test_embed, compute_embeddings_time
+            start_test_time = time.time()
+            X_test_embed = self._compute_embeddings(X_test)
+            compute_test_embeddings_time = time.time() - start_test_time
+
+            return X_train_embed, X_test_embed, compute_embeddings_time, compute_test_embeddings_time
         else:
             return X_train_embed, compute_embeddings_time
 

@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from pathlib import Path
+import time
 
 import numpy as np
 import polars as pl
@@ -141,14 +142,14 @@ def run_outlier_benchmark(
                 if num_samples > upper_bound_num_samples:
                     logger.warning(
                         f"Skipping {dataset_name} "
-                        f"- dataset size {num_samples}"
+                        f"- dataset size {num_samples} "
                         f"exceeds limit {upper_bound_num_samples}"
                     )
                     continue
                 if num_features > upper_bound_num_features:
                     logger.warning(
                         f"Skipping {dataset_name} "
-                        f"- number of features size {num_features}"
+                        f"- number of features size {num_features} "
                         f"exceeds limit {upper_bound_num_features}"
                     )
                     continue
@@ -197,7 +198,7 @@ def run_outlier_benchmark(
                         if num_neighbors == 0:
                             continue
                         for distance_metric in distance_metrics:
-                            score_auc, exception_message = (
+                            score_auc, pred_time, exception_message = (
                                 _evaluate_local_outlier_factor(
                                 num_neighbors=num_neighbors,
                                 X_embed=X_embed,
@@ -213,18 +214,19 @@ def run_outlier_benchmark(
                                 )
                                 continue
 
-                            update_batch_dict(
+                            batch_dict = update_batch_dict(
                                 batch_dict=batch_dict,
                                 dataset_name=dataset_file.stem,
                                 dataset_size=X.shape[0],
                                 embedding_model_name=embedding_model.name,
                                 num_neighbors=num_neighbors,
-                                compute_time=compute_embeddings_time,
+                                time_to_compute_train_embeddings=compute_embeddings_time,
                                 task="Outlier Detection",
                                 auc_score=score_auc,
                                 distance_metric=distance_metric,
                                 algorithm="LocalOutlierFactor",
                                 embedding_dimension=embed_dim,
+                                prediction_time=pred_time,
                             )
 
                     # Isolation Forest Implementation
@@ -233,10 +235,11 @@ def run_outlier_benchmark(
                         f"with Isolation Forest."
                     )
 
-                    score_auc, exception_message = _evaluate_isolation_forest(
+                    score_auc, pred_time, exception_message = (
+                        _evaluate_isolation_forest(
                         X_embed=X_embed,
                         y_true=y,
-                    )
+                    ))
 
                     if exception_message is not None:
                         logger.warning(
@@ -245,18 +248,19 @@ def run_outlier_benchmark(
                             f"Isolation Forest: {exception_message}"
                         )
                     else:
-                        update_batch_dict(
+                        batch_dict = update_batch_dict(
                             batch_dict=batch_dict,
                             dataset_name=dataset_file.stem,
                             dataset_size=X.shape[0],
                             embedding_model_name=embedding_model.name,
                             num_neighbors=0,  # Not applicable for Isolation Forest
-                            compute_time=compute_embeddings_time,
+                            time_to_compute_train_embeddings=compute_embeddings_time,
                             task="Outlier Detection",
                             auc_score=score_auc,
                             distance_metric='',  # Not applicable for Isolation Forest
                             algorithm="IsolationForest",
                             embedding_dimension=embed_dim,
+                            prediction_time=pred_time,
                         )
 
                 logger.debug(
@@ -319,14 +323,16 @@ def _evaluate_local_outlier_factor(
             n_jobs=-1,
             metric=distance_metric,
         )
-
+        start_predict_time = time.time()
         lof.fit_predict(X_embed)
+        compute_prediction_time = time.time() - start_predict_time
+
         neg_outlier_factor = (-1) * lof.negative_outlier_factor_
         score_auc = roc_auc_score(y_true, neg_outlier_factor)
 
-        return score_auc, None
+        return score_auc, compute_prediction_time, None
     except Exception as e:
-        return None, e
+        return None, None, e
 
 
 def _evaluate_isolation_forest(
@@ -367,8 +373,9 @@ def _evaluate_isolation_forest(
             n_estimators=n_estimators,
             n_jobs=-1,
         )
-
+        start_predict_time = time.time()
         iso_forest.fit(X_embed)
+        compute_prediction_time = time.time() - start_predict_time
         # Get anomaly scores (negative values for outliers)
         anomaly_scores = iso_forest.decision_function(X_embed)
         # Convert to positive scores (higher values = more anomalous)
@@ -376,6 +383,6 @@ def _evaluate_isolation_forest(
 
         score_auc = roc_auc_score(y_true, outlier_scores)
 
-        return score_auc, None
+        return score_auc, compute_prediction_time, None
     except Exception as e:
-        return None, e
+        return None, None, e
