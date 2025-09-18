@@ -88,15 +88,17 @@ def run_benchmark(
     if data_dir is not None:
         data_dir = Path(data_dir)
         data_dir.mkdir(exist_ok=True)
-        log_dir = data_dir / Path("logs")
-        result_path = data_dir / Path("results")
-        result_path.mkdir(exist_ok=True)
+        result_dir = Path(data_dir / f"tabembedbench_{timestamp}")
+        result_dir.mkdir(exist_ok=True)
+        log_dir = Path(result_dir / "logs")
+        log_dir.mkdir(exist_ok=True)
     else:
         data_dir = Path("data")
         data_dir.mkdir(exist_ok=True)
-        log_dir = data_dir / Path("logs")
-        result_path = data_dir / Path("results")
-        result_path.mkdir(exist_ok=True)
+        result_dir = Path(data_dir / f"tabembedbench_{timestamp}")
+        result_dir.mkdir(exist_ok=True)
+        log_dir = Path(result_dir / "logs")
+        log_dir.mkdir(exist_ok=True)
 
     if save_logs:
         setup_unified_logging(
@@ -144,48 +146,41 @@ def run_benchmark(
                          f" {[outlier_embedding_model.name for outlier_embedding_model in outlier_embedding_models]}")
         if len(outlier_embedding_models) > 0:
             main_logger.debug("Start outlier detection function")
-            result_outlier_df = run_outlier_benchmark(
-                embedding_models=outlier_embedding_models,
-                dataset_paths=adbench_dataset_path,
-                save_embeddings=save_embeddings,
-                exclude_datasets=exclude_adbench_datasets,
-                exclude_image_datasets=exclude_adbench_image_datasets,
-                upper_bound_num_samples=upper_bound_dataset_size,
-                data_dir=data_dir,
-                save_result_dataframe=save_result_dataframe,
-                timestamp=timestamp,
-            )
-            if save_result_dataframe:
-                main_logger.info("Saving results for outlier detection...")
-
-                result_outlier_file = result_path / (f"results_outlier"
-                                             f"_{timestamp}.parquet")
-
-                result_outlier_df.write_parquet(result_outlier_file)
-
+            try:
+                result_outlier_df = run_outlier_benchmark(
+                    embedding_models=outlier_embedding_models,
+                    dataset_paths=adbench_dataset_path,
+                    save_embeddings=save_embeddings,
+                    exclude_datasets=exclude_adbench_datasets,
+                    exclude_image_datasets=exclude_adbench_image_datasets,
+                    upper_bound_num_samples=upper_bound_dataset_size,
+                    result_dir=result_dir,
+                    save_result_dataframe=save_result_dataframe,
+                    timestamp=timestamp,
+                )
+            except Exception as e:
+                main_logger.error(f"Error occurred during outlier detection benchmark: {e}")
+                result_outlier_df = pl.DataFrame()
         else:
             raise ValueError("No outlier models provided.")
     else:
         result_outlier_df = pl.DataFrame()
     if run_task_specific:
         main_logger.info("Running task-specific benchmark (TabArena Lite)...")
-        result_tabarena_df = run_tabarena_benchmark(
-            embedding_models=models_to_process,
-            tabarena_version=tabarena_version,
-            tabarena_lite=tabarena_lite,
-            upper_bound_dataset_size=upper_bound_dataset_size,
-            save_embeddings=save_embeddings,
-            timestamp=timestamp,
-            data_dir=data_dir,
-            save_result_dataframe=save_result_dataframe
-        )
-        if save_result_dataframe:
-            main_logger.info("Saving results for task-specific benchmark...")
-
-            result_tabarena_file = result_path / (f"results_tabarena"
-                                           f"_{timestamp}.parquet")
-
-            result_outlier_df.write_parquet(result_tabarena_file)
+        try:
+            result_tabarena_df = run_tabarena_benchmark(
+                embedding_models=models_to_process,
+                tabarena_version=tabarena_version,
+                tabarena_lite=tabarena_lite,
+                upper_bound_dataset_size=upper_bound_dataset_size,
+                save_embeddings=save_embeddings,
+                timestamp=timestamp,
+                result_dir=result_dir,
+                save_result_dataframe=save_result_dataframe
+            )
+        except Exception as e:
+            main_logger.error(f"Error occurred during task-specific benchmark: {e}")
+            result_tabarena_df = pl.DataFrame()
 
     else:
         result_tabarena_df = pl.DataFrame()
@@ -194,14 +189,5 @@ def run_benchmark(
     result_df = pl.concat(
         [result_outlier_df, result_tabarena_df], how="diagonal"
     )
-
-    if save_result_dataframe:
-        main_logger.info("Saving results...")
-
-        result_file = result_path / f"results_{timestamp}.parquet"
-
-        result_df.write_parquet(
-            result_file
-        )
 
     return result_df

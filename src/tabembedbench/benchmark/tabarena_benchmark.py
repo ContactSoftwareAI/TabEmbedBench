@@ -1,5 +1,4 @@
 import os
-import time
 from typing import Dict, Tuple
 from datetime import datetime
 from pathlib import Path
@@ -16,7 +15,12 @@ from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.embedding_utils import check_nan
 from tabembedbench.utils.logging_utils import get_benchmark_logger
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
-from tabembedbench.utils.tracking_utils import update_result_dict
+from tabembedbench.utils.tracking_utils import (
+    get_batch_dict_result_df,
+    update_batch_dict,
+    update_result_df,
+    save_result_df
+)
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -33,7 +37,7 @@ def run_tabarena_benchmark(
     neighbors_step: int = 5,
     distance_metrics=None,
     save_result_dataframe: bool = True,
-    data_dir: str | Path = "data",
+    result_dir: str | Path = "result_task_specific",
     timestamp: str = TIMESTAMP,
 ):
     """Run the TabArena benchmark for a set of embedding models.
@@ -73,21 +77,13 @@ def run_tabarena_benchmark(
     if distance_metrics is None:
         distance_metrics = ["euclidean", "cosine"]
 
+    if isinstance(result_dir, str):
+        result_dir = Path(result_dir)
+
     benchmark_suite = openml.study.get_suite(tabarena_version)
     task_ids = benchmark_suite.tasks
 
-    result_tabarena_dict = {
-        "dataset_name": [],
-        "dataset_size": [],
-        "embedding_model": [],
-        "num_neighbors": [],
-        "auc_score": [],
-        "msr_score": [],
-        "task": [],
-        "time_to_compute_embeddings": [],
-        "benchmark": [],
-        "distance_metric": [],
-    }
+    batch_dict, result_df = get_batch_dict_result_df()
 
     for task_id in task_ids:
         task = openml.tasks.get_task(task_id)
@@ -173,7 +169,9 @@ def run_tabarena_benchmark(
 
                         os.remove(embedding_file)
 
-                    for num_neighbors in range(1, neighbors, neighbors_step):
+                    for num_neighbors in range(0, neighbors, neighbors_step):
+                        if num_neighbors == 0:
+                            continue
                         for distance_metric in distance_metrics:
                             if task.task_type == "Supervised Classification":
                                 score_auc, exception_message = (
@@ -194,8 +192,8 @@ def run_tabarena_benchmark(
                                     )
                                     continue
 
-                                update_result_dict(
-                                    result_tabarena_dict,
+                                update_batch_dict(
+                                    batch_dict,
                                     dataset_name=dataset.name,
                                     dataset_size=X_train.shape[0],
                                     embedding_model_name=embedding_model.name,
@@ -203,7 +201,8 @@ def run_tabarena_benchmark(
                                     compute_time=compute_embeddings_time,
                                     auc_score=score_auc,
                                     distance_metric=distance_metric,
-                                    task=task.task_type
+                                    task=task.task_type,
+                                    algorithm="KNNClassifier"
                                 )
 
                             elif task.task_type == "Supervised Regression":
@@ -224,8 +223,8 @@ def run_tabarena_benchmark(
                                     )
                                     continue
 
-                                update_result_dict(
-                                    result_tabarena_dict,
+                                update_batch_dict(
+                                    batch_dict,
                                     dataset_name=dataset.name,
                                     dataset_size=X_train.shape[0],
                                     embedding_model_name=embedding_model.name,
@@ -233,30 +232,28 @@ def run_tabarena_benchmark(
                                     compute_time=compute_embeddings_time,
                                     msr_score=score_msr,
                                     distance_metric=distance_metric,
-                                    task=task.task_type
+                                    task=task.task_type,
+                                    algorithm="KNNRegressor"
                                 )
-
+                    logger.debug(
+                        f"Finished experiment for {embedding_model.name} and "
+                        f"resetting the model."
+                    )
                     embedding_model.reset_embedding_model()
+
+                    batch_dict, result_df = update_result_df(
+                        batch_dict=batch_dict, result_df=result_df, logger=logger
+                    )
+
+                    if save_result_dataframe:
+                        save_result_df(result_df=result_df,
+                                       output_path=result_dir,
+                                       benchmark_name="TabArena",
+                                       timestamp=timestamp)
 
                     if get_device() in ["cuda", "mps"]:
                         empty_gpu_cache()
     logger.info("TabArena benchmark completed.")
-
-    result_df = pl.from_dict(
-        result_tabarena_dict,
-        schema={
-            "dataset_name": pl.Categorical,
-            "dataset_size": pl.UInt64,
-            "embedding_model": pl.Categorical,
-            "num_neighbors": pl.UInt64,
-            "auc_score": pl.Float64,
-            "msr_score": pl.Float64,
-            "time_to_compute_embeddings": pl.Float64,
-            "benchmark": pl.Categorical,
-            "distance_metric": pl.Categorical,
-            "task": pl.Categorical,
-        },
-    )
 
     return result_df
 

@@ -16,7 +16,12 @@ from tabembedbench.utils.dataset_utils import (
 from tabembedbench.utils.embedding_utils import check_nan
 from tabembedbench.utils.logging_utils import get_benchmark_logger
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
-from tabembedbench.utils.tracking_utils import update_result_dict
+from tabembedbench.utils.tracking_utils import (
+    get_batch_dict_result_df,
+    update_batch_dict,
+    update_result_df,
+    save_result_df
+)
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -45,7 +50,7 @@ def run_outlier_benchmark(
     neighbors_step: int = 5,
     distance_metrics: list[str] = ["euclidean", "cosine"],
     save_result_dataframe: bool = True,
-    data_dir: str | Path = "data",
+    result_dir: str | Path = "result_outlier",
     timestamp: str = TIMESTAMP,
 ):
     """Runs an outlier detection benchmark using the provided embedding models
@@ -78,6 +83,12 @@ def run_outlier_benchmark(
             Defaults to 5.
         distance_metrics: List of distance metrics to use for outlier detection.
             Defaults to ["euclidean", "cosine"].
+        save_result_dataframe: Boolean flag to determine whether to save the result
+            dataframe to disk. Defaults to True.
+        result_dir: Optional path to the directory where the result dataframe should
+            be saved. Defaults to "result_outlier".
+        timestamp: Optional timestamp string to use for saving the result dataframe.
+            Defaults to the current timestamp.
 
     Returns:
         pl.DataFrame: A Polars DataFrame containing the benchmark results, including
@@ -103,24 +114,17 @@ def run_outlier_benchmark(
         else:
             exclude_datasets = IMAGE_CATEGORY
 
-    result_outlier_dict = {
-        "dataset_name": [],
-        "dataset_size": [],
-        "embedding_model": [],
-        "num_neighbors": [],
-        "auc_score": [],
-        "time_to_compute_embeddings": [],
-        "benchmark": [],
-        "distance_metric": [],
-        "task": []
-    }
+    if isinstance(result_dir, str):
+        result_dir = Path(result_dir)
+
+    batch_dict, result_df = get_batch_dict_result_df()
 
     for dataset_file in dataset_paths.glob("*.npz"):
         if dataset_file.name not in exclude_datasets:
             logger.info(f"Running benchmark for {dataset_file.name}...")
 
-            if "dataset_name" not in result_outlier_dict:
-                result_outlier_dict["dataset_name"] = []
+            if "dataset_name" not in batch_dict:
+                batch_dict["dataset_name"] = []
 
             with np.load(dataset_file) as dataset:
                 num_samples = dataset["X"].shape[0]
@@ -173,7 +177,9 @@ def run_outlier_benchmark(
                         f"with Local Outlier Factor."
                     )
 
-                    for num_neighbors in range(1, neighbors, neighbors_step):
+                    for num_neighbors in range(0, neighbors, neighbors_step):
+                        if num_neighbors == 0:
+                            continue
                         for distance_metric in distance_metrics:
                             score_auc, exception_message = (
                                 _evaluate_local_outlier_factor(
@@ -191,8 +197,8 @@ def run_outlier_benchmark(
                                 )
                                 continue
 
-                            update_result_dict(
-                                result_dict=result_outlier_dict,
+                            update_batch_dict(
+                                batch_dict=batch_dict,
                                 dataset_name=dataset_file.stem,
                                 dataset_size=X.shape[0],
                                 embedding_model_name=embedding_model.name,
@@ -201,7 +207,7 @@ def run_outlier_benchmark(
                                 task="Outlier Detection",
                                 auc_score=score_auc,
                                 distance_metric=distance_metric,
-                                outlier_benchmark=True
+                                algorithm="LocalOutlierFactor"
                             )
 
                     #TODO: Isolation Foest Implementation
@@ -212,23 +218,18 @@ def run_outlier_benchmark(
                     )
                     embedding_model.reset_embedding_model()
 
+                    batch_dict, result_df = update_result_df(
+                        batch_dict=batch_dict, result_df=result_df, logger=logger
+                    )
+
+                    if save_result_dataframe:
+                        save_result_df(result_df=result_df,
+                                       output_path=result_dir,
+                                       benchmark_name="ADBench_Tabular",
+                                       timestamp=timestamp)
+
                 if get_device() in ["cuda", "mps"]:
                     empty_gpu_cache()
-
-    result_df = pl.from_dict(
-        result_outlier_dict,
-        schema={
-            "dataset_name": pl.Categorical,
-            "dataset_size": pl.UInt64,
-            "embedding_model": pl.Categorical,
-            "num_neighbors": pl.UInt64,
-            "auc_score": pl.Float64,
-            "time_to_compute_embeddings": pl.Float64,
-            "benchmark": pl.Categorical,
-            "distance_metric": pl.Categorical,
-            "task": pl.Categorical,
-        },
-    )
 
     return result_df
 
