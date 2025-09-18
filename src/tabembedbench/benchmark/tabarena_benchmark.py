@@ -60,6 +60,9 @@ def run_tabarena_benchmark(
         upper_bound_num_samples: Integer representing the maximum dataset size to
             consider for benchmarking. Datasets larger than this value will be skipped.
             Defaults to 100000.
+        upper_bound_num_features: Integer representing the maximum number of features
+            considered for benchmarking. Datasets with more features than this value
+            will be skipped. Defaults to 500.
         save_embeddings: Boolean indicating whether to save computed embeddings during
             the benchmark process. Defaults to False.
         neighbors: Integer specifying the number of neighbors to use for KNN.
