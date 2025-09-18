@@ -135,11 +135,5 @@ def prepare_data_for_torch(X: np.ndarray, device: str = "cpu") -> torch.Tensor:
 def check_tabpfn_dataset_restrictions(X: np.ndarray) -> bool:
     raise NotImplementedError
 
-
 def check_tabicl_dataset_restrictions(X: np.ndarray) -> bool:
-    num_samples, num_features = X.shape
-
-    if num_samples > 100000 or num_features > 500:
-        return True
-    else:
-        return False
+    raise NotImplementedError
