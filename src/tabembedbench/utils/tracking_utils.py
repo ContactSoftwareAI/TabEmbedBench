@@ -13,7 +13,6 @@ RESULT_DF_SCHEMA = {
     "auc_score": pl.Float64,
     "mse_score": pl.Float64,
     "time_to_compute_embeddings": pl.Float64,
-    "benchmark": pl.Categorical,
     "distance_metric": pl.Categorical,
     "task": pl.Categorical,
     "algorithm": pl.Categorical,
@@ -29,7 +28,6 @@ EMPTY_BATCH_DICT = {
         "mse_score": [],
         "task": [],
         "time_to_compute_embeddings": [],
-        "benchmark": [],
         "distance_metric": [],
         "algorithm": [],
         "emb_dim": []
@@ -72,7 +70,7 @@ def update_batch_dict(
     auc_score: float = None,
     mse_score: float = None,
     distance_metric: str = "euclidean",
-    emb_dim: int = None,
+    embedding_dimension: int = None,
 ):
     """
     Updates the provided batch dictionary with results and parameters of an embedding
@@ -96,7 +94,7 @@ def update_batch_dict(
             during evaluation. Defaults to None.
         distance_metric (str, optional): The distance metric used, such as
             "euclidean" or "cosine". Defaults to "euclidean".
-        emb_dim (int, optional): The dimensionality of the embeddings.
+        embedding_dimension (int, optional): The dimensionality of the embeddings.
             Defaults to None.
     """
     batch_dict["dataset_name"].append(dataset_name)
@@ -104,11 +102,10 @@ def update_batch_dict(
     batch_dict["embedding_model"].append(embedding_model_name)
     batch_dict["num_neighbors"].append(num_neighbors)
     batch_dict["time_to_compute_embeddings"].append(compute_time)
-    batch_dict["benchmark"].append("tabarena")
     batch_dict["distance_metric"].append(distance_metric)
     batch_dict["task"].append(task)
     batch_dict["algorithm"].append(algorithm)
-    batch_dict["emb_dim"].append(emb_dim)
+    batch_dict["emb_dim"].append(embedding_dimension)
 
     if auc_score is not None:
         batch_dict["auc_score"].append(auc_score)

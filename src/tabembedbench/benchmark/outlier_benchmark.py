@@ -170,6 +170,7 @@ def run_outlier_benchmark(
                              f"Compute Embeddings.")
 
                 X_embed, compute_embeddings_time = embedding_model.compute_embeddings(X)
+                embed_dim = X_embed.shape[-1]
 
                 if save_embeddings:
                     embedding_file = (
@@ -222,7 +223,8 @@ def run_outlier_benchmark(
                                 task="Outlier Detection",
                                 auc_score=score_auc,
                                 distance_metric=distance_metric,
-                                algorithm="LocalOutlierFactor"
+                                algorithm="LocalOutlierFactor",
+                                embedding_dimension=embed_dim,
                             )
 
                     # Isolation Forest Implementation
@@ -253,7 +255,8 @@ def run_outlier_benchmark(
                             task="Outlier Detection",
                             auc_score=score_auc,
                             distance_metric='',  # Not applicable for Isolation Forest
-                            algorithm="IsolationForest"
+                            algorithm="IsolationForest",
+                            embedding_dimension=embed_dim,
                         )
 
                 logger.debug(

@@ -166,6 +166,8 @@ def run_tabarena_benchmark(
                         )
                         continue
 
+                    embedding_dim = X_train_embed.shape[-1]
+
                     if save_embeddings:
                         embedding_file = (
                             f"task_{embedding_model.name}"
@@ -215,7 +217,7 @@ def run_tabarena_benchmark(
                                     distance_metric=distance_metric,
                                     task=task.task_type,
                                     algorithm="KNNClassifier",
-                                    emb_dim=X_train_embed.shape[1]
+                                    embedding_dimension=embedding_dim
                                 )
 
                             elif task.task_type == "Supervised Regression":
@@ -247,7 +249,7 @@ def run_tabarena_benchmark(
                                     distance_metric=distance_metric,
                                     task=task.task_type,
                                     algorithm="KNNRegressor",
-                                    emb_dim=X_train_embed.shape[1],
+                                    embedding_dimension=embedding_dim,
                                 )
                     logger.debug(
                         f"Finished experiment for {embedding_model.name} and "
