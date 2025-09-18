@@ -206,7 +206,7 @@ def run_tabarena_benchmark(
                                 )
 
                             elif task.task_type == "Supervised Regression":
-                                score_msr, exception_message = _evaluate_regression(
+                                score_mse, exception_message = _evaluate_regression(
                                     X_train_embed,
                                     X_test_embed,
                                     y_train,
@@ -230,7 +230,7 @@ def run_tabarena_benchmark(
                                     embedding_model_name=embedding_model.name,
                                     num_neighbors=num_neighbors,
                                     compute_time=compute_embeddings_time,
-                                    msr_score=score_msr,
+                                    mse_score=score_mse,
                                     distance_metric=distance_metric,
                                     task=task.task_type,
                                     algorithm="KNNRegressor"
@@ -304,9 +304,9 @@ def _evaluate_regression(
         knn_regressor = KNeighborsRegressor(**knn_params)
         knn_regressor.fit(X_train_embed, y_train)
         y_pred = knn_regressor.predict(X_test_embed)
-        score_msr = mean_squared_error(y_test, y_pred)
+        score_mse = mean_squared_error(y_test, y_pred)
 
-        return score_msr, None
+        return score_mse, None
     except Exception as e:
         return None, e
 
