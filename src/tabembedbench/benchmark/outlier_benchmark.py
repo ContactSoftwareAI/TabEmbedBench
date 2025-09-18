@@ -12,6 +12,7 @@ from sklearn.neighbors import (
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.dataset_utils import (
     download_adbench_tabular_datasets,
+    check_tabicl_dataset_restrictions
 )
 from tabembedbench.utils.embedding_utils import check_nan
 from tabembedbench.utils.logging_utils import get_benchmark_logger
@@ -52,6 +53,8 @@ def run_outlier_benchmark(
     save_result_dataframe: bool = True,
     result_dir: str | Path = "result_outlier",
     timestamp: str = TIMESTAMP,
+    tabicl_run: bool = False,
+    tabpfn_run: bool = False
 ):
     """Runs an outlier detection benchmark using the provided embedding models
     and datasets. It uses the tabular datasets from the ADBench benchmark [1]
@@ -89,6 +92,12 @@ def run_outlier_benchmark(
             be saved. Defaults to "result_outlier".
         timestamp: Optional timestamp string to use for saving the result dataframe.
             Defaults to the current timestamp.
+        tabicl_run: Boolean flag to determine whether to run the benchmark only
+            on datasets that satisfy the conditions outlined in the TabICL paper.
+            Defaults to False.
+        tabpfn_run: Boolean flag to determine whether to run the benchmark only
+            on datasets that satisfy the conditions outlined in the TabPFN paper.
+            Defaults to False.
 
     Returns:
         pl.DataFrame: A Polars DataFrame containing the benchmark results, including
@@ -138,6 +147,18 @@ def run_outlier_benchmark(
                         f"exceeds limit {upper_bound_num_samples}"
                     )
                     continue
+                if tabpfn_run:
+                    continue
+
+                if tabicl_run:
+                    if check_tabicl_dataset_restrictions(dataset["X"]):
+                        logger.warning(
+                            f"Skipping {dataset_name} - dataset size "
+                            f"{num_samples} exceeds the conditions"
+                            f"outlined in the TabICL paper."
+                        )
+                        continue
+
                 logger.info(
                     f"Running experiments on {dataset_name}. "
                     f"Samples: {num_samples}, "
