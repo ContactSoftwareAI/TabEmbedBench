@@ -22,7 +22,7 @@ This directory contains the benchmarking utilities for TabEmbedBench. It provide
   - Task‑specific benchmark using OpenML’s TabArena suite (classification and regression tasks).
   - Main function: `run_tabarena_benchmark(...)`
     - Downloads/splits datasets via OpenML, transforms to numerical features, computes embeddings, and evaluates KNN classifiers/regressors with various neighbors and distance metrics.
-    - Returns a Polars DataFrame with metrics (AUC for classification, MSR for regression), compute time, and metadata.
+    - Returns a Polars DataFrame with metrics (AUC for classification, MSE for regression), compute time, and metadata.
   - Helpers:
     - `_evaluate_classification(...)` (KNN + ROC‑AUC)
     - `_evaluate_regression(...)` (KNN + mean squared error)

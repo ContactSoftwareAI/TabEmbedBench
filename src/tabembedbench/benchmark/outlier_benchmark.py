@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 from sklearn.metrics import roc_auc_score
+from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import (
     LocalOutlierFactor,
 )
@@ -210,23 +211,52 @@ def run_outlier_benchmark(
                                 algorithm="LocalOutlierFactor"
                             )
 
-                    #TODO: Isolation Foest Implementation
-
+                    # Isolation Forest Implementation
                     logger.debug(
+                        f"Start Outlier Detection for {embedding_model.name} "
+                        f"with Isolation Forest."
+                    )
+
+                    score_auc, exception_message = _evaluate_isolation_forest(
+                        X_embed=X_embed,
+                        y_true=y,
+                    )
+
+                    if exception_message is not None:
+                        logger.warning(
+                            f"Error occurred while running experiment for "
+                            f"{embedding_model.name} with "
+                            f"Isolation Forest: {exception_message}"
+                        )
+                    else:
+                        update_batch_dict(
+                            batch_dict=batch_dict,
+                            dataset_name=dataset_file.stem,
+                            dataset_size=X.shape[0],
+                            embedding_model_name=embedding_model.name,
+                            num_neighbors=0,  # Not applicable for Isolation Forest
+                            compute_time=compute_embeddings_time,
+                            task="Outlier Detection",
+                            auc_score=score_auc,
+                            distance_metric='',  # Not applicable for Isolation Forest
+                            algorithm="IsolationForest"
+                        )
+
+                logger.debug(
                         f"Finished experiment for {embedding_model.name} and "
                         f"resetting the model."
                     )
-                    embedding_model.reset_embedding_model()
+                embedding_model.reset_embedding_model()
 
-                    batch_dict, result_df = update_result_df(
-                        batch_dict=batch_dict, result_df=result_df, logger=logger
-                    )
+                batch_dict, result_df = update_result_df(
+                    batch_dict=batch_dict, result_df=result_df, logger=logger
+                )
 
-                    if save_result_dataframe:
-                        save_result_df(result_df=result_df,
-                                       output_path=result_dir,
-                                       benchmark_name="ADBench_Tabular",
-                                       timestamp=timestamp)
+                if save_result_dataframe:
+                    save_result_df(result_df=result_df,
+                                   output_path=result_dir,
+                                   benchmark_name="ADBench_Tabular",
+                                   timestamp=timestamp)
 
                 if get_device() in ["cuda", "mps"]:
                     empty_gpu_cache()
@@ -276,6 +306,58 @@ def _evaluate_local_outlier_factor(
         lof.fit_predict(X_embed)
         neg_outlier_factor = (-1) * lof.negative_outlier_factor_
         score_auc = roc_auc_score(y_true, neg_outlier_factor)
+
+        return score_auc, None
+    except Exception as e:
+        return None, e
+
+
+def _evaluate_isolation_forest(
+        X_embed: np.ndarray,
+        y_true: np.ndarray,
+        contamination: float = "auto",
+        n_estimators: int = 100,
+):
+    """
+    Evaluates the Isolation Forest model to identify outlier detection
+    performance by computing the AUROC score for given input data.
+
+    This function utilizes the Isolation Forest algorithm to compute the
+    anomaly score for each data point in the provided dataset. It then evaluates
+    the performance of the outlier detection by calculating the ROC AUC score
+    against the ground-truth labels.
+
+    Args:
+        X_embed (np.ndarray): The embedded feature space data used for Isolation
+            Forest computation.
+        y_true (np.ndarray): Ground-truth binary labels indicating which data
+            points are outliers.
+        contamination (float or str): The amount of contamination of the data set,
+            i.e., the proportion of outliers in the data set. Defaults to "auto".
+        n_estimators (int): The number of base estimators in the ensemble.
+            Defaults to 100.
+
+    Returns:
+        tuple: A tuple consisting of the following:
+            - float: The computed ROC AUC score indicating model performance, or
+              None in case of an error.
+            - Exception: An exception object if an error occurred during calculation,
+              otherwise None.
+    """
+    try:
+        iso_forest = IsolationForest(
+            contamination=contamination,
+            n_estimators=n_estimators,
+            n_jobs=-1,
+        )
+
+        iso_forest.fit(X_embed)
+        # Get anomaly scores (negative values for outliers)
+        anomaly_scores = iso_forest.decision_function(X_embed)
+        # Convert to positive scores (higher values = more anomalous)
+        outlier_scores = -anomaly_scores
+
+        score_auc = roc_auc_score(y_true, outlier_scores)
 
         return score_auc, None
     except Exception as e:
