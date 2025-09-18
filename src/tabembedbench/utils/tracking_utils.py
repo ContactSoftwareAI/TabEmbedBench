@@ -12,26 +12,14 @@ RESULT_DF_SCHEMA = {
     "num_neighbors": pl.UInt64,
     "auc_score": pl.Float64,
     "mse_score": pl.Float64,
-    "time_to_compute_embeddings": pl.Float64,
+    "time_to_compute_train_embeddings": pl.Float64,
     "distance_metric": pl.Categorical,
     "task": pl.Categorical,
     "algorithm": pl.Categorical,
     "emb_dim": pl.UInt64,
+    "prediction_time": pl.Float64,
+    "time_to_compute_test_embeddings": pl.Float64,
 }
-
-EMPTY_BATCH_DICT = {
-        "dataset_name": [],
-        "dataset_size": [],
-        "embedding_model": [],
-        "num_neighbors": [],
-        "auc_score": [],
-        "mse_score": [],
-        "task": [],
-        "time_to_compute_embeddings": [],
-        "distance_metric": [],
-        "algorithm": [],
-        "emb_dim": []
-    }
 
 
 def get_batch_dict_result_df():
@@ -49,7 +37,7 @@ def get_batch_dict_result_df():
         tuple: A tuple containing the batch dictionary and the empty result DataFrame.
 
     """
-    batch_dict = EMPTY_BATCH_DICT
+    batch_dict = {key: [] for key in RESULT_DF_SCHEMA.keys()}
 
     result_df = pl.DataFrame(
         schema=RESULT_DF_SCHEMA,
@@ -64,13 +52,15 @@ def update_batch_dict(
     dataset_size: int,
     embedding_model_name: str,
     num_neighbors: int,
-    compute_time: float,
+    time_to_compute_train_embeddings: float,
     task: str,
     algorithm: str,
     auc_score: float = None,
     mse_score: float = None,
     distance_metric: str = "euclidean",
     embedding_dimension: int = None,
+    prediction_time: float = None,
+    time_to_compute_test_embeddings: float = None,
 ):
     """
     Updates the provided batch dictionary with results and parameters of an embedding
@@ -85,7 +75,7 @@ def update_batch_dict(
         dataset_size (int): The size, in number of records, of the dataset.
         embedding_model_name (str): The name of the embedding model being evaluated.
         num_neighbors (int): The number of neighbors used in the benchmark.
-        compute_time (float): The time taken to compute the embeddings, in seconds.
+        time_to_compute_train_embeddings (float): The time taken to compute the embeddings, in seconds.
         task (str): The type of task being performed during the benchmark run.
         algorithm (str): The algorithm used for the benchmark task.
         auc_score (float, optional): The AUC (Area Under Curve) score achieved
@@ -96,16 +86,22 @@ def update_batch_dict(
             "euclidean" or "cosine". Defaults to "euclidean".
         embedding_dimension (int, optional): The dimensionality of the embeddings.
             Defaults to None.
+        prediction_time: (float, optional): The time taken to make predictions using
+            the embeddings. Defaults to None.
+        time_to_compute_test_embeddings (float, optional): The time taken to compute
+            embeddings for the test dataset. Defaults to None.
     """
     batch_dict["dataset_name"].append(dataset_name)
     batch_dict["dataset_size"].append(dataset_size)
     batch_dict["embedding_model"].append(embedding_model_name)
     batch_dict["num_neighbors"].append(num_neighbors)
-    batch_dict["time_to_compute_embeddings"].append(compute_time)
+    batch_dict["time_to_compute_train_embeddings"].append(time_to_compute_train_embeddings)
     batch_dict["distance_metric"].append(distance_metric)
     batch_dict["task"].append(task)
     batch_dict["algorithm"].append(algorithm)
     batch_dict["emb_dim"].append(embedding_dimension)
+    batch_dict["prediction_time"].append(prediction_time)
+    batch_dict["time_to_compute_test_embeddings"].append(time_to_compute_test_embeddings)
 
     if auc_score is not None:
         batch_dict["auc_score"].append(auc_score)
@@ -113,6 +109,8 @@ def update_batch_dict(
     else:
         batch_dict["auc_score"].append((-1) * np.inf)
         batch_dict["mse_score"].append(mse_score)
+
+    return batch_dict
 
 
 def update_result_df(
@@ -154,7 +152,7 @@ def update_result_df(
 
     result_df = result_df.unique(maintain_order=True)
 
-    batch_dict = EMPTY_BATCH_DICT
+    batch_dict = {key: [] for key in RESULT_DF_SCHEMA.keys()}
 
     return batch_dict, result_df
 
@@ -188,4 +186,3 @@ def save_result_df(
 
     result_df.write_parquet(parquet_file)
     result_df.write_csv(csv_file)
-
