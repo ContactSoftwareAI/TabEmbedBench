@@ -11,23 +11,17 @@ from tabembedbench.utils.torch_utils import get_device
 
 device = get_device()
 
-tabicl_wo_preproccessing = get_tabicl_embedding_model(model_path="auto")
-
-tabicl_wo_preproccessing.name = "tabicl-classifier-v1.1-0506"
-
 tabicl_with_preproccessing = get_tabicl_embedding_model(
     model_path="auto", preprocess_data=True
 )
 
 tabicl_with_preproccessing.name = "tabicl-classifier-v1.1-0506_preprocessed"
 
-tabicl_wo_preproccessing.to(device)
 tabicl_with_preproccessing.to(device)
 
 tablevector = TabVectorizerEmbedding()
 
-#models = [tablevector, tabicl_with_preproccessing, tabicl_wo_preproccessing]
-models = []
+models = [tablevector, tabicl_with_preproccessing]
 
 for n in range(5, 10):
     print(f"n={2**n}")
@@ -40,11 +34,10 @@ result_df = run_benchmark(
     save_embeddings=False,
     exclude_adbench_datasets=["3_backdoor.npz"],
     exclude_adbench_image_datasets=True,
-    upper_bound_dataset_size=10000,
+    upper_bound_dataset_size=50000,
+    upper_bound_num_feautres=500,
     run_outlier=True,
     run_task_specific=False,
     save_logs=True,
-    data_dir= r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data",
-    adbench_dataset_path=r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\adbench_tabular_datasets",
     logging_level=logging.DEBUG,
 )
