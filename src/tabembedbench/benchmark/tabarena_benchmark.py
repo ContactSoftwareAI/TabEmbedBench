@@ -31,7 +31,8 @@ def run_tabarena_benchmark(
     embedding_models: list[BaseEmbeddingGenerator],
     tabarena_version: str = "tabarena-v0.1",
     tabarena_lite: bool = True,
-    upper_bound_dataset_size: int = 100000,
+    upper_bound_num_samples: int = 100000,
+    upper_bound_num_features: int = 500,
     save_embeddings: bool = False,
     neighbors: int = 51,
     neighbors_step: int = 5,
@@ -56,9 +57,12 @@ def run_tabarena_benchmark(
             Defaults to "tabarena-v0.1".
         tabarena_lite: Boolean indicating whether to run in lite mode. If True, uses fewer
             splits and repetitions for quicker evaluations. Defaults to True.
-        upper_bound_dataset_size: Integer representing the maximum dataset size to
+        upper_bound_num_samples: Integer representing the maximum dataset size to
             consider for benchmarking. Datasets larger than this value will be skipped.
             Defaults to 100000.
+        upper_bound_num_features: Integer representing the maximum number of features
+            considered for benchmarking. Datasets with more features than this value
+            will be skipped. Defaults to 500.
         save_embeddings: Boolean indicating whether to save computed embeddings during
             the benchmark process. Defaults to False.
         neighbors: Integer specifying the number of neighbors to use for KNN.
@@ -89,11 +93,19 @@ def run_tabarena_benchmark(
         task = openml.tasks.get_task(task_id)
         dataset = task.get_dataset()
 
-        if dataset.qualities["NumberOfInstances"] > upper_bound_dataset_size:
+        if dataset.qualities["NumberOfInstances"] > upper_bound_num_samples:
             logger.warning(
                 f"Skipping {dataset.name} - dataset size "
                 f"{dataset.qualities["NumberOfInstances"]} exceeds "
-                f"limit {upper_bound_dataset_size}"
+                f"limit {upper_bound_num_samples}"
+            )
+            continue
+
+        if dataset.qualities["NumberOfFeatures"] > upper_bound_num_features:
+            logger.warning(
+                f"Skipping {dataset.name} - number of features size "
+                f"{dataset.qualities["NumberOfFeatures"]} exceeds "
+                f"limit {upper_bound_num_features}"
             )
             continue
 
@@ -202,7 +214,8 @@ def run_tabarena_benchmark(
                                     auc_score=score_auc,
                                     distance_metric=distance_metric,
                                     task=task.task_type,
-                                    algorithm="KNNClassifier"
+                                    algorithm="KNNClassifier",
+                                    emb_dim=X_train_embed.shape[1]
                                 )
 
                             elif task.task_type == "Supervised Regression":
@@ -233,7 +246,8 @@ def run_tabarena_benchmark(
                                     mse_score=score_mse,
                                     distance_metric=distance_metric,
                                     task=task.task_type,
-                                    algorithm="KNNRegressor"
+                                    algorithm="KNNRegressor",
+                                    emb_dim=X_train_embed.shape[1],
                                 )
                     logger.debug(
                         f"Finished experiment for {embedding_model.name} and "

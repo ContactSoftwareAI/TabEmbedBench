@@ -12,7 +12,7 @@ from sklearn.neighbors import (
 
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.dataset_utils import (
-    download_adbench_tabular_datasets,
+    download_adbench_tabular_datasets
 )
 from tabembedbench.utils.embedding_utils import check_nan
 from tabembedbench.utils.logging_utils import get_benchmark_logger
@@ -47,9 +47,10 @@ def run_outlier_benchmark(
     exclude_image_datasets: bool = False,
     save_embeddings: bool = False,
     upper_bound_num_samples: int = 10000,
+    upper_bound_num_features: int = 500,
     neighbors: int = 51,
     neighbors_step: int = 5,
-    distance_metrics: list[str] = ["euclidean", "cosine"],
+    distance_metrics=None,
     save_result_dataframe: bool = True,
     result_dir: str | Path = "result_outlier",
     timestamp: str = TIMESTAMP,
@@ -79,6 +80,9 @@ def run_outlier_benchmark(
         upper_bound_num_samples: Integer specifying the maximum size of rows
             (in number of samples) to include in the benchmark. Datasets exceeding
             this size will be skipped. Defaults to 10000.
+        upper_bound_num_features: Integer specifying the maximum number of features
+            to include in the benchmark. Datasets with more features than this
+            value will be skipped. Defaults to 500.
         neighbors: Integer specifying the number of neighbors to use for outlier
         neighbors_step: Integer specifying the step size for neighbors.
             Defaults to 5.
@@ -101,6 +105,8 @@ def run_outlier_benchmark(
         [1] Han, S., et al. (2022). "Adbench: Anomaly detection benchmark."
             Advances in neural information processing systems, 35, 32142-32159.
     """
+    if distance_metrics is None:
+        distance_metrics = ["euclidean", "cosine"]
     if dataset_paths is None:
         dataset_paths = Path("data/adbench_tabular_datasets")
         if not dataset_paths.exists():
@@ -139,6 +145,14 @@ def run_outlier_benchmark(
                         f"exceeds limit {upper_bound_num_samples}"
                     )
                     continue
+                if num_features > upper_bound_num_features:
+                    logger.warning(
+                        f"Skipping {dataset_name} "
+                        f"- number of features size {num_features}"
+                        f"exceeds limit {upper_bound_num_features}"
+                    )
+                    continue
+
                 logger.info(
                     f"Running experiments on {dataset_name}. "
                     f"Samples: {num_samples}, "

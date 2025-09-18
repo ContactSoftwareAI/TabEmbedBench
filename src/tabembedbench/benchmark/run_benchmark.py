@@ -20,6 +20,7 @@ def run_benchmark(
     tabarena_version: str = "tabarena-v0.1",
     tabarena_lite: bool = True,
     upper_bound_dataset_size: int = 10000,
+    upper_bound_num_feautres: int = 500,
     save_embeddings: bool = False,
     run_outlier: bool = True,
     run_task_specific: bool = True,
@@ -56,6 +57,8 @@ def run_benchmark(
             subset of TabArena. Defaults to True.
         upper_bound_dataset_size (int): Maximum number of data samples to process in any
             single dataset. Defaults to 10000.
+        upper_bound_num_feautres (int): Maximum number of features to process in any
+            single dataset. Defaults to 500.
         save_embeddings (bool): Whether to save intermediate and final embeddings to disk.
             Defaults to False.
         run_outlier (bool): Whether to perform the outlier detection benchmarks.
@@ -154,6 +157,7 @@ def run_benchmark(
                     exclude_datasets=exclude_adbench_datasets,
                     exclude_image_datasets=exclude_adbench_image_datasets,
                     upper_bound_num_samples=upper_bound_dataset_size,
+                    upper_bound_num_features=upper_bound_num_feautres,
                     result_dir=result_dir,
                     save_result_dataframe=save_result_dataframe,
                     timestamp=timestamp,
@@ -172,7 +176,8 @@ def run_benchmark(
                 embedding_models=models_to_process,
                 tabarena_version=tabarena_version,
                 tabarena_lite=tabarena_lite,
-                upper_bound_dataset_size=upper_bound_dataset_size,
+                upper_bound_num_samples=upper_bound_dataset_size,
+                upper_bound_num_features=upper_bound_num_feautres,
                 save_embeddings=save_embeddings,
                 timestamp=timestamp,
                 result_dir=result_dir,
