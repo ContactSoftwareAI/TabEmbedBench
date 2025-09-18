@@ -149,6 +149,8 @@ def update_result_df(
 
     result_df = pl.concat([result_df, batch_df], how="vertical")
 
+    result_df = result_df.unique(maintain_order=True)
+
     batch_dict = EMPTY_BATCH_DICT
 
     return batch_dict, result_df
@@ -178,6 +180,14 @@ def save_result_df(
 
     output_file = Path(output_path / f"results_{benchmark_name}_{timestamp}")
 
-    result_df.write_parquet(output_file.with_suffix(".parquet"))
+    parquet_file = output_file.with_suffix(".parquet")
+    csv_file = output_file.with_suffix(".csv")
 
-    result_df.write_csv(output_file.with_suffix(".csv"))
+    if parquet_file.exists():
+        parquet_file.unlink()
+    if csv_file.exists():
+        csv_file.unlink()
+
+    result_df.write_parquet(parquet_file)
+    result_df.write_csv(csv_file)
+
