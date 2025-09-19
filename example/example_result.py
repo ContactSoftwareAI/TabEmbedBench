@@ -34,10 +34,10 @@ result_df = run_benchmark(
     save_embeddings=False,
     exclude_adbench_datasets=["3_backdoor.npz"],
     exclude_adbench_image_datasets=True,
-    upper_bound_dataset_size=50000,
+    upper_bound_dataset_size=100000,
     upper_bound_num_feautres=500,
     run_outlier=True,
-    run_task_specific=False,
+    run_task_specific=True,
     save_logs=True,
     logging_level=logging.DEBUG,
 )

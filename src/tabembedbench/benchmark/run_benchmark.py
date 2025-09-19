@@ -1,14 +1,55 @@
-import logging
+from contextlib import contextmanager
 from datetime import datetime
+import gc
+import logging
 from pathlib import Path
-from typing import Dict
 
 import polars as pl
+import torch
 
 from tabembedbench.benchmark.outlier_benchmark import run_outlier_benchmark
 from tabembedbench.benchmark.tabarena_benchmark import run_tabarena_benchmark
 from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
 from tabembedbench.utils.logging_utils import setup_unified_logging
+
+
+@contextmanager
+def benchmark_context(models_to_process, main_logger, context_name="benchmark"):
+    """
+    Provides a context manager to benchmark and manage the lifecycle of a collection
+    of models. The context logs the start and end of the process, ensures embedded
+    models are reset, clears memory, and optionally flushes GPU memory. Useful for
+    efficient and clean benchmarking of models.
+
+    Args:
+        models_to_process (List[Any]): Collection of models to process within
+            the context.
+        main_logger (logging.Logger): Logger instance for logging context lifecycle
+            events and warnings.
+        context_name (str, optional): Name for the context to appear in the logs.
+            Defaults to "benchmak".
+
+    Yields:
+        List[Any]: The same list of models provided in 'models_to_process'.
+    """
+    try:
+        main_logger.info(f"Starting {context_name} at {datetime.now()}")
+        yield models_to_process
+    finally:
+        main_logger.info(f"Cleaning up {context_name} at {datetime.now()}")
+        for model in models_to_process:
+            try:
+                model.reset_embedding_model()
+            except Exception as e:
+                main_logger.warning(f"Error occurred during resetting "
+                                    f"{model.name}: {e}")
+
+        gc.collect()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        main_logger.info(f"Finished {context_name} at {datetime.now()}")
 
 
 def run_benchmark(
@@ -145,25 +186,30 @@ def run_benchmark(
         for model in models_to_process:
             if not model.task_only:
                 outlier_embedding_models.append(model)
-        main_logger.debug(f"Outlier embedding models:"
-                         f" {[outlier_embedding_model.name for outlier_embedding_model in outlier_embedding_models]}")
+        main_logger.debug(
+            f"Outlier embedding models:"
+            f" {[model.name for model in outlier_embedding_models]}"
+        )
         if len(outlier_embedding_models) > 0:
-            main_logger.debug("Start outlier detection function")
+            main_logger.debug("Start outlier detection benchmark")
             try:
-                result_outlier_df = run_outlier_benchmark(
-                    embedding_models=outlier_embedding_models,
-                    dataset_paths=adbench_dataset_path,
-                    save_embeddings=save_embeddings,
-                    exclude_datasets=exclude_adbench_datasets,
-                    exclude_image_datasets=exclude_adbench_image_datasets,
-                    upper_bound_num_samples=upper_bound_dataset_size,
-                    upper_bound_num_features=upper_bound_num_feautres,
-                    result_dir=result_dir,
-                    save_result_dataframe=save_result_dataframe,
-                    timestamp=timestamp,
-                )
+                with benchmark_context(outlier_embedding_models, main_logger,
+                                       "ADBench Outlier Detection"):
+                    result_outlier_df = run_outlier_benchmark(
+                        embedding_models=outlier_embedding_models,
+                        dataset_paths=adbench_dataset_path,
+                        save_embeddings=save_embeddings,
+                        exclude_datasets=exclude_adbench_datasets,
+                        exclude_image_datasets=exclude_adbench_image_datasets,
+                        upper_bound_num_samples=upper_bound_dataset_size,
+                        upper_bound_num_features=upper_bound_num_feautres,
+                        result_dir=result_dir,
+                        save_result_dataframe=save_result_dataframe,
+                        timestamp=timestamp,
+                    )
             except Exception as e:
-                main_logger.error(f"Error occurred during outlier detection benchmark: {e}")
+                main_logger.error(f"Error occurred during "
+                                  f"outlier detection benchmark: {e}")
                 result_outlier_df = pl.DataFrame()
         else:
             raise ValueError("No outlier models provided.")
@@ -172,17 +218,18 @@ def run_benchmark(
     if run_task_specific:
         main_logger.info("Running task-specific benchmark (TabArena Lite)...")
         try:
-            result_tabarena_df = run_tabarena_benchmark(
-                embedding_models=models_to_process,
-                tabarena_version=tabarena_version,
-                tabarena_lite=tabarena_lite,
-                upper_bound_num_samples=upper_bound_dataset_size,
-                upper_bound_num_features=upper_bound_num_feautres,
-                save_embeddings=save_embeddings,
-                timestamp=timestamp,
-                result_dir=result_dir,
-                save_result_dataframe=save_result_dataframe
-            )
+            with benchmark_context(models_to_process, main_logger, "TabArena Lite"):
+                result_tabarena_df = run_tabarena_benchmark(
+                    embedding_models=models_to_process,
+                    tabarena_version=tabarena_version,
+                    tabarena_lite=tabarena_lite,
+                    upper_bound_num_samples=upper_bound_dataset_size,
+                    upper_bound_num_features=upper_bound_num_feautres,
+                    save_embeddings=save_embeddings,
+                    timestamp=timestamp,
+                    result_dir=result_dir,
+                    save_result_dataframe=save_result_dataframe
+                )
         except Exception as e:
             main_logger.error(f"Error occurred during task-specific benchmark: {e}")
             result_tabarena_df = pl.DataFrame()
