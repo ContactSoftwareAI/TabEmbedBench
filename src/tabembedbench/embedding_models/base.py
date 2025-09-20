@@ -131,6 +131,7 @@ class BaseEmbeddingGenerator(ABC):
         self,
         X_train: np.ndarray,
         X_test: np.ndarray = None,
+        outlier: bool = False,
     ):
         """
         Computes embeddings for training and optionally test data. The embeddings are preprocessed
@@ -139,6 +140,8 @@ class BaseEmbeddingGenerator(ABC):
         Args:
             X_train (np.ndarray): Data for training.
             X_test (np.ndarray, optional): Data for testing. Default is None.
+            outlier (bool): Whether to do preprocessing for outlier benchmark.
+                Default is False.
 
         Returns:
             tuple: If `X_test` is provided, returns a tuple containing embeddings of
@@ -146,7 +149,7 @@ class BaseEmbeddingGenerator(ABC):
                 embeddings. Otherwise, returns a tuple containing embeddings of training
                 data and the time taken to compute embeddings.
         """
-        X_train = self._preprocess_data(X_train, train=True)
+        X_train = self._preprocess_data(X_train, train=True, outlier=outlier)
 
         start_time = time.time()
         X_train_embed = self._compute_embeddings(X_train)
