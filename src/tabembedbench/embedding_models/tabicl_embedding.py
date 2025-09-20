@@ -11,6 +11,7 @@ from sklearn.preprocessing import (
     QuantileTransformer,
     RobustScaler,
 )
+from sklearn.utils.validation import check_is_fitted
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
