@@ -28,7 +28,7 @@ class TabVectorizerEmbedding(BaseEmbeddingGenerator):
     def task_only(self):
         return False
 
-    def _preprocess_data(self, X, train=True):
+    def _preprocess_data(self, X, train=True, outlier=False):
         """
         Preprocesses the input data by converting it from a NumPy array to a
         specific format and optionally fitting it using the model.

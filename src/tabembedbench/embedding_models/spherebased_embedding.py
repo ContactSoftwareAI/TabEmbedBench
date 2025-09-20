@@ -208,7 +208,7 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
 
         return embeddings
 
-    def _preprocess_data(self, data: np.ndarray, train: bool = True):
+    def _preprocess_data(self, data: np.ndarray, train: bool = True, outlier: bool = False):
         if train:
             self.fit(data)
 
