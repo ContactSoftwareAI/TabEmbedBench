@@ -70,7 +70,12 @@ class BaseEmbeddingGenerator(ABC):
         self._name = value
 
     @abstractmethod
-    def _preprocess_data(self, X: np.ndarray, train: bool = True) -> np.ndarray:
+    def _preprocess_data(
+            self,
+            X: np.ndarray,
+            train: bool = True,
+            outlier: bool = False,
+    ) -> np.ndarray:
         """Preprocess the input data for training or inference.
 
         This method is designed to perform preprocessing operations on the

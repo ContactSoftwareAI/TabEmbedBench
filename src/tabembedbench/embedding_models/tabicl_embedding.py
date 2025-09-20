@@ -3,10 +3,22 @@ import inspect
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import (
+    StandardScaler,
+    PowerTransformer,
+    QuantileTransformer,
+    RobustScaler,
+)
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
-from tabicl.sklearn.preprocessing import PreprocessingPipeline
+from tabicl.sklearn.preprocessing import (
+    CustomStandardScaler,
+    RTDLQuantileTransformer,
+    PreprocessingPipeline
+)
 from torch import nn
 from typing import Optional, Union
 
@@ -114,6 +126,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         self.normalize_embeddings = normalize_embeddings
         self._preprocess_tabicl_data = preprocess_tabicl_data
         self.preprocess_pipeline = PreprocessingPipeline()
+        self.outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
         self.eval()
 
     def forward(
@@ -156,7 +169,12 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
     def task_only(self) -> bool:
         return False
 
-    def _preprocess_data(self, X: np.ndarray, train: bool = True):
+    def _preprocess_data(
+            self,
+            X: np.ndarray,
+            train: bool = True,
+            outlier: bool = False,
+    ):
         """Preprocesses the input data by applying normalization and preprocessing pipelines
         based on the mode (training or inference). If normalization is enabled, the
         numerical transformation is applied to the data during training, creating a
@@ -175,10 +193,17 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         X_preprocess = X
 
         if train and self._preprocess_tabicl_data:
-            X_preprocess = self.preprocess_pipeline.fit_transform(X_preprocess)
+            if outlier:
+                X_preprocess = (
+                    self.outlier_preprocessing_pipeline.fit_transform(X_preprocess))
+            else:
+                X_preprocess = self.preprocess_pipeline.fit_transform(X_preprocess)
         else:
             if self._preprocess_tabicl_data:
                 X_preprocess = self.preprocess_pipeline.transform(X_preprocess)
+            elif outlier:
+                X_preprocess = self.outlier_preprocessing_pipeline.transform(
+                    X_preprocess)
 
         return X_preprocess
 
@@ -223,6 +248,7 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
 
     def reset_embedding_model(self):
         self.preprocess_pipeline = PreprocessingPipeline()
+        self.outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
 
 
 def filter_params_for_class(cls, params_dict):
@@ -313,3 +339,127 @@ def get_tabicl_embedding_model(
     row_embedding_model.load_state_dict(state_dict, strict=False)
 
     return row_embedding_model
+
+# The code is taken from the original TabICL repo, only the
+# OutlierRemover is removed. The rest is similar to the original code.
+class OutlierPreprocessingPipeline(TransformerMixin, BaseEstimator):
+    """Preprocessing pipeline for tabular data.
+
+    This pipeline combines scaling, normalization, and outlier handling.
+
+    Parameters
+    ----------
+    normalization_method : str, default='power'
+        Method for normalization: 'power', 'quantile', 'quantile_tabr', 'robust', 'none'.
+
+    outlier_threshold : float, default=4.0
+        Z-score threshold for outlier detection.
+
+    random_state : int or None, default=None
+        Random seed for reproducible normalization.
+
+    Attributes
+    ----------
+    n_features_in_ : int
+        Number of features in the training data.
+
+    standard_scaler_ : CustomStandardScaler
+        The fitted standard scaler.
+
+    normalizer_ : sklearn transformers
+        The fitted normalization transformer (PowerTransformer, QuantileTransformer, RTDLQuantileTransformer, RobustScaler).
+
+    outlier_remover_ : OutlierRemover
+        The fitted outlier remover.
+
+    X_transformed_ : ndarray of shape (n_samples, n_features)
+        The transofrmed training input data. Save it for later use to avoid recomputation.
+    """
+
+    def __init__(
+        self, normalization_method: str = "power", outlier_threshold: float = 4.0, random_state: Optional[int] = None
+    ):
+        self.normalization_method = normalization_method
+        self.outlier_threshold = outlier_threshold
+        self.random_state = random_state
+
+    def fit(self, X, y=None):
+        """Fit the preprocessing pipeline.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            The input data.
+
+        y : None
+            Ignored.
+
+        Returns
+        -------
+        self : object
+            Returns self.
+        """
+        X = self._validate_data(X)
+
+        # 1. Apply standard scaling
+        self.standard_scaler_ = CustomStandardScaler()
+        X_scaled = self.standard_scaler_.fit_transform(X)
+
+        # 2. Apply normalization
+        if self.normalization_method != "none":
+            if self.normalization_method == "power":
+                self.normalizer_ = PowerTransformer(method="yeo-johnson", standardize=True)
+            elif self.normalization_method == "quantile":
+                self.normalizer_ = QuantileTransformer(output_distribution="normal", random_state=self.random_state)
+            elif self.normalization_method == "quantile_rtdl":
+                self.normalizer_ = Pipeline(
+                    [
+                        (
+                            "quantile_rtdl",
+                            RTDLQuantileTransformer(output_distribution="normal", random_state=self.random_state),
+                        ),
+                        ("std", StandardScaler()),
+                    ]
+                )
+            elif self.normalization_method == "robust":
+                self.normalizer_ = RobustScaler(unit_variance=True)
+            else:
+                raise ValueError(f"Unknown normalization method: {self.normalization_method}")
+
+            self.X_min_ = np.min(X_scaled, axis=0, keepdims=True)
+            self.X_max_ = np.max(X_scaled, axis=0, keepdims=True)
+            X_normalized = self.normalizer_.fit_transform(X_scaled)
+        else:
+            self.normalizer_ = None
+            X_normalized = X_scaled
+
+        return self
+
+    def transform(self, X):
+        """Apply the preprocessing pipeline.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            The input data.
+
+        Returns
+        -------
+        X_out : ndarray
+            Preprocessed data.
+        """
+        check_is_fitted(self)
+        X = self._validate_data(X, reset=False, copy=True)
+        # Standard scaling
+        X = self.standard_scaler_.transform(X)
+        # Normalization
+        if self.normalizer_ is not None:
+            try:
+                # this can fail in rare cases if there is an outlier in X that was not present in fit()
+                X = self.normalizer_.transform(X)
+            except ValueError:
+                # clip values to train min/max
+                X = np.clip(X, self.X_min_, self.X_max_)
+                X = self.normalizer_.transform(X)
+
+        return X
