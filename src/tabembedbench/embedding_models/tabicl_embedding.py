@@ -200,10 +200,11 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
                 X_preprocess = self.preprocess_pipeline.fit_transform(X_preprocess)
         else:
             if self._preprocess_tabicl_data:
-                X_preprocess = self.preprocess_pipeline.transform(X_preprocess)
-            elif outlier:
-                X_preprocess = self.outlier_preprocessing_pipeline.transform(
-                    X_preprocess)
+                if outlier:
+                    X_preprocess = self.outlier_preprocessing_pipeline.transform(
+                        X_preprocess)
+                else:
+                    X_preprocess = self.preprocess_pipeline.transform(X_preprocess)
 
         return X_preprocess
 
