@@ -7,7 +7,8 @@ import time
 import numpy as np
 import openml
 import polars as pl
-from sklearn.metrics import mean_squared_error, roc_auc_score
+import sklearn.metrics
+from sklearn.metrics import mean_squared_error, roc_auc_score, mean_absolute_percentage_error, log_loss
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.preprocessing import LabelEncoder
 from tabicl.sklearn.preprocessing import TransformToNumerical
@@ -190,7 +191,7 @@ def run_tabarena_benchmark(
                             continue
                         for distance_metric in distance_metrics:
                             if task.task_type == "Supervised Classification":
-                                score_auc, predict_time, exception_message = (
+                                score, predict_time, exception_message = (
                                     _evaluate_classification(
                                     X_train_embed,
                                     X_test_embed,
@@ -208,24 +209,41 @@ def run_tabarena_benchmark(
                                     )
                                     continue
 
-                                batch_dict = update_batch_dict(
-                                    batch_dict,
-                                    dataset_name=dataset.name,
-                                    dataset_size=X_train.shape[0],
-                                    embedding_model_name=embedding_model.name,
-                                    num_neighbors=num_neighbors,
-                                    time_to_compute_train_embeddings=compute_embeddings_time,
-                                    auc_score=score_auc,
-                                    distance_metric=distance_metric,
-                                    task=task.task_type,
-                                    algorithm="KNNClassifier",
-                                    embedding_dimension=embedding_dim,
-                                    prediction_time=predict_time,
-                                    time_to_compute_test_embeddings=compute_test_embeddings_time,
-                                )
+                                if np.unique(y_train).shape[0] == 2:
+                                    batch_dict = update_batch_dict(
+                                        batch_dict,
+                                        dataset_name=dataset.name,
+                                        dataset_size=X_train.shape[0],
+                                        embedding_model_name=embedding_model.name,
+                                        num_neighbors=num_neighbors,
+                                        time_to_compute_train_embeddings=compute_embeddings_time,
+                                        auc_score=score,
+                                        distance_metric=distance_metric,
+                                        task=task.task_type,
+                                        algorithm="KNNClassifier",
+                                        embedding_dimension=embedding_dim,
+                                        prediction_time=predict_time,
+                                        time_to_compute_test_embeddings=compute_test_embeddings_time,
+                                    )
+                                else:
+                                    batch_dict = update_batch_dict(
+                                        batch_dict,
+                                        dataset_name=dataset.name,
+                                        dataset_size=X_train.shape[0],
+                                        embedding_model_name=embedding_model.name,
+                                        num_neighbors=num_neighbors,
+                                        time_to_compute_train_embeddings=compute_embeddings_time,
+                                        log_loss_score=score,
+                                        distance_metric=distance_metric,
+                                        task=task.task_type,
+                                        algorithm="KNNClassifier",
+                                        embedding_dimension=embedding_dim,
+                                        prediction_time=predict_time,
+                                        time_to_compute_test_embeddings=compute_test_embeddings_time,
+                                    )
 
                             elif task.task_type == "Supervised Regression":
-                                score_mse, predict_time, exception_message = (
+                                score_mape, predict_time, exception_message = (
                                     _evaluate_regression(
                                     X_train_embed,
                                     X_test_embed,
@@ -250,7 +268,7 @@ def run_tabarena_benchmark(
                                     embedding_model_name=embedding_model.name,
                                     num_neighbors=num_neighbors,
                                     time_to_compute_train_embeddings=compute_embeddings_time,
-                                    mse_score=score_mse,
+                                    mape_score=score_mape,
                                     distance_metric=distance_metric,
                                     task=task.task_type,
                                     algorithm="KNNRegressor",
@@ -304,11 +322,12 @@ def _evaluate_classification(
 
         n_classes = y_pred_proba.shape[1]
         if n_classes == 2:
-            score_auc = roc_auc_score(y_test, y_pred_proba[:, 1])
+            score = roc_auc_score(y_test, y_pred_proba[:, 1])
         else:
-            score_auc = roc_auc_score(y_test, y_pred_proba, multi_class="ovr")
+            score = log_loss(y_test, y_pred_proba)
+            #score = roc_auc_score(y_test, y_pred_proba, multi_class="ovr")
 
-        return score_auc, predict_time, None
+        return score, predict_time, None
     except Exception as e:
         return None, None, e
 
@@ -334,9 +353,10 @@ def _evaluate_regression(
         y_pred = knn_regressor.predict(X_test_embed)
         predict_time = time.time() - start_predict_time
 
-        score_mse = mean_squared_error(y_test, y_pred)
+        #score_mse = mean_squared_error(y_test, y_pred)
+        score_mape = mean_absolute_percentage_error(y_test, y_pred)
 
-        return score_mse, predict_time, None
+        return score_mape, predict_time, None
     except Exception as e:
         return None, None, e
 

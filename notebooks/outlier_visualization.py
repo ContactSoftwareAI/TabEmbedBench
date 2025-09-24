@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 # Pfad zur Parquet-Datei
-path_to_data_file = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\results_ADBench_Tabular_20250918_151705.parquet"
+path_to_data_file = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\results_ADBench_Tabular_20250918_144839.parquet"
 
 
 def load_benchmark_data(file_path: str) -> pl.DataFrame:
@@ -20,23 +20,66 @@ def load_benchmark_data(file_path: str) -> pl.DataFrame:
         return None
 
 
-def create_score_distribution_boxplot(df: pl.DataFrame, score_col: str = "auc_score"):
-    """Erstellt ein Boxplot für die Verteilung der Scores nach Embedding-Modell."""
-    # Filtere ungültige Werte
+def create_balanced_algorithm_comparison_data(df: pl.DataFrame, score_col: str = "auc_score"):
+    """
+    Erstellt ausgewogene Daten für den Algorithmus-Vergleich, indem LOF-Scores
+    über alle Nachbar-Werte gemittelt werden.
+    """
     valid_data = df.filter(
         (pl.col(score_col) > -np.inf) &
         (pl.col(score_col) < np.inf) &
         pl.col(score_col).is_not_null()
     )
 
+    # Für LocalOutlierFactor: Mittle über alle Nachbar-Werte pro (dataset, embedding_model, distance_metric)
+    lof_data = (
+        valid_data
+        .filter(pl.col("algorithm") == "LocalOutlierFactor")
+        .group_by(["dataset_name", "embedding_model", "distance_metric", "algorithm", "dataset_size", "emb_dim"])
+        .agg([
+            pl.col(score_col).max().alias(score_col),
+            pl.col("time_to_compute_train_embeddings").first().alias("time_to_compute_train_embeddings"),
+            pl.col("prediction_time").max().alias("prediction_time"),  # Mittle auch die Prediction-Zeit
+            pl.col("num_neighbors").first().alias("num_neighbors"),  # Füge num_neighbors hinzu
+            pl.col("mse_score").first().alias("mse_score"),  # Füge mse_score hinzu
+            pl.col("task").first().alias("task"),  # Füge task hinzu
+            pl.col("time_to_compute_test_embeddings").first().alias("time_to_compute_test_embeddings")
+            # Füge time_to_compute_test_embeddings hinzu
+        ])
+    )
+
+    # Für IsolationForest: Nehme die Daten direkt und wähle nur die benötigten Spalten aus
+    isolation_data = (
+        valid_data
+        .filter(pl.col("algorithm") == "IsolationForest")
+        .select([
+            "dataset_name", "embedding_model", "distance_metric", "algorithm",
+            "dataset_size", "emb_dim", score_col, "time_to_compute_train_embeddings",
+            "prediction_time", "num_neighbors", "mse_score", "task",
+            "time_to_compute_test_embeddings"
+        ])
+    )
+
+    # Kombiniere beide Datensätze
+    balanced_data = pl.concat([lof_data, isolation_data])
+
+    return balanced_data
+
+
+def create_score_distribution_boxplot(df: pl.DataFrame, score_col: str = "auc_score"):
+    """Erstellt ein ausgewogenes Boxplot für die Verteilung der Scores nach Embedding-Modell."""
+
+    # Erstelle ausgewogene Daten
+    balanced_data = create_balanced_algorithm_comparison_data(df, score_col)
+
     fig = px.box(
-        valid_data.to_pandas(),
+        balanced_data.to_pandas(),
         x="embedding_model",
         y=score_col,
         color="embedding_model",
-        title=f"Verteilung der {score_col} nach Embedding-Modell",
+        title=f"Verteilung der {score_col} nach Embedding-Modell (ausgewogen)",
         points="outliers",
-        hover_data=["dataset_name", "algorithm", "num_neighbors"]
+        hover_data=["dataset_name", "algorithm", "distance_metric"]
     )
 
     fig.update_xaxes(tickangle=45)
@@ -44,38 +87,20 @@ def create_score_distribution_boxplot(df: pl.DataFrame, score_col: str = "auc_sc
     return fig
 
 
-def create_performance_by_dataset_size(df: pl.DataFrame, score_col: str = "auc_score"):
-    """Erstellt ein Scatter-Plot für Performance vs. Datensatzgröße."""
-    valid_data = df.filter(
-        (pl.col(score_col) > -np.inf) &
-        (pl.col(score_col) < np.inf) &
-        pl.col(score_col).is_not_null()
-    )
-
-    fig = px.scatter(
-        valid_data.to_pandas(),
-        x="dataset_size",
-        y=score_col,
-        color="embedding_model",
-        size="num_neighbors",
-        hover_data=["dataset_name", "algorithm"],
-        title=f"{score_col} vs. Datensatzgröße",
-        log_x=True
-    )
-
-    fig.update_layout(height=500)
-    return fig
-
-
 def create_computation_time_analysis(df: pl.DataFrame):
-    """Erstellt Visualisierungen für die Berechnungszeit-Analyse."""
+    """Erstellt ausgewogene Visualisierungen für die Berechnungszeit-Analyse."""
+
+    # Erstelle ausgewogene Daten (für Embedding-Berechnungszeit ist das nicht nötig,
+    # da diese pro (dataset, embedding_model) eindeutig ist)
+    balanced_data = create_balanced_algorithm_comparison_data(df, "auc_score")
+
     # Boxplot für Berechnungszeit nach Embedding-Modell
     fig1 = px.box(
-        df.to_pandas(),
+        balanced_data.to_pandas(),
         x="embedding_model",
-        y="time_to_compute_embeddings",
+        y="time_to_compute_train_embeddings",
         color="embedding_model",
-        title="Berechnungszeit nach Embedding-Modell",
+        title="Berechnungszeit nach Embedding-Modell (ausgewogen)",
         log_y=True,
         hover_data=["dataset_name", "dataset_size"]
     )
@@ -84,13 +109,14 @@ def create_computation_time_analysis(df: pl.DataFrame):
 
     # Scatter-Plot: Berechnungszeit vs. Datensatzgröße
     fig2 = px.scatter(
-        df.to_pandas(),
+        balanced_data.to_pandas(),
         x="dataset_size",
-        y="time_to_compute_embeddings",
+        y="time_to_compute_train_embeddings",
         color="embedding_model",
+        symbol="algorithm",
         size="emb_dim",
         hover_data=["dataset_name", "algorithm"],
-        title="Berechnungszeit vs. Datensatzgröße",
+        title="Berechnungszeit vs. Datensatzgröße (ausgewogen)",
         log_x=True,
         log_y=True
     )
@@ -100,55 +126,25 @@ def create_computation_time_analysis(df: pl.DataFrame):
 
 
 def create_algorithm_comparison(df: pl.DataFrame, score_col: str = "auc_score"):
-    """Erstellt einen Vergleich der verschiedenen Algorithmen."""
-    valid_data = df.filter(
-        (pl.col(score_col) > -np.inf) &
-        (pl.col(score_col) < np.inf) &
-        pl.col(score_col).is_not_null()
-    )
+    """Erstellt einen ausgewogenen Vergleich der verschiedenen Algorithmen."""
 
-    # Gruppierte Boxplots
+    # Erstelle ausgewogene Daten
+    balanced_data = create_balanced_algorithm_comparison_data(df, score_col)
+
+    # Gruppierte Boxplots mit ausgewogenen Daten
     fig = px.box(
-        valid_data.to_pandas(),
+        balanced_data.to_pandas(),
         x="algorithm",
         y=score_col,
         color="embedding_model",
-        title=f"Algorithmus-Vergleich: {score_col}",
-        hover_data=["dataset_name", "num_neighbors"]
+        title=f"Algorithmus-Vergleich: {score_col} (LOF gemittelt über Nachbar-Werte)",
+        hover_data=["dataset_name", "distance_metric"]
     )
 
     fig.update_xaxes(tickangle=45)
     fig.update_layout(height=600)
     return fig
 
-
-def create_correlation_heatmap(df: pl.DataFrame):
-    """Erstellt eine Korrelations-Heatmap für numerische Spalten."""
-    # Wähle numerische Spalten aus
-    numeric_cols = ["dataset_size", "num_neighbors", "auc_score", "mse_score",
-                    "time_to_compute_embeddings", "emb_dim"]
-
-    # Filtere ungültige Werte
-    correlation_data = df.select(numeric_cols).filter(
-        (pl.col("auc_score") > -np.inf) &
-        (pl.col("auc_score") < np.inf) &
-        (pl.col("mse_score") > -np.inf) &
-        (pl.col("mse_score") < np.inf)
-    )
-
-    # Berechne Korrelationsmatrix
-    corr_matrix = correlation_data.to_pandas().corr()
-
-    fig = px.imshow(
-        corr_matrix,
-        title="Korrelations-Heatmap",
-        color_continuous_scale="RdBu_r",
-        aspect="auto",
-        text_auto=True
-    )
-
-    fig.update_layout(height=500)
-    return fig
 
 
 def create_neighbors_effect_analysis(df: pl.DataFrame, score_col: str = "auc_score"):
@@ -180,37 +176,6 @@ def create_neighbors_effect_analysis(df: pl.DataFrame, score_col: str = "auc_sco
     return fig
 
 
-def create_embedding_dimension_analysis(df: pl.DataFrame, score_col: str = "auc_score"):
-    """Analysiert den Effekt der Embedding-Dimension auf die Performance."""
-    valid_data = df.filter(
-        (pl.col(score_col) > -np.inf) &
-        (pl.col(score_col) < np.inf) &
-        pl.col(score_col).is_not_null()
-    )
-
-    # Berechne Durchschnittswerte pro Embedding-Dimension
-    avg_scores = (valid_data
-                  .group_by(["emb_dim", "algorithm"])
-                  .agg([
-        pl.col(score_col).mean().alias(f"avg_{score_col}"),
-        pl.col("time_to_compute_embeddings").mean().alias("avg_time")
-    ])
-                  .sort(["algorithm", "emb_dim"]))
-
-    fig = px.scatter(
-        avg_scores.to_pandas(),
-        x="emb_dim",
-        y=f"avg_{score_col}",
-        color="algorithm",
-        size="avg_time",
-        title=f"Durchschnittliche {score_col} vs. Embedding-Dimension",
-        hover_data=["avg_time"],
-        log_x=True
-    )
-
-    fig.update_layout(height=500)
-    return fig
-
 
 def create_distance_metric_comparison(df: pl.DataFrame, score_col: str = "auc_score"):
     """Vergleicht die Performance verschiedener Distanzmetriken."""
@@ -241,15 +206,13 @@ def create_distance_metric_comparison(df: pl.DataFrame, score_col: str = "auc_sc
 
 
 def create_dataset_difficulty_analysis(df: pl.DataFrame, score_col: str = "auc_score"):
-    """Analysiert die Schwierigkeit verschiedener Datensätze."""
-    valid_data = df.filter(
-        (pl.col(score_col) > -np.inf) &
-        (pl.col(score_col) < np.inf) &
-        pl.col(score_col).is_not_null()
-    )
+    """Analysiert die Schwierigkeit verschiedener Datensätze mit ausgewogenen Daten."""
+
+    # Erstelle ausgewogene Daten
+    balanced_data = create_balanced_algorithm_comparison_data(df, score_col)
 
     # Berechne durchschnittliche Performance pro Datensatz
-    dataset_difficulty = (valid_data
+    dataset_difficulty = (balanced_data
                           .group_by("dataset_name")
                           .agg([
         pl.col(score_col).mean().alias(f"avg_{score_col}"),
@@ -263,7 +226,7 @@ def create_dataset_difficulty_analysis(df: pl.DataFrame, score_col: str = "auc_s
         x="dataset_name",
         y=f"avg_{score_col}",
         hover_data=["size", "features"],
-        title=f"Datensatz-Schwierigkeit (durchschnittliche {score_col})",
+        title=f"Datensatz-Schwierigkeit (durchschnittliche {score_col}, ausgewogen)",
         labels={"dataset_name": "Datensatz"}
     )
 
@@ -273,52 +236,84 @@ def create_dataset_difficulty_analysis(df: pl.DataFrame, score_col: str = "auc_s
 
 
 def generate_summary_statistics(df: pl.DataFrame):
-    """Erstellt eine Zusammenfassung der wichtigsten Statistiken."""
-    print("\n=== BENCHMARK ERGEBNISSE ZUSAMMENFASSUNG ===")
-    print(f"Gesamtzahl der Experimente: {len(df)}")
-    print(f"Anzahl der Datensätze: {df['dataset_name'].n_unique()}")
-    print(f"Anzahl der Embedding-Modelle: {df['embedding_model'].n_unique()}")
-    print(f"Anzahl der Algorithmen: {df['algorithm'].n_unique()}")
+    """Erstellt eine Zusammenfassung der wichtigsten Statistiken basierend auf ausgewogenen Daten."""
 
-    print(f"\nEmbedding-Modelle: {df['embedding_model'].unique().to_list()}")
-    print(f"Algorithmen: {df['algorithm'].unique().to_list()}")
-    print(f"Distanzmetriken: {df['distance_metric'].unique().to_list()}")
+    # Erstelle ausgewogene Daten für konsistente Statistiken
+    balanced_data = create_balanced_algorithm_comparison_data(df, "auc_score")
+
+    print("\n=== BENCHMARK ERGEBNISSE ZUSAMMENFASSUNG (AUSGEWOGENE DATEN) ===")
+    print(f"Rohdaten: {len(df)} Experimente")
+    print(f"Ausgewogene Daten: {len(balanced_data)} Experimente")
+    print(f"Anzahl der Datensätze: {balanced_data['dataset_name'].n_unique()}")
+    print(f"Anzahl der Embedding-Modelle: {balanced_data['embedding_model'].n_unique()}")
+    print(f"Anzahl der Algorithmen: {balanced_data['algorithm'].n_unique()}")
+
+    print(f"\nEmbedding-Modelle: {balanced_data['embedding_model'].unique().to_list()}")
+    print(f"Algorithmen: {balanced_data['algorithm'].unique().to_list()}")
+    print(f"Distanzmetriken: {balanced_data['distance_metric'].unique().to_list()}")
 
     # AUC Score Statistiken (nur gültige Werte)
-    valid_auc = df.filter(
+    valid_auc = balanced_data.filter(
         (pl.col("auc_score") > -np.inf) &
-        (pl.col("auc_score") < np.inf)
+        (pl.col("auc_score") < np.inf) &
+        pl.col("auc_score").is_not_null()
     )
 
     if len(valid_auc) > 0:
-        print(f"\n--- AUC Score Statistiken ---")
+        print(f"\n--- AUC Score Statistiken (ausgewogen) ---")
         print(f"Mittelwert: {valid_auc['auc_score'].mean():.4f}")
         print(f"Median: {valid_auc['auc_score'].median():.4f}")
         print(f"Min: {valid_auc['auc_score'].min():.4f}")
         print(f"Max: {valid_auc['auc_score'].max():.4f}")
+        print(f"Standardabweichung: {valid_auc['auc_score'].std():.4f}")
 
-    # Berechnungszeit Statistiken
-    print(f"\n--- Berechnungszeit Statistiken ---")
-    print(f"Mittelwert: {df['time_to_compute_embeddings'].mean():.4f} Sekunden")
-    print(f"Median: {df['time_to_compute_embeddings'].median():.4f} Sekunden")
-    print(f"Min: {df['time_to_compute_embeddings'].min():.4f} Sekunden")
-    print(f"Max: {df['time_to_compute_embeddings'].max():.4f} Sekunden")
+    # Berechnungszeit Statistiken (ausgewogene Daten)
+    valid_time = balanced_data.filter(
+        pl.col("time_to_compute_train_embeddings").is_not_null() &
+        (pl.col("time_to_compute_train_embeddings") > 0)
+    )
 
-    # Performance pro Embedding-Modell
-    print(f"\n--- Performance nach Embedding-Modell ---")
+    if len(valid_time) > 0:
+        print(f"\n--- Berechnungszeit Statistiken (ausgewogen) ---")
+        print(f"Mittelwert: {valid_time['time_to_compute_train_embeddings'].mean():.4f} Sekunden")
+        print(f"Median: {valid_time['time_to_compute_train_embeddings'].median():.4f} Sekunden")
+        print(f"Min: {valid_time['time_to_compute_train_embeddings'].min():.4f} Sekunden")
+        print(f"Max: {valid_time['time_to_compute_train_embeddings'].max():.4f} Sekunden")
+
+    # Performance pro Embedding-Modell (ausgewogene Daten)
+    print(f"\n--- Performance nach Embedding-Modell (ausgewogen) ---")
     model_performance = (valid_auc
                          .group_by("embedding_model")
                          .agg([
         pl.col("auc_score").mean().alias("avg_auc"),
         pl.col("auc_score").std().alias("std_auc"),
-        pl.col("time_to_compute_embeddings").mean().alias("avg_time")
+        pl.col("time_to_compute_train_embeddings").mean().alias("avg_time"),
+        pl.col("auc_score").count().alias("num_experiments")
     ])
                          .sort("avg_auc", descending=True))
 
     for row in model_performance.iter_rows(named=True):
         print(f"{row['embedding_model']}: "
               f"AUC={row['avg_auc']:.4f}±{row['std_auc']:.4f}, "
-              f"Zeit={row['avg_time']:.4f}s")
+              f"Zeit={row['avg_time']:.4f}s, "
+              f"Experimente={row['num_experiments']}")
+
+    # Algorithmus-Performance (ausgewogene Daten)
+    print(f"\n--- Performance nach Algorithmus (ausgewogen) ---")
+    algorithm_performance = (valid_auc
+                             .group_by("algorithm")
+                             .agg([
+        pl.col("auc_score").mean().alias("avg_auc"),
+        pl.col("auc_score").std().alias("std_auc"),
+        pl.col("auc_score").count().alias("num_experiments")
+    ])
+                             .sort("avg_auc", descending=True))
+
+    for row in algorithm_performance.iter_rows(named=True):
+        print(f"{row['algorithm']}: "
+              f"AUC={row['avg_auc']:.4f}±{row['std_auc']:.4f}, "
+              f"Experimente={row['num_experiments']}")
+
 
 
 def main():
@@ -339,10 +334,6 @@ def main():
     fig1 = create_score_distribution_boxplot(data, "auc_score")
     fig1.show()
 
-    # 2. Performance vs. Datensatzgröße
-    fig2 = create_performance_by_dataset_size(data, "auc_score")
-    fig2.show()
-
     # 3. Berechnungszeit-Analyse
     fig3, fig4 = create_computation_time_analysis(data)
     fig3.show()
@@ -352,17 +343,9 @@ def main():
     fig5 = create_algorithm_comparison(data, "auc_score")
     fig5.show()
 
-    # 5. Korrelations-Heatmap
-    fig6 = create_correlation_heatmap(data)
-    fig6.show()
-
     # 6. Nachbarn-Effekt-Analyse
     fig7 = create_neighbors_effect_analysis(data, "auc_score")
     fig7.show()
-
-    # 7. Embedding-Dimension-Analyse
-    fig8 = create_embedding_dimension_analysis(data, "auc_score")
-    fig8.show()
 
     # 8. Distanzmetrik-Vergleich
     fig9 = create_distance_metric_comparison(data, "auc_score")
@@ -379,13 +362,10 @@ def main():
 
     plots = [
         (fig1, "score_distribution_boxplot.html"),
-        (fig2, "performance_vs_dataset_size.html"),
         (fig3, "computation_time_by_model.html"),
         (fig4, "computation_time_vs_size.html"),
         (fig5, "algorithm_comparison.html"),
-        (fig6, "correlation_heatmap.html"),
         (fig7, "neighbors_effect_analysis.html"),
-        (fig8, "embedding_dimension_analysis.html"),
         (fig10, "dataset_difficulty_analysis.html")
     ]
 

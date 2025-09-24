@@ -11,7 +11,8 @@ RESULT_DF_SCHEMA = {
     "embedding_model": pl.Categorical,
     "num_neighbors": pl.UInt64,
     "auc_score": pl.Float64,
-    "mse_score": pl.Float64,
+    "mape_score": pl.Float64,
+    "log_loss_score": pl.Float64,
     "time_to_compute_train_embeddings": pl.Float64,
     "distance_metric": pl.Categorical,
     "task": pl.Categorical,
@@ -56,7 +57,8 @@ def update_batch_dict(
     task: str,
     algorithm: str,
     auc_score: float = None,
-    mse_score: float = None,
+    log_loss_score: float = None,
+    mape_score: float = None,
     distance_metric: str = "euclidean",
     embedding_dimension: int = None,
     prediction_time: float = None,
@@ -80,7 +82,7 @@ def update_batch_dict(
         algorithm (str): The algorithm used for the benchmark task.
         auc_score (float, optional): The AUC (Area Under Curve) score achieved
             during evaluation. Defaults to None.
-        mse_score (float, optional): The MSR (Mean Square Residual) score achieved
+        mape_score (float, optional): The MSR (Mean Square Residual) score achieved
             during evaluation. Defaults to None.
         distance_metric (str, optional): The distance metric used, such as
             "euclidean" or "cosine". Defaults to "euclidean".
@@ -105,10 +107,16 @@ def update_batch_dict(
 
     if auc_score is not None:
         batch_dict["auc_score"].append(auc_score)
-        batch_dict["mse_score"].append(np.inf)
+        batch_dict["log_loss_score"].append(np.inf)
+        batch_dict["mape_score"].append(np.inf)
+    elif log_loss_score is not None:
+        batch_dict["auc_score"].append((-1) * np.inf)
+        batch_dict["log_loss_score"].append(log_loss_score)
+        batch_dict["mape_score"].append(np.inf)
     else:
         batch_dict["auc_score"].append((-1) * np.inf)
-        batch_dict["mse_score"].append(mse_score)
+        batch_dict["log_loss_score"].append((-1) * np.inf)
+        batch_dict["mape_score"].append(mape_score)
 
     return batch_dict
 
