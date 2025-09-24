@@ -170,7 +170,9 @@ def run_outlier_benchmark(
                              f"{embedding_model.name}..."
                              f"Compute Embeddings.")
 
-                X_embed, compute_embeddings_time = embedding_model.compute_embeddings(X)
+                X_embed, compute_embeddings_time = (
+                    embedding_model.compute_embeddings(X, outlier=True)
+                )
                 embed_dim = X_embed.shape[-1]
 
                 if save_embeddings:
