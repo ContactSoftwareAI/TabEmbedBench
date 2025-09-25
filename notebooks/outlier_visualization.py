@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 # Pfad zur Parquet-Datei
-path_to_data_file = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\results_ADBench_Tabular_20250918_144839.parquet"
+path_to_data_file = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\results_ADBench_Tabular_20250924_142053.parquet"
 
 
 def load_benchmark_data(file_path: str) -> pl.DataFrame:
