@@ -1,4 +1,5 @@
 import inspect
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -6,10 +7,10 @@ from huggingface_hub import hf_hub_download
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
-    StandardScaler,
     PowerTransformer,
     QuantileTransformer,
     RobustScaler,
+    StandardScaler,
 )
 from sklearn.utils.validation import check_is_fitted
 from tabicl.model.embedding import ColEmbedding
@@ -17,32 +18,35 @@ from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
 from tabicl.sklearn.preprocessing import (
     CustomStandardScaler,
+    PreprocessingPipeline,
     RTDLQuantileTransformer,
-    PreprocessingPipeline
 )
 from torch import nn
-from typing import Optional, Union
 
-from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.utils.torch_utils import get_device
 
 
-class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
-    """TabICLEmbedding is a neural network module for tabular data embedding. It is
-    based on the TabICL architecture and uses the first two stages of TabICL to
-    generate embeddings for the rows.
+class TabICLRowEmbedding(nn.Module):
+    """A neural network module for embedding tabular data using column and
+    row interactions.
 
-    This class combines the column embedding and row interaction modules into a
-    single model for generating row embeddings. It uses the inference forward method
-    from TabICL to generate row representations from the input data. It is not intended
-    for training. It is designed to easily load the state dictionary and config
-    from a trained TabICL model.
+    This class is designed to process tabular data by embedding columnar and
+    row-wise information. It combines column embeddings with row-level
+    interaction mechanisms, making it suitable for tasks such as tabular
+    data modeling and representation learning. The model leverages hierarchical
+    attention mechanisms on both column and row levels to extract meaningful
+    embeddings.
 
     Attributes:
-        col_embedder (ColEmbedding): Module responsible for creating embeddings
-            for columns in the input data.
-        row_interactor (RowInteraction): Module responsible for processing the
-            column embeddings and generating the final row-wise representations.
+        col_embedder (ColEmbedding): Embedding mechanism for columns, which
+            processes column-level features to generate column representations.
+        row_interactor (RowInteraction): Interaction mechanism for rows that
+            processes column representations to extract row-level embeddings.
+
+    References:
+    [1] Qu, J. et al. (2025). Tabicl: A tabular foundation model for in-context
+        learning on large data. arXiv preprint arXiv:2502.05564.
     """
 
     def __init__(
@@ -57,43 +61,11 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         row_rope_base: float = 100000,
         ff_factor: int = 2,
         dropout: float = 0.0,
-        activation: Union[str, callable] = "gelu",
+        activation: str | callable = "gelu",
         norm_first: bool = True,
-        normalize_embeddings: bool = False,
-        preprocess_tabicl_data: bool = False,
         **kwargs,
     ):
-        """Initializes the model configuration by setting up the column embedding and row
-        interaction modules with the specified parameters. Configurations are used to
-        define the behavior of each module and the overall model.
-
-        Args:
-            embed_dim (int): Embedding dimension for both column embedding and row
-                interaction modules.
-            col_num_blocks (int): Number of blocks in the column embedding module.
-            col_nhead (int): Number of attention heads in the column embedding module.
-            col_num_inds (int): Number of induced tokens for column embedding.
-            row_num_blocks (int): Number of blocks in the row interaction module.
-            row_nhead (int): Number of attention heads in the row interaction module.
-            row_num_cls (int): Number of classification tokens in the row interaction
-                module.
-            row_rope_base (float): Base value used for rotary position embedding
-                (RoPE) in the row interaction module.
-            ff_factor (int): Feedforward dimension factor used to scale the size of the
-                intermediate layer in both modules.
-            dropout (float): Dropout probability applied within the modules to prevent
-                overfitting.
-            activation (Union[str, callable]): Activation function used in feedforward
-                layers of the modules. Can be a string or a callable function.
-            norm_first (bool): If True, applies layer normalization before other
-                operations in each layer.
-            normalize_embeddings (bool):
-
-        References:
-            [1] Qu, J. et al. (2025). Tabicl: A tabular foundation model for in-context learning on large data.
-                arXiv preprint arXiv:2502.05564.
-        """
-        super().__init__()
+        super().__init__(**kwargs)
         self.col_embedder = ColEmbedding(
             embed_dim=embed_dim,
             num_blocks=col_num_blocks,
@@ -118,39 +90,12 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
             norm_first=norm_first,
         )
 
-        for param in self.col_embedder.parameters():
-            param.requires_grad = False
-
-        for param in self.row_interactor.parameters():
-            param.requires_grad = False
-
-        self.normalize_embeddings = normalize_embeddings
-        self._preprocess_tabicl_data = preprocess_tabicl_data
-        self.preprocess_pipeline = PreprocessingPipeline()
-        self.outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
-        self.eval()
-
     def forward(
         self,
         X: torch.Tensor,
         feature_shuffles: list[list[int]] | None = None,
         inference_config: InferenceConfig | None = None,
     ) -> torch.Tensor:
-        """Performs the forward pass through the model, generating row representations
-        from the input data. This method applies column embedding followed by row
-        interaction to derive the final tensor output.
-
-        Args:
-            X (torch.Tensor): The input tensor for the model.
-            feature_shuffles (Optional[List[List[int]]]): Optional feature shuffling
-                configurations to modify input feature representation.
-            inference_config (Optional[InferenceConfig]): Configuration for inference
-                detailing how the column and row representations should be generated.
-
-        Returns:
-            torch.Tensor: The computed tensor of row representations after applying the
-                prescribed transformations.
-        """
         if inference_config is None:
             inference_config = InferenceConfig()
 
@@ -158,52 +103,152 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
             X, feature_shuffles=feature_shuffles, mgr_config=inference_config.COL_CONFIG
         )
 
-        row_representations = self.row_interactor(
+        return self.row_interactor(
             column_representations, mgr_config=inference_config.ROW_CONFIG
         )
-        return row_representations
 
-    def _get_default_name(self) -> str:
-        return "TabICL"
+
+class TabICLEmbedding(AbstractEmbeddingGenerator):
+    """Generates embeddings from TabICL models with preprocessing capabilities and
+    optional embedding normalization.
+
+    The TabICLEmbedding class is designed to create embeddings using
+    pre-trained TabICL models. It supports preprocessing for input data and
+    provides an option for embedding normalization. The class also allows
+    working with pretrained TabICL model checkpoints or downloading them
+    automatically if not provided. It encapsulates preprocessing pipelines for
+    outlier and non-outlier data handling, and provides functionalities for
+    resetting and configuring the preprocess pipelines.
+
+    Attributes:
+        model_path (Optional[Path]): Path to the TabICL model checkpoint;
+            downloads from HF Hub if not provided or path doesn't exist.
+        tabicl_row_embedder (TabICLRowEmbedding): The row embedding model is
+            loaded with specific weights and configuration.
+        normalize_embeddings (bool): Specifies whether generated embeddings
+            should be normalized.
+        preprocess_pipeline (PreprocessingPipeline): Pipeline for preprocessing
+            input data.
+        outlier_preprocessing_pipeline (OutlierPreprocessingPipeline):
+            Dedicated pipeline for preprocessing outlier data.
+    """
+
+    def __init__(
+        self,
+        model_path: str | None = None,
+        normalize_embeddings: bool = False,
+        preprocess_tabicl_data: bool = False,
+    ):
+        """Initializes the TabICLEmbedding class, handling configuration and setup
+        for the tabular data embedder. Optionally loads a specific model
+        path and applies settings for embedding normalization and data
+        preprocessing.
+
+        Args:
+            model_path: Optional path to the model file as a string. If None, no model
+                is loaded.
+            normalize_embeddings: Boolean flag indicating whether to normalize
+                embeddings or not.
+            preprocess_tabicl_data: Boolean flag to determine whether to preprocess
+                Tabicl data.
+        """
+        super().__init__(name="tabicl-classifier-v1.1-0506")
+
+        self.model_path = Path(model_path) if model_path is not None else None
+        self.tabicl_row_embedder = self.get_tabicl_model()
+
+        self.normalize_embeddings = normalize_embeddings
+        self._preprocess_tabicl_data = preprocess_tabicl_data
+        self.preprocess_pipeline = PreprocessingPipeline()
+        self.outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
+
+    def get_tabicl_model(self):
+        if self.model_path is not None and self.model_path.exists():
+            model_ckpt_path = self.model_path
+        else:
+            model_ckpt_path = hf_hub_download(
+                repo_id="jingang/TabICL-clf",
+                filename="tabicl-classifier-v1.1-0506.ckpt",
+            )
+
+        model_ckpt = torch.load(model_ckpt_path)
+
+        state_dict = model_ckpt["state_dict"]
+        config = model_ckpt["config"]
+
+        filtered_config = filter_params_for_class(TabICLRowEmbedding, config)
+
+        row_embedding_model = TabICLRowEmbedding(
+            **filtered_config,
+        )
+
+        row_embedding_model.load_state_dict(state_dict, strict=False)
+
+        for param in row_embedding_model.col_embedder.parameters():
+            param.requires_grad = False
+
+        for param in row_embedding_model.row_interactor.parameters():
+            param.requires_grad = False
+
+        row_embedding_model.eval()
+
+        return row_embedding_model
 
     @property
     def task_only(self) -> bool:
+        """
+        Checks whether the task-only mode is active.
+
+        This property determines if only tasks are considered in the current
+        context or execution.
+
+        Returns:
+            bool: True if task-only mode is enabled, False otherwise.
+        """
         return False
 
     def _preprocess_data(
-            self,
-            X: np.ndarray,
-            train: bool = True,
-            outlier: bool = False,
+        self,
+        X: np.ndarray,
+        train: bool = True,
+        outlier: bool = False,
     ):
-        """Preprocesses the input data by applying normalization and preprocessing pipelines
-        based on the mode (training or inference). If normalization is enabled, the
-        numerical transformation is applied to the data during training, creating a
-        reusable transformer. During inference, the existing transformer is reused.
-        Additionally, if preprocessing is enabled, a preprocessing pipeline is applied
-        to the data.
+        """
+        Preprocesses the input data based on the specified mode (training or inference) and
+        whether the data contains outliers.
+
+        This function applies preprocessing pipelines to the input data depending on the training
+        or inference mode and handles outlier data if specified. If training mode is enabled, the
+        method fits and transforms the data using the appropriate preprocessing pipeline, either
+        for outlier or standard data. During inference or non-training mode, it only transforms
+        the data using the respective pipeline.
 
         Args:
-            X (np.ndarray): Input data array to be preprocessed.
-            train (bool): A flag indicating whether the data is used in training mode
-                (default: True).
+            X: Input data to be preprocessed, passed as a numpy array.
+            train: Boolean flag indicating whether the data is in training mode. If True, the
+                method fits and transforms the data; otherwise, it only performs transformation.
+            outlier: Boolean flag indicating if the input data contains outliers. If True,
+                the outlier-specific preprocessing pipeline is used; otherwise, the standard
+                preprocessing pipeline is applied.
 
         Returns:
-            np.ndarray: The preprocessed data.
+            np.ndarray: Preprocessed data after applying the corresponding preprocessing steps.
         """
         X_preprocess = X
 
         if train and self._preprocess_tabicl_data:
             if outlier:
-                X_preprocess = (
-                    self.outlier_preprocessing_pipeline.fit_transform(X_preprocess))
+                X_preprocess = self.outlier_preprocessing_pipeline.fit_transform(
+                    X_preprocess
+                )
             else:
                 X_preprocess = self.preprocess_pipeline.fit_transform(X_preprocess)
         else:
             if self._preprocess_tabicl_data:
                 if outlier:
                     X_preprocess = self.outlier_preprocessing_pipeline.transform(
-                        X_preprocess)
+                        X_preprocess
+                    )
                 else:
                     X_preprocess = self.preprocess_pipeline.transform(X_preprocess)
 
@@ -214,28 +259,27 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         X: np.ndarray,
         device: torch.device | None = None,
     ) -> np.ndarray:
-        """Computes the embeddings for the given input array using the model's forward method.
+        """
+        Computes the embeddings for the given input data.
 
-        The method takes an input array and uses PyTorch to convert it into a tensor, passes
-        it through the forward method of the model, and finally detaches and converts the
-        result back to a NumPy array.
+        The method processes 2D or 3D input arrays and computes embeddings using
+        a row embedder. The input tensor is sent to the specified device, converted
+        to float type, and processed through the forward method of the embedder.
+        The resulting embeddings are returned as a NumPy array.
 
         Args:
-            X (np.ndarray): The input array for which embeddings are to be computed. The array
-                has to have the shape (num_datasets, num_samples, num_features) or
-                (num_samples, num_features). The first dimension is optional.
-            device (Optional[torch.device]): The device to use for computation. If None, uses
-                the `get_default` method to get most suited device.
+            X (np.ndarray): The input data for which embeddings are to be computed.
+                Must be a 2D or 3D array.
+            device (torch.device | None): The device on which to perform the
+                computation. If None, the default device is determined using
+                `get_device()`.
 
         Returns:
             np.ndarray: The computed embeddings as a NumPy array.
-
-        Raises:
-            ValueError: If the input array is not 2D or 3D.
         """
         if device is None:
             device = get_device()
-            self.to(device)
+            self.tabicl_row_embedder.to(device)
 
         if len(X.shape) not in [2, 3]:
             raise ValueError("Input must be 2D or 3D array")
@@ -244,163 +288,44 @@ class TabICLEmbedding(nn.Module, BaseEmbeddingGenerator):
         if len(X.shape) == 2:
             X = X.unsqueeze(0)
 
-        embeddings = self.forward(X).cpu().squeeze().numpy()
-
-        return embeddings
+        return self.tabicl_row_embedder.forward(X).cpu().squeeze().numpy()
 
     def reset_embedding_model(self):
+        """
+        Resets the embedding model by reinitializing preprocessing pipelines.
+
+        This method reinitializes both the primary preprocessing pipeline and the
+        outlier-specific preprocessing pipeline to their original states. It is
+        useful when you need to reset the state of the preprocessing components
+        for a fresh evaluation or after model updates.
+
+        """
         self.preprocess_pipeline = PreprocessingPipeline()
         self.outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
 
 
 def filter_params_for_class(cls, params_dict):
-    """Filter parameters dictionary to only include parameters that are accepted
-    by the class constructor.
-
-    Args:
-        cls: The class whose constructor signature to check
-        params_dict: Dictionary of all parameters
-
-    Returns:
-        dict: Filtered dictionary with only valid parameters for the class
-    """
-    # Get the constructor signature
     sig = inspect.signature(cls.__init__)
 
-    # Get parameter names (excluding 'self')
     valid_params = set(sig.parameters.keys()) - {"self"}
 
-    # Filter the parameters dictionary
-    filtered_params = {k: v for k, v in params_dict.items() if k in valid_params}
+    return {k: v for k, v in params_dict.items() if k in valid_params}
 
-    return filtered_params
-
-
-def get_tabicl_embedding_model(
-    model_path: Optional[str] = "auto",
-    state_dict: Optional[dict] = None,
-    config: Optional[dict] = None,
-    preprocess_data: Optional[bool] = False,
-) -> TabICLEmbedding:
-    """Loads and prepares a row embeddings model based on the provided model path, state dict, and
-    configuration. The function can also optionally preprocess data for embeddings.
-
-    The function supports two methods of loading the model:
-    1. By specifying a model_path to a pre-trained Torch checkpoint, which provides the state_dict
-       and config. Can also infer the model from a default hub repository if "auto" is given.
-    2. By directly passing the state_dict and config. This allows using a custom or pre-loaded
-       state_dict and config.
-
-    In addition, the function supports preprocessing row-based data embeddings using a specified
-    normalization technique if needed.
-
-    Args:
-        model_path (Optional[str]): Path to the pre-trained model file. If "auto", the function will
-            download a preconfigured model checkpoint from a defined repository.
-        state_dict (Optional[dict]): Pre-trained PyTorch model weights (state dict) if not using
-            a model path. Must be specified along with the config if model_path is not provided.
-        config (Optional[dict]): Configuration dictionary required to initialize the model. Must
-            be specified along with the state_dict if model_path is not provided.
-        preprocess_data (bool): Boolean flag indicating whether to preprocess the input data
-            (normalize embeddings). Defaults to False.
-
-    Returns:
-        TabICLEmbedding: Instance of the TabICLEmbedding class initialized with the provided parameters
-        and model weights.
-
-    Raises:
-        ValueError: Raised if neither model_path nor both state_dict and config are provided.
-    """
-    if model_path == "auto":
-        model_ckpt_path = hf_hub_download(
-            repo_id="jingang/TabICL-clf",
-            filename="tabicl-classifier-v1.1-0506.ckpt",
-        )
-
-        model_ckpt = torch.load(model_ckpt_path)
-
-        state_dict = model_ckpt["state_dict"]
-        config = model_ckpt["config"]
-    elif model_path is not None:
-        state_dict = torch.load(model_path)["state_dict"]
-        config = torch.load(model_path)["config"]
-    else:
-        if state_dict is None or config is None:
-            raise ValueError(
-                "Either model_path or state_dict and config must be provided"
-            )
-
-    filtered_config = filter_params_for_class(TabICLEmbedding, config)
-
-    row_embedding_model = TabICLEmbedding(
-        normalize_embeddings=preprocess_data,
-        preprocess_tabicl_data=preprocess_data,
-        **filtered_config,
-    )
-
-    row_embedding_model.load_state_dict(state_dict, strict=False)
-
-    return row_embedding_model
 
 # The code is taken from the original TabICL repo, only the
 # OutlierRemover is removed. The rest is similar to the original code.
 class OutlierPreprocessingPipeline(TransformerMixin, BaseEstimator):
-    """Preprocessing pipeline for tabular data.
-
-    This pipeline combines scaling, normalization, and outlier handling.
-
-    Parameters
-    ----------
-    normalization_method : str, default='power'
-        Method for normalization: 'power', 'quantile', 'quantile_tabr', 'robust', 'none'.
-
-    outlier_threshold : float, default=4.0
-        Z-score threshold for outlier detection.
-
-    random_state : int or None, default=None
-        Random seed for reproducible normalization.
-
-    Attributes
-    ----------
-    n_features_in_ : int
-        Number of features in the training data.
-
-    standard_scaler_ : CustomStandardScaler
-        The fitted standard scaler.
-
-    normalizer_ : sklearn transformers
-        The fitted normalization transformer (PowerTransformer, QuantileTransformer, RTDLQuantileTransformer, RobustScaler).
-
-    outlier_remover_ : OutlierRemover
-        The fitted outlier remover.
-
-    X_transformed_ : ndarray of shape (n_samples, n_features)
-        The transofrmed training input data. Save it for later use to avoid recomputation.
-    """
-
     def __init__(
-        self, normalization_method: str = "power", outlier_threshold: float = 4.0, random_state: Optional[int] = None
+        self,
+        normalization_method: str = "power",
+        outlier_threshold: float = 4.0,
+        random_state: int | None = None,
     ):
         self.normalization_method = normalization_method
         self.outlier_threshold = outlier_threshold
         self.random_state = random_state
 
     def fit(self, X, y=None):
-        """Fit the preprocessing pipeline.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            The input data.
-
-        y : None
-            Ignored.
-
-        Returns
-        -------
-        self : object
-            Returns self.
-        """
         X = self._validate_data(X)
 
         # 1. Apply standard scaling
@@ -410,15 +335,22 @@ class OutlierPreprocessingPipeline(TransformerMixin, BaseEstimator):
         # 2. Apply normalization
         if self.normalization_method != "none":
             if self.normalization_method == "power":
-                self.normalizer_ = PowerTransformer(method="yeo-johnson", standardize=True)
+                self.normalizer_ = PowerTransformer(
+                    method="yeo-johnson", standardize=True
+                )
             elif self.normalization_method == "quantile":
-                self.normalizer_ = QuantileTransformer(output_distribution="normal", random_state=self.random_state)
+                self.normalizer_ = QuantileTransformer(
+                    output_distribution="normal", random_state=self.random_state
+                )
             elif self.normalization_method == "quantile_rtdl":
                 self.normalizer_ = Pipeline(
                     [
                         (
                             "quantile_rtdl",
-                            RTDLQuantileTransformer(output_distribution="normal", random_state=self.random_state),
+                            RTDLQuantileTransformer(
+                                output_distribution="normal",
+                                random_state=self.random_state,
+                            ),
                         ),
                         ("std", StandardScaler()),
                     ]
@@ -426,14 +358,15 @@ class OutlierPreprocessingPipeline(TransformerMixin, BaseEstimator):
             elif self.normalization_method == "robust":
                 self.normalizer_ = RobustScaler(unit_variance=True)
             else:
-                raise ValueError(f"Unknown normalization method: {self.normalization_method}")
+                raise ValueError(
+                    f"Unknown normalization method: {self.normalization_method}"
+                )
 
             self.X_min_ = np.min(X_scaled, axis=0, keepdims=True)
             self.X_max_ = np.max(X_scaled, axis=0, keepdims=True)
-            X_normalized = self.normalizer_.fit_transform(X_scaled)
+            self.normalizer_.fit_transform(X_scaled)
         else:
             self.normalizer_ = None
-            X_normalized = X_scaled
 
         return self
 
@@ -445,7 +378,7 @@ class OutlierPreprocessingPipeline(TransformerMixin, BaseEstimator):
         X : array-like of shape (n_samples, n_features)
             The input data.
 
-        Returns
+        Returns:
         -------
         X_out : ndarray
             Preprocessed data.
@@ -457,7 +390,8 @@ class OutlierPreprocessingPipeline(TransformerMixin, BaseEstimator):
         # Normalization
         if self.normalizer_ is not None:
             try:
-                # this can fail in rare cases if there is an outlier in X that was not present in fit()
+                # this can fail in rare cases if there is an outlier in X
+                # that was not present in fit()
                 X = self.normalizer_.transform(X)
             except ValueError:
                 # clip values to train min/max
