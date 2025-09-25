@@ -1,0 +1,1 @@
+from tabembedbench.embedding_models.abstractembedding import AbstractEmbeddingGenerator
