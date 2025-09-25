@@ -1,34 +1,38 @@
-from skrub import TableVectorizer
+import numpy as np
 import polars as pl
+from skrub import TableVectorizer
 
-from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 
-class TabVectorizerEmbedding(BaseEmbeddingGenerator):
+
+class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
     """Handles the embedding generation using a TableVectorizer model.
 
-    This class provides methods for preprocessing data, generating embeddings,
-    and resetting the embedding model. It is designed to work with tabular data
-    and leverages the TableVectorizer for embedding generation.
+    This class provides a wrapper for the TabVectorizer transformer from the
+    skrub package. It represents most basic transformations for tabular data to
+    numerical values.
 
     Attributes:
-        model (TableVectorizer): Instance of the TableVectorizer model used for
+        tablevectorizer (TableVectorizer): Instance of the TableVectorizer model used for
             embedding generation.
     """
-    def __init__(
-            self,
-    ):
-        super().__init__()
 
-        self.model = TableVectorizer()
+    def __init__(self, **kwargs):
+        """
+        Initializes the TabVectorizerEmbedding class.
 
-    def _get_default_name(self):
-        return "TabVectorizerEmbedding"
+        This class is used to initialize the TableVectorizer model inside its
+        constructor. The model is stored as an attribute for further use.
 
-    @property
-    def task_only(self):
-        return False
+        Attributes:
+            tablevectorizer: An instance of the TableVectorizer class used for
+                generating row embeddings.
+        """
+        super().__init__(name="TabVectorizerEmbedding")
 
-    def _preprocess_data(self, X, train=True, outlier=False):
+        self.tablevectorizer = TableVectorizer(**kwargs)
+
+    def _preprocess_data(self, X, train=True, **kwargs):
         """
         Preprocesses the input data by converting it from a NumPy array to a
         specific format and optionally fitting it using the model.
@@ -47,18 +51,26 @@ class TabVectorizerEmbedding(BaseEmbeddingGenerator):
         X = pl.from_numpy(X)
 
         if train:
-            self.model.fit(X)
+            self.tablevectorizer.fit(X)
 
         return X
 
-    def _compute_embeddings(self, X):
-        embeddings = self.model.transform(X)
+    def _compute_embeddings(self, X: np.ndarray) -> np.ndarray:
+        """
+        Computes embeddings for the input data using the TableVectorizer transformation.
+
+        This method processes the provided data with the TableVectorizer
+        to generate vectorized numerical embeddings represented as a NumPy array.
+
+        Args:
+            X (np.ndarray): Input data to transform into embeddings.
+
+        Returns:
+            np.ndarray: The computed embeddings as a NumPy array.
+        """
+        embeddings = self.tablevectorizer.transform(X)
 
         return embeddings.to_numpy()
 
     def reset_embedding_model(self):
-        self.model = TableVectorizer()
-
-
-
-
+        self.tablevectorizer = TableVectorizer()

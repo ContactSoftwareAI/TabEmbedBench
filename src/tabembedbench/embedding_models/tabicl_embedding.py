@@ -194,19 +194,6 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
 
         return row_embedding_model
 
-    @property
-    def task_only(self) -> bool:
-        """
-        Checks whether the task-only mode is active.
-
-        This property determines if only tasks are considered in the current
-        context or execution.
-
-        Returns:
-            bool: True if task-only mode is enabled, False otherwise.
-        """
-        return False
-
     def _preprocess_data(
         self,
         X: np.ndarray,

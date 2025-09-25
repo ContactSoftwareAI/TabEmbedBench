@@ -30,9 +30,18 @@ class AbstractEmbeddingGenerator(ABC):
         self._name = name
 
     @property
-    @abstractmethod
     def task_only(self) -> bool:
-        raise NotImplementedError
+        """
+        Indicates whether the current object is restricted to a task-only context.
+
+        This property is a simple boolean flag that returns `False`, indicating
+        that the object is not limited to task-only usage. The flag can be
+        overridden or modified within derived classes as needed.
+
+        Returns:
+            bool: False, representing that the object is not task-only.
+        """
+        return False
 
     @property
     def name(self) -> str:
