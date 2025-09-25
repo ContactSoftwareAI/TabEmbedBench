@@ -9,26 +9,17 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
     """Handles the embedding generation using a TableVectorizer model.
 
     This class provides a wrapper for the TabVectorizer transformer from the
-    skrub package. It represents most basic transformations for tabular data to
-    numerical values.
+    skrub package. It represents the most basic transformations for tabular data
+    to numerical values.
 
     Attributes:
-        tablevectorizer (TableVectorizer): Instance of the TableVectorizer model used for
-            embedding generation.
+        tablevectorizer (TableVectorizer): Instance of the TableVectorizer model
+            used for generating row embeddings.
     """
 
-    def __init__(self, **kwargs):
-        """
-        Initializes the TabVectorizerEmbedding class.
-
-        This class is used to initialize the TableVectorizer model inside its
-        constructor. The model is stored as an attribute for further use.
-
-        Attributes:
-            tablevectorizer: An instance of the TableVectorizer class used for
-                generating row embeddings.
-        """
+    def __init__(self, optimize: bool = False, **kwargs):
         super().__init__(name="TabVectorizerEmbedding")
+        self.optimize = optimize
 
         self.tablevectorizer = TableVectorizer(**kwargs)
 
@@ -71,6 +62,9 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
         embeddings = self.tablevectorizer.transform(X)
 
         return embeddings.to_numpy()
+
+    def _optimize_tablevectorizer(self):
+        raise NotImplementedError
 
     def reset_embedding_model(self):
         self.tablevectorizer = TableVectorizer()
