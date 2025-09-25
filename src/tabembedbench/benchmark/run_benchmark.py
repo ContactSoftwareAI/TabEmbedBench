@@ -9,7 +9,7 @@ import torch
 
 from tabembedbench.benchmark.outlier_benchmark import run_outlier_benchmark
 from tabembedbench.benchmark.tabarena_benchmark import run_tabarena_benchmark
-from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.embedding_models.abstractembedding import AbstractEmbeddingGenerator
 from tabembedbench.utils.logging_utils import setup_unified_logging
 
 
@@ -53,8 +53,8 @@ def benchmark_context(models_to_process, main_logger, context_name="benchmark"):
 
 
 def run_benchmark(
-    embedding_model: BaseEmbeddingGenerator | None = None,
-    embedding_models: list[BaseEmbeddingGenerator] | None = None,
+    embedding_model: AbstractEmbeddingGenerator | None = None,
+    embedding_models: list[AbstractEmbeddingGenerator] | None = None,
     adbench_dataset_path: str | Path | None = None,
     exclude_adbench_datasets: list[str] | None = None,
     exclude_adbench_image_datasets: bool = True,
@@ -80,7 +80,7 @@ def run_benchmark(
     detection or task-specific benchmarks.
 
     Args:
-        embedding_model (BaseEmbeddingGenerator | None): A single embedding model to be
+        embedding_model (AbstractEmbeddingGenerator | None): A single embedding model to be
             evaluated. If provided, only this model will be used for benchmarking. Should
             not be specified together with `embedding_models`.
         embedding_models (list[BaseEmbeddingGenerator] | None): A list of embedding

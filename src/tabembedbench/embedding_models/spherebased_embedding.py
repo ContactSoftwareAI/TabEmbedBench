@@ -2,38 +2,25 @@ import numpy as np
 import pandas as pd
 from sklearn.base import TransformerMixin
 
-from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.embedding_models.abstractembedding import AbstractEmbeddingGenerator
 from tabembedbench.utils.preprocess_utils import infer_categorical_columns
 
 
-class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
+class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
     def __init__(
         self, embed_dim: int, categorical_indices: list[int] | None = None
     ) -> None:
+        super().__init__(name=f"SphereBasedEmbedding_d{embed_dim}")
         self.categorical_indices = categorical_indices
         self.embed_dim = embed_dim
         self.column_properties = []
         self.n_cols = None
-        self._name = self._get_default_name()
 
     @property
     def task_only(self) -> bool:
         return False
 
-    def _get_default_name(self) -> str:
-        return "Schalenmodell"
-
     def _generate_random_sphere_point(self) -> np.ndarray:
-        """Generates a random point on the surface of a sphere in an n-dimensional space.
-
-        This method creates a random point in an n-dimensional space, normalizes the
-        point to make it a unit vector, and returns the resulting point that lies on
-        the surface of a sphere.
-
-        Returns:
-            np.ndarray: A unit vector representing a random point on the sphere in
-            an n-dimensional space.
-        """
         point = np.random.randn(self.embed_dim)
 
         return point / np.linalg.norm(point)
@@ -161,7 +148,7 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
                 range_val_64 = col_max_64 - col_min_64
 
                 # Normiere Wert auf Radius zwischen 0.5 und 1.5
-                normalized_value = (value_64 - col_min_64) / range_val_64 
+                normalized_value = (value_64 - col_min_64) / range_val_64
                 # 0 bis 1
                 radius = 0.5 + normalized_value * 1.0  # 0.5 bis 1.5
 
@@ -208,7 +195,9 @@ class SphereBasedEmbedding(TransformerMixin, BaseEmbeddingGenerator):
 
         return embeddings
 
-    def _preprocess_data(self, data: np.ndarray, train: bool = True, outlier: bool = False):
+    def _preprocess_data(
+        self, data: np.ndarray, train: bool = True, outlier: bool = False
+    ):
         if train:
             self.fit(data)
 

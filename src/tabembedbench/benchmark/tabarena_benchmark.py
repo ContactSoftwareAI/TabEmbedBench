@@ -12,7 +12,7 @@ from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.preprocessing import LabelEncoder
 from tabicl.sklearn.preprocessing import TransformToNumerical
 
-from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.embedding_models.abstractembedding import AbstractEmbeddingGenerator
 from tabembedbench.utils.embedding_utils import check_nan
 from tabembedbench.utils.logging_utils import get_benchmark_logger
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
@@ -29,7 +29,7 @@ logger = get_benchmark_logger("TabEmbedBench_TabArena")
 
 
 def run_tabarena_benchmark(
-    embedding_models: list[BaseEmbeddingGenerator],
+    embedding_models: list[AbstractEmbeddingGenerator],
     tabarena_version: str = "tabarena-v0.1",
     tabarena_lite: bool = True,
     upper_bound_num_samples: int = 100000,

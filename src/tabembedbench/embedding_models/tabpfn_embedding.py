@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 from tabpfn import TabPFNClassifier, TabPFNRegressor
 
-from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.utils.config import EmbAggregation
 from tabembedbench.utils.embedding_utils import compute_embeddings_aggregation
 from tabembedbench.utils.preprocess_utils import infer_categorical_columns
@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger("TabPFN")
 
 
-class UniversalTabPFNEmbedding(BaseEmbeddingGenerator):
+class UniversalTabPFNEmbedding(AbstractEmbeddingGenerator):
     def __init__(
         self,
         tabpfn_clf: TabPFNClassifier | None = None,

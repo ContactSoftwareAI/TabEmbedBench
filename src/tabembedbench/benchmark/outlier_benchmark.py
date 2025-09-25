@@ -11,7 +11,9 @@ from sklearn.neighbors import (
     LocalOutlierFactor,
 )
 
-from tabembedbench.embedding_models.base import BaseEmbeddingGenerator
+from tabembedbench.embedding_models import (
+    AbstractEmbeddingGenerator
+)
 from tabembedbench.utils.dataset_utils import (
     download_adbench_tabular_datasets
 )
@@ -42,7 +44,7 @@ IMAGE_CATEGORY = [
 
 
 def run_outlier_benchmark(
-    embedding_models: list[BaseEmbeddingGenerator],
+    embedding_models: list[AbstractEmbeddingGenerator],
     dataset_paths: str | Path | None = None,
     exclude_datasets: list[str] | None = None,
     exclude_image_datasets: bool = False,
