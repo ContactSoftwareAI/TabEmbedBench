@@ -17,10 +17,16 @@ class AbstractEmbeddingGenerator(ABC):
     Attributes:
         name (str): The name associated with the instance.
     """
+
     def __init__(
-            self,
-            name: str,
+        self,
+        name: str,
     ):
+        """Initializes an instance of the AbstractEmbeddingGenerator class.
+
+        Args:
+            name (str): The name associated with the instance.
+        """
         self._name = name
 
     @property
@@ -51,38 +57,41 @@ class AbstractEmbeddingGenerator(ABC):
 
     @abstractmethod
     def _preprocess_data(
-            self,
-            X: np.ndarray,
-            train: bool = True,
-            outlier: bool = False,
+        self,
+        X: np.ndarray,
+        train: bool = True,
+        outlier: bool = False,
     ) -> np.ndarray:
-        """Preprocess the input data for training or inference.
+        """Preprocesses the input data.
 
-        This method is designed to perform preprocessing operations on the
-        input data. The preprocessing can vary depending on whether the
-        input data is for training or inference. Specific preprocessing
-        steps would depend on the concrete implementation of this method
-        in a subclass.
+        This method must be implemented in derived classes. The method is
+        designed to prepare the data before the `_compute_embeddings` method.
+        The actual preprocess logic is determined by the specific implementation
+        in the subclass.
 
         Args:
             X (np.ndarray): The input data to preprocess.
-            train (bool, optional): Whether the data is for training.
+            train (bool): A flag indicating whether the preprocessing is for training.
                 Default is True.
+            outlier (bool): A flag indicating whether to handle outliers during
+                preprocessing. Default is False.
 
         Returns:
-            np.ndarray: The processed data after applying preprocessing steps.
+            np.ndarray: The preprocessed data.
+
+        Raises:
+            NotImplementedError: If the method is not implemented in a subclass.
         """
-        return X
+        raise NotImplementedError
 
     @abstractmethod
     def _compute_embeddings(
         self,
         X: np.ndarray,
     ) -> np.ndarray:
-        """
-        Computes embeddings for the given input data.
+        """Computes embeddings for the given input data.
 
-        This is an abstract method that must be implemented by subclasses. The method
+        This is an abstract method that subclasses must implement. The method
         is designed to process the input data, represented as a NumPy array, and
         return a NumPy array containing computed embeddings. The actual computation
         logic is determined by the specific implementation in the subclass.
@@ -105,31 +114,32 @@ class AbstractEmbeddingGenerator(ABC):
 
     @abstractmethod
     def reset_embedding_model(self):
-        """
-        Abstract method to reset the embedding model.
+        """Abstract method to reset the embedding model.
 
         This method needs to be implemented by any subclass inheriting this base class.
         The purpose of this method is to reset or reinitialize the embedding model
         to ensure correct functioning or state restoration within the subclass.
 
         Raises:
-            NotImplementedError: This exception is raised if the method is not implemented
-                in a subclass.
+            NotImplementedError: This exception is raised if the method is not
+                implemented in a subclass.
         """
         raise NotImplementedError
 
     @staticmethod
     def _check_emb_shape(X_embed: np.ndarray) -> bool:
-        """Verifies the shape of the embedding array to ensure it meets the expected
-        requirements.
+        """Checks whether the provided embedded data has the correct shape.
+
+        The method validates if the input array `X_embed` has two dimensions as
+        expected for embedding matrices. If the array does not have two dimensions,
+        the shape is considered invalid.
 
         Args:
-            X_embed (np.ndarray): Input embedding array to be checked. Expected to
-                be an array with shape (num_samples, embedding_dim).
+            X_embed (np.ndarray): The embedding matrix to validate.
 
         Returns:
-            bool: Returns True if the shape of the array does not meet the
-                requirement of being 2-dimensional, otherwise False.
+            bool: Returns True if the shape is invalid (not 2-dimensional),
+                  otherwise False.
         """
         return len(X_embed.shape) != 2
 
@@ -152,8 +162,7 @@ class AbstractEmbeddingGenerator(ABC):
 
     @staticmethod
     def _validate_embeddings(
-            X_train_embed: np.ndarray,
-            X_test_embed: np.ndarray | None = None
+        X_train_embed: np.ndarray, X_test_embed: np.ndarray | None = None
     ) -> bool:
         """Validates the embeddings for training and test datasets.
 
@@ -168,15 +177,13 @@ class AbstractEmbeddingGenerator(ABC):
         Returns:
             bool: True if the embeddings for both datasets are valid, otherwise False.
         """
-        train_valid = (
-                AbstractEmbeddingGenerator._check_emb_shape(X_train_embed) and
-                AbstractEmbeddingGenerator._check_nan(X_train_embed)
-        )
+        train_valid = AbstractEmbeddingGenerator._check_emb_shape(
+            X_train_embed
+        ) and AbstractEmbeddingGenerator._check_nan(X_train_embed)
         if X_test_embed is not None:
-            test_valid = (
-                    AbstractEmbeddingGenerator._check_emb_shape(X_test_embed) and
-                    AbstractEmbeddingGenerator._check_nan(X_test_embed)
-            )
+            test_valid = AbstractEmbeddingGenerator._check_emb_shape(
+                X_test_embed
+            ) and AbstractEmbeddingGenerator._check_nan(X_test_embed)
             return train_valid and test_valid
         return train_valid
 
@@ -186,13 +193,12 @@ class AbstractEmbeddingGenerator(ABC):
         X_test: np.ndarray = None,
         outlier: bool = False,
     ) -> tuple:
-        """
-        Computes embeddings for the given training and optional testing data.
+        """Computes embeddings for the given training and optional testing data.
 
-        The method processes the input data using a preprocessing step before generating
-        embeddings. If testing data is provided, it computes embeddings for both training
-        and testing data and validates them. Execution times for the embedding computation
-        steps are also returned.
+        The method processes the input data using a preprocessing step before
+        generating embeddings. If testing data is provided, it computes
+        embeddings for both training and testing data and validates them.
+        Execution times for the embedding computation steps are also returned.
 
         Args:
             X_train (np.ndarray): The training data to compute embeddings for.
@@ -231,6 +237,10 @@ class AbstractEmbeddingGenerator(ABC):
             if not self._validate_embeddings(X_train_embed, X_test_embed):
                 raise Exception("Embeddings contain NaN values.")
 
-            return (X_train_embed, X_test_embed, compute_embeddings_time,
-                    compute_test_embeddings_time)
+            return (
+                X_train_embed,
+                X_test_embed,
+                compute_embeddings_time,
+                compute_test_embeddings_time,
+            )
         return X_train_embed, compute_embeddings_time
