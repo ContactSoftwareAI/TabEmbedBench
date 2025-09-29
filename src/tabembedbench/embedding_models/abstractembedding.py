@@ -1,5 +1,7 @@
 import time
 from abc import ABC, abstractmethod
+from typing import Optional
+
 
 import numpy as np
 
@@ -70,6 +72,7 @@ class AbstractEmbeddingGenerator(ABC):
         X: np.ndarray,
         train: bool = True,
         outlier: bool = False,
+        **kwargs,
     ) -> np.ndarray:
         """Preprocesses the input data.
 
@@ -97,6 +100,7 @@ class AbstractEmbeddingGenerator(ABC):
     def _compute_embeddings(
         self,
         X: np.ndarray,
+        **kwargs,
     ) -> np.ndarray:
         """Computes embeddings for the given input data.
 
@@ -122,7 +126,7 @@ class AbstractEmbeddingGenerator(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def reset_embedding_model(self):
+    def reset_embedding_model(self, *args, **kwargs):
         """Abstract method to reset the embedding model.
 
         This method needs to be implemented by any subclass inheriting this base class.
@@ -136,7 +140,7 @@ class AbstractEmbeddingGenerator(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def _check_emb_shape(X_embed: np.ndarray) -> bool:
+    def _check_emb_shape(embeddings: np.ndarray) -> bool:
         """Checks whether the provided embedded data has the correct shape.
 
         The method validates if the input array `X_embed` has two dimensions as
@@ -144,16 +148,16 @@ class AbstractEmbeddingGenerator(ABC):
         the shape is considered invalid.
 
         Args:
-            X_embed (np.ndarray): The embedding matrix to validate.
+            embeddings (np.ndarray): The embedding matrix to validate.
 
         Returns:
             bool: Returns True if the shape is invalid (not 2-dimensional),
                   otherwise False.
         """
-        return len(X_embed.shape) != 2
+        return len(embeddings.shape) != 2
 
     @staticmethod
-    def _check_nan(X_embed: np.ndarray) -> bool:
+    def _check_nan(embeddings: np.ndarray) -> bool:
         """Checks if the given array contains any NaN (Not a Number) values.
 
         This static method evaluates the given NumPy array for the presence of any
@@ -161,17 +165,19 @@ class AbstractEmbeddingGenerator(ABC):
         to calculations or operations is valid and does not contain invalid entries.
 
         Args:
-            X_embed (np.ndarray): The NumPy array that needs to be checked for NaN
+            embeddings (np.ndarray): The NumPy array that needs to be checked
+            for NaN
                 values.
 
         Returns:
             bool: True if the array contains any NaN values; otherwise, False.
         """
-        return np.isnan(X_embed).any()
+        return np.isnan(embeddings).any()
 
     @staticmethod
     def _validate_embeddings(
-        X_train_embed: np.ndarray, X_test_embed: np.ndarray | None = None
+            train_embeddings: np.ndarray,
+            test_embeddings: Optional[np.ndarray] = None
     ) -> bool:
         """Validates the embeddings for training and test datasets.
 
@@ -179,20 +185,20 @@ class AbstractEmbeddingGenerator(ABC):
         have the correct shape and do not contain NaN values.
 
         Args:
-            X_train_embed (np.ndarray): The embedding matrix for the training dataset.
-            X_test_embed (Optional[np.ndarray]): The embedding matrix for the test
+            train_embeddings (np.ndarray): The embedding matrix for the training dataset.
+            test_embeddings (Optional[np.ndarray]): The embedding matrix for the test
                 dataset. Defaults to None.
 
         Returns:
             bool: True if the embeddings for both datasets are valid, otherwise False.
         """
         train_valid = AbstractEmbeddingGenerator._check_emb_shape(
-            X_train_embed
-        ) and AbstractEmbeddingGenerator._check_nan(X_train_embed)
-        if X_test_embed is not None:
+            train_embeddings
+        ) and AbstractEmbeddingGenerator._check_nan(train_embeddings)
+        if test_embeddings is not None:
             test_valid = AbstractEmbeddingGenerator._check_emb_shape(
-                X_test_embed
-            ) and AbstractEmbeddingGenerator._check_nan(X_test_embed)
+                test_embeddings
+            ) and AbstractEmbeddingGenerator._check_nan(test_embeddings)
             return train_valid and test_valid
         return train_valid
 
@@ -201,6 +207,7 @@ class AbstractEmbeddingGenerator(ABC):
         X_train: np.ndarray,
         X_test: np.ndarray = None,
         outlier: bool = False,
+        **kwargs,
     ) -> tuple:
         """Computes embeddings for the given training and optional testing data.
 
@@ -230,26 +237,28 @@ class AbstractEmbeddingGenerator(ABC):
             Exception: If the embeddings generated for training and testing data
                 contain NaN values.
         """
-        X_train = self._preprocess_data(X_train, train=True, outlier=outlier)
+        X_train = self._preprocess_data(
+            X_train, train=True, outlier=outlier, **kwargs
+        )
 
         start_time = time.time()
-        X_train_embed = self._compute_embeddings(X_train)
+        train_embeddings = self._compute_embeddings(X_train, **kwargs)
         compute_embeddings_time = time.time() - start_time
 
         if X_test is not None:
             X_test = self._preprocess_data(X_test, train=False)
 
             start_test_time = time.time()
-            X_test_embed = self._compute_embeddings(X_test)
+            test_embeddings = self._compute_embeddings(X_test, **kwargs)
             compute_test_embeddings_time = time.time() - start_test_time
 
-            if not self._validate_embeddings(X_train_embed, X_test_embed):
-                raise Exception("Embeddings contain NaN values.")
+            if not self._validate_embeddings(train_embeddings, test_embeddings):
+                raise ValueError("Embeddings contain NaN values.")
 
             return (
-                X_train_embed,
-                X_test_embed,
+                train_embeddings,
+                test_embeddings,
                 compute_embeddings_time,
                 compute_test_embeddings_time,
             )
-        return X_train_embed, compute_embeddings_time
+        return train_embeddings, compute_embeddings_time
