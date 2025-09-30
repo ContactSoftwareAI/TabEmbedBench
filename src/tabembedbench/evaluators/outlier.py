@@ -46,7 +46,9 @@ class IsolationForestEvaluator(AbstractEvaluator):
             model_params: dict,
             random_seed: int = 42
     ):
-        super().__init__(name="")
+        super().__init__(
+            name="IsolationForest",
+            task_type="Outlier Detection")
 
         self.model_params = model_params
         self.random_seed = random_seed
