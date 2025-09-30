@@ -215,13 +215,13 @@ def run_outlier_benchmark(
                     )
                 embedding_model.reset_embedding_model()
 
-            if save_result_dataframe:
-                save_result_df(result_df=result_df,
-                               output_path=result_dir,
-                               benchmark_name="ADBench_Tabular",
-                               timestamp=timestamp)
+                if save_result_dataframe:
+                    save_result_df(result_df=result_df,
+                                   output_path=result_dir,
+                                   benchmark_name="ADBench_Tabular",
+                                   timestamp=timestamp)
 
-            if get_device() in ["cuda", "mps"]:
-                empty_gpu_cache()
+                if get_device() in ["cuda", "mps"]:
+                    empty_gpu_cache()
 
     return result_df
