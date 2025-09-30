@@ -209,11 +209,11 @@ def run_outlier_benchmark(
                     else:
                         continue
 
-            logger.debug(
-                    f"Finished experiment for {embedding_model.name} and "
-                    f"resetting the model."
-                )
-            embedding_model.reset_embedding_model()
+                logger.debug(
+                        f"Finished experiment for {embedding_model.name} and "
+                        f"resetting the model."
+                    )
+                embedding_model.reset_embedding_model()
 
             if save_result_dataframe:
                 save_result_df(result_df=result_df,
