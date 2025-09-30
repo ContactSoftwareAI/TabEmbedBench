@@ -1,29 +1,20 @@
-import os
 from datetime import datetime
 from pathlib import Path
-import time
 
 import numpy as np
 import polars as pl
 from sklearn.metrics import roc_auc_score
-from sklearn.ensemble import IsolationForest
-from sklearn.neighbors import (
-    LocalOutlierFactor,
-)
 
+from tabembedbench.evaluators import AbstractEvaluator
 from tabembedbench.embedding_models import (
     AbstractEmbeddingGenerator
 )
 from tabembedbench.utils.dataset_utils import (
     download_adbench_tabular_datasets
 )
-from tabembedbench.utils.embedding_utils import check_nan
 from tabembedbench.utils.logging_utils import get_benchmark_logger
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
 from tabembedbench.utils.tracking_utils import (
-    get_batch_dict_result_df,
-    update_batch_dict,
-    update_result_df,
     save_result_df
 )
 
@@ -45,15 +36,12 @@ IMAGE_CATEGORY = [
 
 def run_outlier_benchmark(
     embedding_models: list[AbstractEmbeddingGenerator],
+    evaluators: list[AbstractEvaluator],
     dataset_paths: str | Path | None = None,
     exclude_datasets: list[str] | None = None,
-    exclude_image_datasets: bool = False,
-    save_embeddings: bool = False,
+    exclude_image_datasets: bool = True,
     upper_bound_num_samples: int = 10000,
     upper_bound_num_features: int = 500,
-    neighbors: int = 51,
-    neighbors_step: int = 5,
-    distance_metrics=None,
     save_result_dataframe: bool = True,
     result_dir: str | Path = "result_outlier",
     timestamp: str = TIMESTAMP,
@@ -71,6 +59,7 @@ def run_outlier_benchmark(
         embedding_models: A list of embedding models to be evaluated. Each
             embedding model must implement methods for preprocessing data,
             computing embeddings, and resetting the model.
+        evaluators: A list of algorithm.
         dataset_paths: Optional path to the dataset directory. If not specified,
             a default directory for tabular datasets will be used,
             and datasets will be downloaded if missing.
@@ -78,19 +67,12 @@ def run_outlier_benchmark(
             benchmark. Each filename should match a file in the dataset directory.
         exclude_image_datasets: Boolean flag that indicates whether to exclude
             image datasets from the benchmark. Defaults to False.
-        save_embeddings: Boolean flag to determine whether computed embeddings
-            should be saved to disk. Defaults to False.
         upper_bound_num_samples: Integer specifying the maximum size of rows
             (in number of samples) to include in the benchmark. Datasets exceeding
             this size will be skipped. Defaults to 10000.
         upper_bound_num_features: Integer specifying the maximum number of features
             to include in the benchmark. Datasets with more features than this
             value will be skipped. Defaults to 500.
-        neighbors: Integer specifying the number of neighbors to use for outlier
-        neighbors_step: Integer specifying the step size for neighbors.
-            Defaults to 5.
-        distance_metrics: List of distance metrics to use for outlier detection.
-            Defaults to ["euclidean", "cosine"].
         save_result_dataframe: Boolean flag to determine whether to save the result
             dataframe to disk. Defaults to True.
         result_dir: Optional path to the directory where the result dataframe should
@@ -108,8 +90,6 @@ def run_outlier_benchmark(
         [1] Han, S., et al. (2022). "Adbench: Anomaly detection benchmark."
             Advances in neural information processing systems, 35, 32142-32159.
     """
-    if distance_metrics is None:
-        distance_metrics = ["euclidean", "cosine"]
     if dataset_paths is None:
         dataset_paths = Path("data/adbench_tabular_datasets")
         if not dataset_paths.exists():
@@ -127,14 +107,13 @@ def run_outlier_benchmark(
     if isinstance(result_dir, str):
         result_dir = Path(result_dir)
 
-    batch_dict, result_df = get_batch_dict_result_df()
+        result_dir.mkdir(parents=True, exist_ok=True)
+
+    result_df = pl.DataFrame()
 
     for dataset_file in dataset_paths.glob("*.npz"):
         if dataset_file.name not in exclude_datasets:
             logger.info(f"Running benchmark for {dataset_file.name}...")
-
-            if "dataset_name" not in batch_dict:
-                batch_dict["dataset_name"] = []
 
             with np.load(dataset_file) as dataset:
                 num_samples = dataset["X"].shape[0]
@@ -167,226 +146,82 @@ def run_outlier_benchmark(
             X = dataset["X"]
             y = dataset["y"]
 
+            outlier_ratio = y.sum() / y.shape[0]
+
             for embedding_model in embedding_models:
                 logger.debug(f"Starting experiment for "
                              f"{embedding_model.name}..."
                              f"Compute Embeddings.")
-
-                X_embed, compute_embeddings_time = (
-                    embedding_model.compute_embeddings(X, outlier=True)
-                )
-                embed_dim = X_embed.shape[-1]
-
-                if save_embeddings:
-                    embedding_file = (
-                        f"{embedding_model.name}"
-                        f"_{dataset_file.stem}_embeddings.npz"
+                if embedding_model.task_only:
+                    continue
+                try:
+                    embeddings, compute_embeddings_time = (
+                        embedding_model.compute_embeddings(X, outlier=True)
                     )
-                    np.savez(embedding_file, x=X_embed, y=y)
-
-                    os.remove(embedding_file)
-
-                if check_nan(X_embed):
+                    embed_dim = embeddings.shape[-1]
+                except ValueError as e:
                     logger.warning(
-                        f"The embeddings for {dataset_file.name} contain NaN "
-                        f"values with embedding model {embedding_model.name}. "
-                        f"Skipping."
+                        f"By computing embeddings, the following ValueError "
+                        f"occured: {e}. Skipping"
                     )
-                else:
-                    logger.debug(
-                        f"Start Outlier Detection for {embedding_model.name} "
-                        f"with Local Outlier Factor."
-                    )
-
-                    for num_neighbors in range(0, neighbors, neighbors_step):
-                        if num_neighbors == 0:
-                            continue
-                        for distance_metric in distance_metrics:
-                            score_auc, pred_time, exception_message = (
-                                _evaluate_local_outlier_factor(
-                                num_neighbors=num_neighbors,
-                                X_embed=X_embed,
-                                y_true=y,
-                                distance_metric=distance_metric,
-                            ))
-
-                            if exception_message is not None:
-                                logger.warning(
-                                    f"Error occurred while running experiment for "
-                                    f"{embedding_model.name} with "
-                                    f"Local Outlier Factor: {exception_message}"
-                                )
-                                continue
-
-                            batch_dict = update_batch_dict(
-                                batch_dict=batch_dict,
-                                dataset_name=dataset_file.stem,
-                                dataset_size=X.shape[0],
-                                embedding_model_name=embedding_model.name,
-                                num_neighbors=num_neighbors,
-                                time_to_compute_train_embeddings=compute_embeddings_time,
-                                task="Outlier Detection",
-                                auc_score=score_auc,
-                                distance_metric=distance_metric,
-                                algorithm="LocalOutlierFactor",
-                                embedding_dimension=embed_dim,
-                                prediction_time=pred_time,
-                            )
-
-                    # Isolation Forest Implementation
-                    logger.debug(
-                        f"Start Outlier Detection for {embedding_model.name} "
-                        f"with Isolation Forest."
-                    )
-
-                    score_auc, pred_time, exception_message = (
-                        _evaluate_isolation_forest(
-                        X_embed=X_embed,
-                        y_true=y,
-                    ))
-
-                    if exception_message is not None:
-                        logger.warning(
-                            f"Error occurred while running experiment for "
-                            f"{embedding_model.name} with "
-                            f"Isolation Forest: {exception_message}"
-                        )
-                    else:
-                        batch_dict = update_batch_dict(
-                            batch_dict=batch_dict,
-                            dataset_name=dataset_file.stem,
-                            dataset_size=X.shape[0],
-                            embedding_model_name=embedding_model.name,
-                            num_neighbors=0,  # Not applicable for Isolation Forest
-                            time_to_compute_train_embeddings=compute_embeddings_time,
-                            task="Outlier Detection",
-                            auc_score=score_auc,
-                            distance_metric='',  # Not applicable for Isolation Forest
-                            algorithm="IsolationForest",
-                            embedding_dimension=embed_dim,
-                            prediction_time=pred_time,
-                        )
+                    continue
 
                 logger.debug(
-                        f"Finished experiment for {embedding_model.name} and "
-                        f"resetting the model."
-                    )
-                embedding_model.reset_embedding_model()
-
-                batch_dict, result_df = update_result_df(
-                    batch_dict=batch_dict, result_df=result_df, logger=logger
+                    f"Start Outlier Detection for {embedding_model.name} "
                 )
+                for evaluator in evaluators:
+                    if evaluator.task_type == "Outlier Detection":
+                        logger.debug(
+                            f"Using {evaluator._name} "
+                        )
+                        prediction, _ = evaluator.get_prediction(
+                            embeddings
+                        )
 
-                if save_result_dataframe:
-                    save_result_df(result_df=result_df,
-                                   output_path=result_dir,
-                                   benchmark_name="ADBench_Tabular",
-                                   timestamp=timestamp)
+                        score_auc = roc_auc_score(y, prediction)
 
-                if get_device() in ["cuda", "mps"]:
-                    empty_gpu_cache()
+                        evaluator_parameters = evaluator.get_parameters()
+
+                        parameters_string = f"{', '.join(
+                            f'{key}: {value}' 
+                            for key, value in evaluator_parameters.items()
+                        )}"
+
+                        new_row = pl.DataFrame({
+                            "dataset_name": [dataset_name],
+                            "dataset_size": [num_samples],
+                            "embedding_model": [embedding_model.name],
+                            "embed_dim": [embed_dim],
+                            "algorithm": [evaluator._name],
+                            "algorithm_parameters": [parameters_string],
+                            "auc_score": [score_auc],
+                            "time_to_compute_train_embedding": [
+                                compute_embeddings_time
+                            ],
+                            "outlier_ratio": [outlier_ratio]
+                        })
+
+                        result_df = pl.concat(
+                            [result_df, new_row],
+                            how="diagonal"
+                        )
+                        evaluator.reset_evaluator()
+                    else:
+                        continue
+
+            logger.debug(
+                    f"Finished experiment for {embedding_model.name} and "
+                    f"resetting the model."
+                )
+            embedding_model.reset_embedding_model()
+
+            if save_result_dataframe:
+                save_result_df(result_df=result_df,
+                               output_path=result_dir,
+                               benchmark_name="ADBench_Tabular",
+                               timestamp=timestamp)
+
+            if get_device() in ["cuda", "mps"]:
+                empty_gpu_cache()
 
     return result_df
-
-
-def _evaluate_local_outlier_factor(
-    num_neighbors: int,
-    X_embed: np.ndarray,
-    y_true: np.ndarray,
-    distance_metric: str = "euclidean",
-):
-    """
-    Evaluates the Local Outlier Factor (LOF) model to identify outlier detection
-    performance by computing the Area Under the Receiver Operating Characteristic
-    (AUROC) score for given input data.
-
-    This function utilizes the Local Outlier Factor algorithm to compute the
-    outlier factor for each data point in the provided dataset. It then evaluates
-    the performance of the outlier detection by calculating the ROC AUC score
-    against the ground-truth labels.
-
-    Args:
-        num_neighbors (int): The number of neighbors to use for LOF calculation.
-        X_embed (np.ndarray): The embedded feature space data used for LOF
-            computation.
-        y_true (np.ndarray): Ground-truth binary labels indicating which data
-            points are outliers.
-        distance_metric (str): The distance metric to use for nearest neighbor
-            computation. Defaults to "euclidean".
-
-    Returns:
-        tuple: A tuple consisting of the following:
-            - float: The computed ROC AUC score indicating model performance, or
-              None in case of an error.
-            - Exception: An exception object if an error occurred during calculation,
-              otherwise None.
-    """
-    try:
-        lof = LocalOutlierFactor(
-            n_neighbors=num_neighbors,
-            n_jobs=-1,
-            metric=distance_metric,
-        )
-        start_predict_time = time.time()
-        lof.fit_predict(X_embed)
-        compute_prediction_time = time.time() - start_predict_time
-
-        neg_outlier_factor = (-1) * lof.negative_outlier_factor_
-        score_auc = roc_auc_score(y_true, neg_outlier_factor)
-
-        return score_auc, compute_prediction_time, None
-    except Exception as e:
-        return None, None, e
-
-
-def _evaluate_isolation_forest(
-        X_embed: np.ndarray,
-        y_true: np.ndarray,
-        contamination: float = "auto",
-        n_estimators: int = 100,
-):
-    """
-    Evaluates the Isolation Forest model to identify outlier detection
-    performance by computing the AUROC score for given input data.
-
-    This function utilizes the Isolation Forest algorithm to compute the
-    anomaly score for each data point in the provided dataset. It then evaluates
-    the performance of the outlier detection by calculating the ROC AUC score
-    against the ground-truth labels.
-
-    Args:
-        X_embed (np.ndarray): The embedded feature space data used for Isolation
-            Forest computation.
-        y_true (np.ndarray): Ground-truth binary labels indicating which data
-            points are outliers.
-        contamination (float or str): The amount of contamination of the data set,
-            i.e., the proportion of outliers in the data set. Defaults to "auto".
-        n_estimators (int): The number of base estimators in the ensemble.
-            Defaults to 100.
-
-    Returns:
-        tuple: A tuple consisting of the following:
-            - float: The computed ROC AUC score indicating model performance, or
-              None in case of an error.
-            - Exception: An exception object if an error occurred during calculation,
-              otherwise None.
-    """
-    try:
-        iso_forest = IsolationForest(
-            contamination=contamination,
-            n_estimators=n_estimators,
-            n_jobs=-1,
-        )
-        start_predict_time = time.time()
-        iso_forest.fit(X_embed)
-        compute_prediction_time = time.time() - start_predict_time
-        # Get anomaly scores (negative values for outliers)
-        anomaly_scores = iso_forest.decision_function(X_embed)
-        # Convert to positive scores (higher values = more anomalous)
-        outlier_scores = -anomaly_scores
-
-        score_auc = roc_auc_score(y_true, outlier_scores)
-
-        return score_auc, compute_prediction_time, None
-    except Exception as e:
-        return None, None, e

@@ -1,27 +1,24 @@
-import os
-from typing import Dict, Tuple
+import time
 from datetime import datetime
 from pathlib import Path
-import time
 
 import numpy as np
 import openml
 import polars as pl
-from sklearn.metrics import mean_squared_error, roc_auc_score
+from sklearn.metrics import (
+    mean_absolute_percentage_error,
+    mean_squared_error,
+    roc_auc_score,
+)
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.preprocessing import LabelEncoder
 from tabicl.sklearn.preprocessing import TransformToNumerical
 
 from tabembedbench.embedding_models.abstractembedding import AbstractEmbeddingGenerator
-from tabembedbench.utils.embedding_utils import check_nan
+from tabembedbench.evaluators.abstractevaluator import AbstractEvaluator
 from tabembedbench.utils.logging_utils import get_benchmark_logger
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
-from tabembedbench.utils.tracking_utils import (
-    get_batch_dict_result_df,
-    update_batch_dict,
-    update_result_df,
-    save_result_df
-)
+from tabembedbench.utils.tracking_utils import save_result_df
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -30,16 +27,13 @@ logger = get_benchmark_logger("TabEmbedBench_TabArena")
 
 def run_tabarena_benchmark(
     embedding_models: list[AbstractEmbeddingGenerator],
+    evaluators: list[AbstractEvaluator],
     tabarena_version: str = "tabarena-v0.1",
     tabarena_lite: bool = True,
     upper_bound_num_samples: int = 100000,
     upper_bound_num_features: int = 500,
-    save_embeddings: bool = False,
-    neighbors: int = 51,
-    neighbors_step: int = 5,
-    distance_metrics=None,
+    result_dir: str | Path = "result_tabarena",
     save_result_dataframe: bool = True,
-    result_dir: str | Path = "result_task_specific",
     timestamp: str = TIMESTAMP,
 ):
     """Run the TabArena benchmark for a set of embedding models.
@@ -54,6 +48,7 @@ def run_tabarena_benchmark(
     Args:
         embedding_models: List of embedding model instances that inherit from
             BaseEmbeddingGenerator. Each model will be evaluated for its performance.
+        evaluators: List of evaluators
         tabarena_version: The version identifier for the TabArena benchmark study.
             Defaults to "tabarena-v0.1".
         tabarena_lite: Boolean indicating whether to run in lite mode. If True, uses fewer
@@ -64,14 +59,9 @@ def run_tabarena_benchmark(
         upper_bound_num_features: Integer representing the maximum number of features
             considered for benchmarking. Datasets with more features than this value
             will be skipped. Defaults to 500.
-        save_embeddings: Boolean indicating whether to save computed embeddings during
-            the benchmark process. Defaults to False.
-        neighbors: Integer specifying the number of neighbors to use for KNN.
-            Defaults to 51.
-        neighbors_step: Integer specifying the step size for neighbors.
-            Defaults to 5.
-        distance_metrics: List of distance metrics to use for KNN algorithms.
-            Defaults to None.
+        result_dir:
+        save_result_dataframe:
+        timestamp:
 
     Returns:
         polars.DataFrame: A dataframe summarizing the benchmark results. The columns
@@ -79,16 +69,13 @@ def run_tabarena_benchmark(
             metrics such as AUC/MSR scores, embedding computation time, and benchmark
             type.
     """
-    if distance_metrics is None:
-        distance_metrics = ["euclidean", "cosine"]
-
     if isinstance(result_dir, str):
         result_dir = Path(result_dir)
 
     benchmark_suite = openml.study.get_suite(tabarena_version)
     task_ids = benchmark_suite.tasks
 
-    batch_dict, result_df = get_batch_dict_result_df()
+    result_df = pl.DataFrame()
 
     for task_id in task_ids:
         task = openml.tasks.get_task(task_id)
@@ -120,6 +107,9 @@ def run_tabarena_benchmark(
                     target=task.target_name, dataset_format="dataframe"
                 )
 
+                categorical_indices = np.nonzero(categorical_indicator)[0]
+                categorical_indices = categorical_indices.tolist()
+
                 train_indices, test_indices = task.get_train_test_split_indices(
                     fold=fold,
                     repeat=repeat,
@@ -144,135 +134,111 @@ def run_tabarena_benchmark(
                         f"Starting experiment for dataset {dataset.name} "
                         f"with model {embedding_model.name}..."
                     )
-
-                    (X_train_embed, X_test_embed, compute_embeddings_time,
-                     compute_test_embeddings_time) = (
-                        embedding_model.compute_embeddings(X_train, X_test)
-                    )
-
-                    if check_nan(X_train_embed):
+                    try:
+                        (train_embeddings, test_embeddings, compute_embeddings_time,
+                         compute_test_embeddings_time) = (
+                            embedding_model.compute_embeddings(
+                                X_train,
+                                X_test,
+                                categorical_indices=categorical_indices
+                            )
+                        )
+                    except Exception as e:
                         logger.warning(
-                            f"The train embeddings for {dataset.name} contain "
-                            f"NaN "
-                            f"values with embedding model {embedding_model.name}. "
-                            f"Skipping."
+                            f"By computing embeddings, the following ValueError "
+                            f"occured: {e}. Skipping"
+                        )
+                        new_row_dict = {
+                            "dataset_name": [dataset.name],
+                            "dataset_size": [X.shape[0]],
+                            "embedding_model": [embedding_model.name],
+                        }
+
+                        new_row = pl.DataFrame(
+                                new_row_dict
+                            )
+
+                        result_df = pl.concat(
+                            [result_df, new_row],
+                            how="diagonal"
                         )
                         continue
 
-                    if check_nan(X_test_embed):
-                        logger.warning(
-                            f"The test embeddings for {dataset.name} contain "
-                            f"NaN "
-                            f"values with embedding model {embedding_model.name}. "
-                            f"Skipping."
-                        )
-                        continue
+                    embed_dim = train_embeddings.shape[-1]
 
-                    embedding_dim = X_train_embed.shape[-1]
+                    for evaluator in evaluators:
+                        logger.debug(f"{evaluator._name}")
+                        if task.task_type == evaluator.task_type:
+                            prediction_train, _ = evaluator.get_prediction(
+                                train_embeddings,
+                                y_train,
+                                train=True,
+                            )
 
-                    if save_embeddings:
-                        embedding_file = (
-                            f"task_{embedding_model.name}"
-                            f"_{dataset.name}_embeddings.npz"
-                        )
-                        np.savez(
-                            embedding_file,
-                            x_train=X_train_embed,
-                            y_train=y_train,
-                            x_test=X_test_embed,
-                            y_test=y_test,
-                        )
+                            test_prediction, _ = evaluator.get_prediction(
+                                test_embeddings,
+                                train=False,
+                            )
 
-                        os.remove(embedding_file)
+                            parameters = evaluator.get_parameters()
 
-                    for num_neighbors in range(0, neighbors, neighbors_step):
-                        if num_neighbors == 0:
-                            continue
-                        for distance_metric in distance_metrics:
+                            new_row_dict = {
+                                "dataset_name": [dataset.name],
+                                "dataset_size": [X.shape[0]],
+                                "embedding_model": [embedding_model.name],
+                                "embed_dim": [embed_dim],
+                                "time_to_compute_train_embedding": [
+                                    compute_embeddings_time
+                                ],
+                            }
+                            logger.debug(f"Parameters: {new_row_dict}")
+
+                            for key, value in parameters.items():
+                                new_row_dict[key] = value
+
+                            if task.task_type == "Supervised Regression":
+                                mape_score = mean_absolute_percentage_error(
+                                    y_test, test_prediction
+                                )
+                                new_row_dict["mape_score"] = mape_score
                             if task.task_type == "Supervised Classification":
-                                score_auc, predict_time, exception_message = (
-                                    _evaluate_classification(
-                                    X_train_embed,
-                                    X_test_embed,
-                                    y_train,
-                                    y_test,
-                                    num_neighbors,
-                                    distance_metric=distance_metric,
-                                ))
-
-                                if exception_message is not None:
-                                    logger.warning(
-                                        f"Error occurred while running experiment for "
-                                        f"{embedding_model.name} with "
-                                        f"KNN: {exception_message}"
+                                n_classes = test_prediction.shape[1]
+                                if n_classes == 2:
+                                    auc_score = roc_auc_score(
+                                        y_test, test_prediction[:, 1]
                                     )
-                                    continue
+                                else:
+                                    auc_score = roc_auc_score(
+                                        y_test, test_prediction, multi_class="ovr"
+                                    )
+                                new_row_dict["auc_score"] = auc_score
 
-                                batch_dict = update_batch_dict(
-                                    batch_dict,
-                                    dataset_name=dataset.name,
-                                    dataset_size=X_train.shape[0],
-                                    embedding_model_name=embedding_model.name,
-                                    num_neighbors=num_neighbors,
-                                    time_to_compute_train_embeddings=compute_embeddings_time,
-                                    auc_score=score_auc,
-                                    distance_metric=distance_metric,
-                                    task=task.task_type,
-                                    algorithm="KNNClassifier",
-                                    embedding_dimension=embedding_dim,
-                                    prediction_time=predict_time,
-                                    time_to_compute_test_embeddings=compute_test_embeddings_time,
+                            new_row = pl.DataFrame(
+                                new_row_dict
+                            )
+
+                            result_df = pl.concat(
+                                [result_df, new_row],
+                                how="diagonal"
+                            )
+
+                            if save_result_dataframe:
+                                save_result_df(
+                                    result_df=result_df,
+                                    output_path=result_dir,
+                                    benchmark_name="TabArena",
+                                    timestamp=timestamp,
                                 )
 
-                            elif task.task_type == "Supervised Regression":
-                                score_mse, predict_time, exception_message = (
-                                    _evaluate_regression(
-                                    X_train_embed,
-                                    X_test_embed,
-                                    y_train,
-                                    y_test,
-                                    num_neighbors,
-                                    distance_metric=distance_metric,
-                                ))
+                            evaluator.reset_evaluator()
 
-                                if exception_message is not None:
-                                    logger.warning(
-                                        f"Error occurred while running experiment for "
-                                        f"{embedding_model.name} with "
-                                        f"KNN: {exception_message}"
-                                    )
-                                    continue
-
-                                batch_dict = update_batch_dict(
-                                    batch_dict,
-                                    dataset_name=dataset.name,
-                                    dataset_size=X_train.shape[0],
-                                    embedding_model_name=embedding_model.name,
-                                    num_neighbors=num_neighbors,
-                                    time_to_compute_train_embeddings=compute_embeddings_time,
-                                    mse_score=score_mse,
-                                    distance_metric=distance_metric,
-                                    task=task.task_type,
-                                    algorithm="KNNRegressor",
-                                    embedding_dimension=embedding_dim,
-                                    prediction_time=predict_time,
-                                    time_to_compute_test_embeddings=compute_test_embeddings_time,
-                                )
                     logger.debug(
                         f"Finished experiment for {embedding_model.name} and "
                         f"resetting the model."
                     )
                     embedding_model.reset_embedding_model()
 
-                    batch_dict, result_df = update_result_df(
-                        batch_dict=batch_dict, result_df=result_df, logger=logger
-                    )
-
-                    if save_result_dataframe:
-                        save_result_df(result_df=result_df,
-                                       output_path=result_dir,
-                                       benchmark_name="TabArena",
-                                       timestamp=timestamp)
+                    logger.debug(f"Dataframe rows: {result_df.shape[0]}")
 
                     if get_device() in ["cuda", "mps"]:
                         empty_gpu_cache()
@@ -341,7 +307,7 @@ def _evaluate_regression(
         return None, None, e
 
 
-def _get_task_configuration(dataset, tabarena_lite: bool, task) -> Tuple[int, int]:
+def _get_task_configuration(dataset, tabarena_lite: bool, task) -> tuple[int, int]:
     """Get the number of folds and repeats for a task."""
     if tabarena_lite:
         return 1, 1
