@@ -42,7 +42,7 @@ class KNNRegressorEvaluator(AbstractEvaluator):
 
     def reset_evaluator(self):
         self.knn_regressor = KNeighborsRegressor(
-            n_neighbors=self.n_neighbors,
+            n_neighbors=self.num_neighbors,
             **self.model_params
         )
 
