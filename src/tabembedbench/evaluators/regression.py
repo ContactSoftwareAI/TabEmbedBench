@@ -1,3 +1,4 @@
+import numpy as np
 from sklearn.neighbors import KNeighborsRegressor
 
 from tabembedbench.evaluators import AbstractEvaluator
@@ -46,7 +47,7 @@ class KNNRegressorEvaluator(AbstractEvaluator):
         )
 
     def get_parameters(self):
-        params = self.model_params
+        params = dict(self.model_params.items())
 
         params["num_neighbors"] = self.num_neighbors
 

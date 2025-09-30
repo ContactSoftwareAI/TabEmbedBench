@@ -1,3 +1,5 @@
+
+import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 
 from tabembedbench.evaluators import AbstractEvaluator
@@ -22,7 +24,7 @@ class KNNClassifierEvaluator(AbstractEvaluator):
         self.model_params["weights"] = weights
         self.model_params["metric"] = metric
 
-        self.knn_regressor = KNeighborsClassifier(
+        self.knn_classifier = KNeighborsClassifier(
             n_neighbors=self.num_neighbors,
             **self.model_params
         )
@@ -36,19 +38,19 @@ class KNNClassifierEvaluator(AbstractEvaluator):
         if train:
             if y is None:
                 raise ValueError("y must be provided for training")
-            self.knn_regressor.fit(embeddings, y)
+            self.knn_classifier.fit(embeddings, y)
 
-            return self.knn_regressor.predict_proba(embeddings), None
-        return self.knn_regressor.predict_proba(embeddings), None
+            return self.knn_classifier.predict_proba(embeddings), None
+        return self.knn_classifier.predict_proba(embeddings), None
 
     def reset_evaluator(self):
-        self.knn_regressor = KNeighborsClassifier(
+        self.knn_classifier = KNeighborsClassifier(
             n_neighbors=self.num_neighbors,
             **self.model_params
         )
 
     def get_parameters(self):
-        params = self.model_params
+        params = dict(self.model_params.items())
 
         params["num_neighbors"] = self.num_neighbors
 
