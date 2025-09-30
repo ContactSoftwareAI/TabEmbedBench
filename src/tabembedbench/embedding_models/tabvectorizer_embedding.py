@@ -46,7 +46,7 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
 
         return X
 
-    def _compute_embeddings(self, X: np.ndarray) -> np.ndarray:
+    def _compute_embeddings(self, X: np.ndarray, **kwargs) -> np.ndarray:
         """
         Computes embeddings for the input data using the TableVectorizer transformation.
 

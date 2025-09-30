@@ -25,14 +25,17 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
 
         return point / np.linalg.norm(point)
 
-    def fit(self, data: pd.DataFrame | np.ndarray, y=None):
+    def fit(self, data: pd.DataFrame | np.ndarray, y=None,
+            categorical_indices: list[int] | None = None):
         if isinstance(data, pd.DataFrame):
             data = data.values
         else:
             data = data
 
-        if self.categorical_indices is None:
+        if categorical_indices is None:
             self.categorical_indices = infer_categorical_columns(data)
+        else:
+            self.categorical_indices = categorical_indices
 
         _, self.n_cols = data.shape
 
@@ -46,10 +49,12 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
 
                 for category in unique_categories:
                     # Generiere zufälligen Punkt in kleiner Kugel (Radius 0.1) um Mittelpunkt
+                    category_key = category.item() if hasattr(category, 'item') else category
+
                     random_offset = np.random.randn(self.embed_dim)
                     random_offset = 0.1 * random_offset / np.linalg.norm(random_offset)
 
-                    category_embeddings[category] = center_point + random_offset
+                    category_embeddings[category_key] = center_point + random_offset
 
                 self.column_properties.append([center_point, category_embeddings])
             else:
@@ -184,7 +189,9 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
         embeddings = np.zeros((n_values, self.embed_dim))
 
         for i, value in enumerate(column_data):
-            if value in unique_category_embeddings.keys():
+            value_key = value.item() if hasattr(value, 'item') else value
+
+            if value_key in unique_category_embeddings.keys():
                 embeddings[i] = unique_category_embeddings[value]
             else:
                 random_offset = np.random.randn(self.embed_dim)
@@ -196,17 +203,33 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
         return embeddings
 
     def _preprocess_data(
-        self, data: np.ndarray, train: bool = True, outlier: bool = False
+        self, data: np.ndarray, train: bool = True, outlier: bool = False,
+            categorical_indices: list[int] | None = None,
+            **kwargs
     ):
         if train:
-            self.fit(data)
+            self.fit(data, categorical_indices=categorical_indices)
 
         return data
 
-    def _compute_embeddings(self, data: np.ndarray):
+    def _compute_embeddings(self, data: np.ndarray, **kwargs):
         return self.transform(data)
 
     def reset_embedding_model(self):
         self.column_properties = []
         self.categorical_indices = None
         self.n_cols = None
+
+
+if __name__ == "__main__":
+    if __name__ == "__main__":
+        dataset = np.load("/Users/lkl/PycharmProjects/TabEmbedBench/data/adbench_tabular_datasets/30_satellite.npz")
+
+        X = dataset["X"]
+        y = dataset["y"]
+
+        sphere_model = SphereBasedEmbedding(
+            embed_dim=8
+        )
+
+        sphere_model.compute_embeddings(X)

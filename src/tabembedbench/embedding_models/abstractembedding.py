@@ -1,7 +1,6 @@
 import time
 from abc import ABC, abstractmethod
-from typing import Optional
-
+from typing import Optional, Union
 
 import numpy as np
 
@@ -71,7 +70,6 @@ class AbstractEmbeddingGenerator(ABC):
         self,
         X: np.ndarray,
         train: bool = True,
-        outlier: bool = False,
         **kwargs,
     ) -> np.ndarray:
         """Preprocesses the input data.
@@ -154,7 +152,7 @@ class AbstractEmbeddingGenerator(ABC):
             bool: Returns True if the shape is invalid (not 2-dimensional),
                   otherwise False.
         """
-        return len(embeddings.shape) != 2
+        return len(embeddings.shape) == 2
 
     @staticmethod
     def _check_nan(embeddings: np.ndarray) -> bool:
@@ -172,12 +170,11 @@ class AbstractEmbeddingGenerator(ABC):
         Returns:
             bool: True if the array contains any NaN values; otherwise, False.
         """
-        return np.isnan(embeddings).any()
+        return not np.isnan(embeddings).any()
 
     @staticmethod
     def _validate_embeddings(
-            train_embeddings: np.ndarray,
-            test_embeddings: Optional[np.ndarray] = None
+            embeddings: np.ndarray,
     ) -> bool:
         """Validates the embeddings for training and test datasets.
 
@@ -185,22 +182,18 @@ class AbstractEmbeddingGenerator(ABC):
         have the correct shape and do not contain NaN values.
 
         Args:
-            train_embeddings (np.ndarray): The embedding matrix for the training dataset.
-            test_embeddings (Optional[np.ndarray]): The embedding matrix for the test
-                dataset. Defaults to None.
+            embeddings (np.ndarray): The embedding matrix for the training
+                dataset.
 
         Returns:
             bool: True if the embeddings for both datasets are valid, otherwise False.
         """
-        train_valid = AbstractEmbeddingGenerator._check_emb_shape(
-            train_embeddings
-        ) and AbstractEmbeddingGenerator._check_nan(train_embeddings)
-        if test_embeddings is not None:
-            test_valid = AbstractEmbeddingGenerator._check_emb_shape(
-                test_embeddings
-            ) and AbstractEmbeddingGenerator._check_nan(test_embeddings)
-            return train_valid and test_valid
-        return train_valid
+        shape_check = AbstractEmbeddingGenerator._check_emb_shape(
+            embeddings
+        )
+        nan_check = AbstractEmbeddingGenerator._check_nan(embeddings)
+
+        return shape_check and nan_check
 
     def compute_embeddings(
         self,
@@ -245,6 +238,9 @@ class AbstractEmbeddingGenerator(ABC):
         train_embeddings = self._compute_embeddings(X_train, **kwargs)
         compute_embeddings_time = time.time() - start_time
 
+        if not self._validate_embeddings(train_embeddings):
+            raise ValueError("Embeddings contain NaN values.")
+
         if X_test is not None:
             X_test = self._preprocess_data(X_test, train=False)
 
@@ -252,7 +248,7 @@ class AbstractEmbeddingGenerator(ABC):
             test_embeddings = self._compute_embeddings(X_test, **kwargs)
             compute_test_embeddings_time = time.time() - start_test_time
 
-            if not self._validate_embeddings(train_embeddings, test_embeddings):
+            if not self._validate_embeddings(test_embeddings):
                 raise ValueError("Embeddings contain NaN values.")
 
             return (

@@ -1,5 +1,6 @@
 import inspect
 from pathlib import Path
+from typing import Tuple, Union
 
 import numpy as np
 import torch
@@ -61,7 +62,7 @@ class TabICLRowEmbedding(nn.Module):
         row_rope_base: float = 100000,
         ff_factor: int = 2,
         dropout: float = 0.0,
-        activation: str | callable = "gelu",
+        activation: Union[str, callable] = "gelu",
         norm_first: bool = True,
         **kwargs,
     ):
@@ -199,7 +200,8 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         X: np.ndarray,
         train: bool = True,
         outlier: bool = False,
-    ):
+        **kwargs
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Preprocesses the input data based on the specified mode (training or inference) and
         whether the data contains outliers.
@@ -245,6 +247,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         self,
         X: np.ndarray,
         device: torch.device | None = None,
+        **kwargs
     ) -> np.ndarray:
         """
         Computes the embeddings for the given input data.

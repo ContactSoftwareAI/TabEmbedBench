@@ -16,6 +16,7 @@ RESULT_DF_SCHEMA = {
     "distance_metric": pl.Categorical,
     "task": pl.Categorical,
     "algorithm": pl.Categorical,
+    "algorithm_parameters": pl.String,
     "emb_dim": pl.UInt64,
     "prediction_time": pl.Float64,
     "time_to_compute_test_embeddings": pl.Float64,
