@@ -49,7 +49,14 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
 
                 for category in unique_categories:
                     # Generiere zufälligen Punkt in kleiner Kugel (Radius 0.1) um Mittelpunkt
-                    category_key = category.item() if hasattr(category, 'item') else category
+                    if isinstance(category, (np.integer, np.floating)):
+                        category_key = int(category)
+                    elif isinstance(category, str):
+                        category_key = category
+                    else:
+                        category_key = (
+                            category.item() if hasattr(category, "item") else category
+                        )
 
                     random_offset = np.random.randn(self.embed_dim)
                     random_offset = 0.1 * random_offset / np.linalg.norm(random_offset)
@@ -184,12 +191,16 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
         center_point = self.column_properties[col_idx][0]
         unique_category_embeddings = self.column_properties[col_idx][1]
 
+        if not isinstance(unique_category_embeddings, dict):
+            raise ValueError(
+                f"The unique category embedding is not an dictionary."
+            )
+
         # Erstelle Einbettungen für alle Werte
         n_values = len(column_data)
         embeddings = np.zeros((n_values, self.embed_dim))
 
         for i, value in enumerate(column_data):
-            value_key = value.item() if hasattr(value, 'item') else value
 
             if value_key in unique_category_embeddings.keys():
                 embeddings[i] = unique_category_embeddings[value]
@@ -219,17 +230,3 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
         self.column_properties = []
         self.categorical_indices = None
         self.n_cols = None
-
-
-if __name__ == "__main__":
-    if __name__ == "__main__":
-        dataset = np.load("/Users/lkl/PycharmProjects/TabEmbedBench/data/adbench_tabular_datasets/30_satellite.npz")
-
-        X = dataset["X"]
-        y = dataset["y"]
-
-        sphere_model = SphereBasedEmbedding(
-            embed_dim=8
-        )
-
-        sphere_model.compute_embeddings(X)
