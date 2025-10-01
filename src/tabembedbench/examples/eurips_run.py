@@ -136,7 +136,7 @@ def run_main(debug, max_samples, max_features, run_outlier,
 @click.option('--max-features', default=500, help='Upper bound for number of features')
 @click.option('--run-outlier/--no-run-outlier', default=True, help='Run outlier detection')
 @click.option('--run-task-specific/--no-run-task-specific', default=True, help='Run task-specific evaluations')
-@click.option('--adbench_data', default='data', help='Run task-specific '
+@click.option('--adbench-data', default='data', help='Run task-specific '
                                                  'evaluations')
 def main(debug, max_samples, max_features, run_outlier, run_task_specific,
          adbench_data):
