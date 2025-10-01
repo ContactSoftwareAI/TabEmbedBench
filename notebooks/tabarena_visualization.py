@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 
 # Pfad zur Parquet-Datei
-path_to_data_file = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\results_TabArena_20250925_052255.parquet"
+path_to_data_file = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\results_TabArena_20250925_134113.parquet"
 
 
 def load_tabarena_results(file_path: str) -> pl.DataFrame:
@@ -72,17 +72,6 @@ def separate_by_task_type(df: pl.DataFrame) -> dict:
             results["regression"] = regression_data
             print(f"Regression Experimente (MAPE): {len(regression_data)}")
 
-    # Falls MSE verfügbar ist, auch für Regression verwenden
-    if "mse_score" in columns and "regression" not in results:
-        regression_data = df.filter(
-            pl.col("mse_score").is_not_null() &
-            (pl.col("mse_score") != np.inf) &
-            (pl.col("mse_score") >= 0)
-        )
-        if len(regression_data) > 0:
-            results["regression_mse"] = regression_data
-            print(f"Regression Experimente (MSE): {len(regression_data)}")
-
     return results
 
 
@@ -122,10 +111,6 @@ def create_detailed_boxplots(task_data: dict) -> dict:
             height=500,
             yaxis_title=metric_col.upper().replace("_", " ")
         )
-
-        # Für Log-Loss und MAPE/MSE verwende Log-Skala wenn sinnvoll
-        if metric_col in ["log_loss_score", "mape_score", "mse_score"]:
-            fig.update_yaxes(type="log")
 
         plots[task_type] = fig
 
