@@ -49,19 +49,10 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
 
                 for category in unique_categories:
                     # Generiere zufälligen Punkt in kleiner Kugel (Radius 0.1) um Mittelpunkt
-                    if isinstance(category, (np.integer, np.floating)):
-                        category_key = int(category)
-                    elif isinstance(category, str):
-                        category_key = category
-                    else:
-                        category_key = (
-                            category.item() if hasattr(category, "item") else category
-                        )
-
                     random_offset = np.random.randn(self.embed_dim)
                     random_offset = 0.1 * random_offset / np.linalg.norm(random_offset)
 
-                    category_embeddings[category_key] = center_point + random_offset
+                    category_embeddings[category] = center_point + random_offset
 
                 self.column_properties.append([center_point, category_embeddings])
             else:
@@ -202,7 +193,7 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
 
         for i, value in enumerate(column_data):
 
-            if value_key in unique_category_embeddings.keys():
+            if value in unique_category_embeddings.keys():
                 embeddings[i] = unique_category_embeddings[value]
             else:
                 random_offset = np.random.randn(self.embed_dim)

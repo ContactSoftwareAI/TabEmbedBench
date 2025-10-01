@@ -18,26 +18,28 @@ logger = logging.getLogger("EuRIPS_Run_Benchmark")
 
 
 def get_embedding_models(debug=False):
+    embedding_models = []
+    for n in range(3, 10):
+        sphere_model = SphereBasedEmbedding(embed_dim=2**n)
+        sphere_model.name = f"sphere-model-d{2**n}"
+        embedding_models.append(sphere_model)
+
     tabicl_with_preproccessing = TabICLEmbedding(preprocess_tabicl_data=True)
 
     tabicl_with_preproccessing.name = "tabicl-classifier-v1.1-0506_preprocessed"
 
     tablevector = TabVectorizerEmbedding()
 
-    embedding_models = [tablevector, tabicl_with_preproccessing]
+    embedding_models.extend([tablevector, tabicl_with_preproccessing])
 
     if debug:
+        embedding_models = [tablevector, tabicl_with_preproccessing]
         sphere_model = SphereBasedEmbedding(embed_dim=8)
         sphere_model.name = "sphere-model-d8-debug"
 
         embedding_models.append(sphere_model)
 
         return embedding_models
-
-    for n in range(3, 10):
-        sphere_model = SphereBasedEmbedding(embed_dim=2**n)
-        sphere_model.name = f"sphere-model-d{2**n}"
-        embedding_models.append(sphere_model)
 
     return embedding_models
 

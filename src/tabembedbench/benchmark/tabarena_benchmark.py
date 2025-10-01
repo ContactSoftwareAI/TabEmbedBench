@@ -144,7 +144,7 @@ def run_tabarena_benchmark(
                             )
                         )
                     except Exception as e:
-                        logger.warning(
+                        logger.exception(
                             f"By computing embeddings, the following ValueError "
                             f"occured: {e}. Skipping"
                         )
@@ -194,24 +194,27 @@ def run_tabarena_benchmark(
                             logger.debug(f"Parameters: {new_row_dict}")
 
                             for key, value in parameters.items():
-                                new_row_dict[key] = value
+                                new_row_dict[f"algorithm_{key}"] = [value]
 
                             if task.task_type == "Supervised Regression":
                                 mape_score = mean_absolute_percentage_error(
                                     y_test, test_prediction
                                 )
-                                new_row_dict["mape_score"] = mape_score
+                                new_row_dict["mape_score"] = [mape_score]
+                                new_row_dict["task"] = ["Regression"]
                             if task.task_type == "Supervised Classification":
                                 n_classes = test_prediction.shape[1]
                                 if n_classes == 2:
                                     auc_score = roc_auc_score(
                                         y_test, test_prediction[:, 1]
                                     )
+                                    new_row_dict["task"] = ["Binary"]
                                 else:
                                     auc_score = roc_auc_score(
                                         y_test, test_prediction, multi_class="ovr"
                                     )
-                                new_row_dict["auc_score"] = auc_score
+                                    new_row_dict["task"] = ["Multiclass"]
+                                new_row_dict["auc_score"] = [auc_score]
 
                             new_row = pl.DataFrame(
                                 new_row_dict

@@ -159,9 +159,9 @@ def run_outlier_benchmark(
                         embedding_model.compute_embeddings(X, outlier=True)
                     )
                     embed_dim = embeddings.shape[-1]
-                except ValueError as e:
-                    logger.warning(
-                        f"By computing embeddings, the following ValueError "
+                except Exception as e:
+                    logger.exception(
+                        f"By computing embeddings, the following Exception "
                         f"occured: {e}. Skipping"
                     )
                     continue
@@ -171,9 +171,6 @@ def run_outlier_benchmark(
                 )
                 for evaluator in evaluators:
                     if evaluator.task_type == "Outlier Detection":
-                        logger.debug(
-                            f"Using {evaluator._name} "
-                        )
                         prediction, _ = evaluator.get_prediction(
                             embeddings
                         )
@@ -181,25 +178,30 @@ def run_outlier_benchmark(
                         score_auc = roc_auc_score(y, prediction)
 
                         evaluator_parameters = evaluator.get_parameters()
-
-                        parameters_string = f"{', '.join(
-                            f'{key}: {value}' 
-                            for key, value in evaluator_parameters.items()
-                        )}"
-
-                        new_row = pl.DataFrame({
+                        logger.debug(
+                            f"Finished experiment for {evaluator._name} with parameters: "
+                            f"{evaluator_parameters}"
+                        )
+                        new_row_dict = {
                             "dataset_name": [dataset_name],
                             "dataset_size": [num_samples],
                             "embedding_model": [embedding_model.name],
                             "embed_dim": [embed_dim],
                             "algorithm": [evaluator._name],
-                            "algorithm_parameters": [parameters_string],
                             "auc_score": [score_auc],
                             "time_to_compute_train_embedding": [
                                 compute_embeddings_time
                             ],
-                            "outlier_ratio": [outlier_ratio]
-                        })
+                            "outlier_ratio": [outlier_ratio],
+                            "task": ["Outlier Detection"]
+                        }
+
+                        for key, value in evaluator_parameters.items():
+                            new_row_dict[f"algorithm_{key}"] = [value]
+
+                        new_row = pl.DataFrame(
+                            new_row_dict
+                        )
 
                         result_df = pl.concat(
                             [result_df, new_row],
