@@ -89,8 +89,36 @@ print(results_df.head())
 ```
 
 ### Command Line Usage
+
+#### Using UV (Recommended)
 ```bash
-# Run the example benchmark script
+# Run the example benchmark script with uv
+uv run src/tabembedbench/examples/eurips_run.py
+
+# Run in debug mode for quick testing
+uv run src/tabembedbench/examples/eurips_run.py --debug
+
+# Run only outlier detection
+uv run src/tabembedbench/examples/eurips_run.py --no-run-task-specific
+
+# Run only task-specific benchmarks
+uv run src/tabembedbench/examples/eurips_run.py --no-run-outlier
+
+# Limit dataset size and features
+uv run src/tabembedbench/examples/eurips_run.py --max-samples 1000 --max-features 50
+
+# Combine multiple options
+uv run src/tabembedbench/examples/eurips_run.py --debug --max-samples 500 --max-features 20
+```
+
+#### Using Python directly (after environment activation)
+```bash
+# First activate the environment
+source .venv/bin/activate  # On Unix/macOS
+# or
+.venv\Scripts\activate     # On Windows
+
+# Then run the script
 python src/tabembedbench/examples/eurips_run.py
 
 # Run in debug mode for quick testing
