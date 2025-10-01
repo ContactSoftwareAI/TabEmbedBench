@@ -102,7 +102,8 @@ def get_evaluators(debug=False):
 
     return evaluator_algorithms
 
-def run_main(debug, max_samples, max_features, run_outlier, run_task_specific):
+def run_main(debug, max_samples, max_features, run_outlier,
+             run_task_specific, adbench_dataset_path):
     if debug:
         logger.info("Running in DEBUG mode")
         max_samples = 800
@@ -119,6 +120,7 @@ def run_main(debug, max_samples, max_features, run_outlier, run_task_specific):
     run_benchmark(
         embedding_models=embedding_models,
         evaluator_algorithms=evaluators,
+        adbench_dataset_path=adbench_dataset_path,
         exclude_adbench_datasets=["3_backdoor.npz"],
         upper_bound_dataset_size= max_samples,
         upper_bound_num_feautres= max_features,
@@ -134,8 +136,17 @@ def run_main(debug, max_samples, max_features, run_outlier, run_task_specific):
 @click.option('--max-features', default=500, help='Upper bound for number of features')
 @click.option('--run-outlier/--no-run-outlier', default=True, help='Run outlier detection')
 @click.option('--run-task-specific/--no-run-task-specific', default=True, help='Run task-specific evaluations')
-def main(debug, max_samples, max_features, run_outlier, run_task_specific):
-    run_main(debug, max_samples, max_features, run_outlier, run_task_specific)
+@click.option('--adbench_data', default='data', help='Run task-specific '
+                                                 'evaluations')
+def main(debug, max_samples, max_features, run_outlier, run_task_specific,
+         adbench_data):
+    run_main(
+        debug=debug,
+        max_samples=max_samples,
+        max_features=max_features,
+        run_outlier=run_outlier,
+        run_task_specific=run_task_specific,
+        adbench_dataset_path=adbench_data)
 
 
 if __name__ == "__main__":
