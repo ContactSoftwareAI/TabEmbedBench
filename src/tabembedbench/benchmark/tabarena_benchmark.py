@@ -100,7 +100,9 @@ def run_tabarena_benchmark(
         folds, tabarena_repeats = _get_task_configuration(dataset,
                                                           tabarena_lite,
                                                           task)
-
+        logger.info(f"Starting experiments for dataset {dataset.name}"
+                    f" and task {task.task_type}"
+                    )
         for repeat in range(tabarena_repeats):
             for fold in range(folds):
                 X, y, categorical_indicator, attribute_names = dataset.get_data(
@@ -131,8 +133,8 @@ def run_tabarena_benchmark(
 
                 for embedding_model in embedding_models:
                     logger.info(
-                        f"Starting experiment for dataset {dataset.name} "
-                        f"with model {embedding_model.name}..."
+                        f"Starting experiment for embedding model"
+                        f" {embedding_model.name}..."
                     )
                     try:
                         (train_embeddings, test_embeddings, compute_embeddings_time,
@@ -167,8 +169,9 @@ def run_tabarena_benchmark(
                     embed_dim = train_embeddings.shape[-1]
 
                     for evaluator in evaluators:
-                        logger.debug(f"{evaluator._name}")
                         if task.task_type == evaluator.task_type:
+                            logger.debug(f"Starting experiment for evaluator "
+                                         f"{evaluator._name}...")
                             prediction_train, _ = evaluator.get_prediction(
                                 train_embeddings,
                                 y_train,
@@ -190,8 +193,10 @@ def run_tabarena_benchmark(
                                 "time_to_compute_train_embedding": [
                                     compute_embeddings_time
                                 ],
+                                "algorithm": [evaluator._name],
                             }
-                            logger.debug(f"Parameters: {new_row_dict}")
+                            logger.debug(f"Parameters for {evaluator._name}: "
+                                         f"{new_row_dict}")
 
                             for key, value in parameters.items():
                                 new_row_dict[f"algorithm_{key}"] = [value]
@@ -201,19 +206,23 @@ def run_tabarena_benchmark(
                                     y_test, test_prediction
                                 )
                                 new_row_dict["mape_score"] = [mape_score]
-                                new_row_dict["task"] = ["Regression"]
+                                new_row_dict["task"] = ["regression"]
                             if task.task_type == "Supervised Classification":
                                 n_classes = test_prediction.shape[1]
                                 if n_classes == 2:
                                     auc_score = roc_auc_score(
                                         y_test, test_prediction[:, 1]
                                     )
-                                    new_row_dict["task"] = ["Binary"]
+                                    new_row_dict["task"] = ["classification"]
+                                    new_row_dict["classification_type"] = [
+                                        "binary"]
                                 else:
                                     auc_score = roc_auc_score(
                                         y_test, test_prediction, multi_class="ovr"
                                     )
-                                    new_row_dict["task"] = ["Multiclass"]
+                                    new_row_dict["task"] = ["classification"]
+                                    new_row_dict["classification_type"] = [
+                                        "multiclass"]
                                 new_row_dict["auc_score"] = [auc_score]
 
                             new_row = pl.DataFrame(
