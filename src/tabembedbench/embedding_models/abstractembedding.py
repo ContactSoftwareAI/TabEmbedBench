@@ -1,6 +1,5 @@
 import time
 from abc import ABC, abstractmethod
-from typing import Optional, Union
 
 import numpy as np
 
@@ -32,8 +31,7 @@ class AbstractEmbeddingGenerator(ABC):
 
     @property
     def is_computing_embeddings(self) -> bool:
-        """
-        Indicates whether the current object is restricted to a task-only context.
+        """Indicates whether the current object is restricted to a task-only context.
 
         This property is a simple boolean flag that returns `False`, indicating
         that the object is not limited to task-only usage. The flag can be
@@ -97,7 +95,7 @@ class AbstractEmbeddingGenerator(ABC):
     @abstractmethod
     def _fit_model(self,
                    X_preprocessed: np.ndarray,
-                   y_preprocessed: Optional[np.ndarray] = None,
+                   y_preprocessed: np.ndarray | None = None,
                    train: bool = True,
                    **kwargs):
         raise NotImplementedError
@@ -133,7 +131,7 @@ class AbstractEmbeddingGenerator(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def reset_embedding_model(self, *args, **kwargs):
+    def _reset_embedding_model(self, *args, **kwargs):
         """Abstract method to reset the embedding model.
 
         This method needs to be implemented by any subclass inheriting this base class.
@@ -211,7 +209,8 @@ class AbstractEmbeddingGenerator(ABC):
         outlier: bool = False,
         **kwargs,
     ) -> tuple:
-        """Computes embeddings for the given training and optional testing data.
+        """Generates embeddings for the given training and optional testing
+        data.
 
         The method processes the input data using a preprocessing step before
         generating embeddings. If testing data is provided, it computes
@@ -262,10 +261,15 @@ class AbstractEmbeddingGenerator(ABC):
             if not self._validate_embeddings(test_embeddings):
                 raise ValueError("Embeddings contain NaN values.")
 
-            return (
-                train_embeddings,
-                test_embeddings,
-                compute_embeddings_time,
-                compute_test_embeddings_time,
-            )
-        return train_embeddings, compute_embeddings_time
+        else:
+            test_embeddings = None
+            compute_test_embeddings_time = None
+
+        self._reset_embedding_model()
+
+        return (
+            train_embeddings,
+            compute_embeddings_time,
+            test_embeddings,
+            compute_test_embeddings_time,
+        )

@@ -66,5 +66,5 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
     def _optimize_tablevectorizer(self):
         raise NotImplementedError
 
-    def reset_embedding_model(self):
+    def _reset_embedding_model(self):
         self.tablevectorizer = TableVectorizer()

@@ -284,7 +284,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
 
         return self.tabicl_row_embedder.forward(X).cpu().squeeze().numpy()
 
-    def reset_embedding_model(self):
+    def _reset_embedding_model(self):
         """
         Resets the embedding model by reinitializing preprocessing pipelines.
 

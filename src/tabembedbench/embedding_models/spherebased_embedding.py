@@ -219,7 +219,7 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
     def _compute_embeddings(self, data: np.ndarray, **kwargs):
         return self.transform(data)
 
-    def reset_embedding_model(self):
+    def _reset_embedding_model(self):
         self.column_properties = []
         self.categorical_indices = None
         self.n_cols = None
