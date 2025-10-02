@@ -91,7 +91,7 @@ model.name = "custom-model-name"
 train_emb, test_emb, time_taken = model.generate_embeddings(X_train, X_test)
 
 # 3. State Reset (between datasets)
-model.reset_embedding_model()
+model._reset_embedding_model()
 ```
 
 ## Available Implementations
