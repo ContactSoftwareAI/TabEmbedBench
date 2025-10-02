@@ -9,6 +9,7 @@ from sklearn.metrics import (
     mean_absolute_percentage_error,
     mean_squared_error,
     roc_auc_score,
+    log_loss
 )
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.preprocessing import LabelEncoder
@@ -220,10 +221,15 @@ def run_tabarena_benchmark(
                                     auc_score = roc_auc_score(
                                         y_test, test_prediction, multi_class="ovr"
                                     )
+                                    log_loss_score = log_loss(
+                                        y_test, test_prediction, multi_class="ovr"
+                                    )
                                     new_row_dict["task"] = ["classification"]
                                     new_row_dict["classification_type"] = [
                                         "multiclass"]
+                                    new_row_dict["log_loss_score"] = [log_loss_score]
                                 new_row_dict["auc_score"] = [auc_score]
+
 
                             new_row = pl.DataFrame(
                                 new_row_dict
