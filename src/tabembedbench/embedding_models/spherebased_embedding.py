@@ -25,8 +25,12 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
 
         return point / np.linalg.norm(point)
 
-    def fit(self, data: pd.DataFrame | np.ndarray, y=None,
-            categorical_indices: list[int] | None = None):
+    def fit(
+        self,
+        data: pd.DataFrame | np.ndarray,
+        y=None,
+        categorical_indices: list[int] | None = None,
+    ):
         if isinstance(data, pd.DataFrame):
             data = data.values
         else:
@@ -183,16 +187,13 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
         unique_category_embeddings = self.column_properties[col_idx][1]
 
         if not isinstance(unique_category_embeddings, dict):
-            raise ValueError(
-                f"The unique category embedding is not an dictionary."
-            )
+            raise ValueError(f"The unique category embedding is not an dictionary.")
 
         # Erstelle Einbettungen für alle Werte
         n_values = len(column_data)
         embeddings = np.zeros((n_values, self.embed_dim))
 
         for i, value in enumerate(column_data):
-
             if value in unique_category_embeddings.keys():
                 embeddings[i] = unique_category_embeddings[value]
             else:
@@ -204,14 +205,21 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
 
         return embeddings
 
-    def _preprocess_data(self, data: np.ndarray, train: bool = True, outlier: bool = False,
-            categorical_indices: list[int] | None = None,):
+    def _preprocess_data(
+        self,
+        data: np.ndarray,
+        train: bool = True,
+        outlier: bool = False,
+        categorical_indices: list[int] | None = None,
+    ):
         return data
 
     def _fit_model(
-        self, data: np.ndarray, train: bool = True,
-            categorical_indices: list[int] | None = None,
-            **kwargs
+        self,
+        data: np.ndarray,
+        train: bool = True,
+        categorical_indices: list[int] | None = None,
+        **kwargs,
     ):
         if train:
             self.fit(data, categorical_indices=categorical_indices)

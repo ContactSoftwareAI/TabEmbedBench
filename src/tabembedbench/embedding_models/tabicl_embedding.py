@@ -196,11 +196,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         return row_embedding_model
 
     def _preprocess_data(
-        self,
-        X: np.ndarray,
-        train: bool = True,
-        outlier: bool = False,
-        **kwargs
+        self, X: np.ndarray, train: bool = True, outlier: bool = False, **kwargs
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Preprocesses the input data based on the specified mode (training or inference) and
@@ -243,15 +239,11 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
 
         return X_preprocess
 
-    def _fit_model(self, X_preprocessed: np.ndarray, train: bool = True,
-                   **kwargs):
+    def _fit_model(self, X_preprocessed: np.ndarray, train: bool = True, **kwargs):
         return X_preprocessed
 
     def _compute_embeddings(
-        self,
-        X: np.ndarray,
-        device: torch.device | None = None,
-        **kwargs
+        self, X: np.ndarray, device: torch.device | None = None, **kwargs
     ) -> np.ndarray:
         """
         Computes the embeddings for the given input data.

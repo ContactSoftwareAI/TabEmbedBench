@@ -93,13 +93,14 @@ class AbstractEmbeddingGenerator(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _fit_model(self,
-                   X_preprocessed: np.ndarray,
-                   y_preprocessed: np.ndarray | None = None,
-                   train: bool = True,
-                   **kwargs):
+    def _fit_model(
+        self,
+        X_preprocessed: np.ndarray,
+        y_preprocessed: np.ndarray | None = None,
+        train: bool = True,
+        **kwargs,
+    ):
         raise NotImplementedError
-
 
     @abstractmethod
     def _compute_embeddings(
@@ -181,7 +182,7 @@ class AbstractEmbeddingGenerator(ABC):
 
     @staticmethod
     def _validate_embeddings(
-            embeddings: np.ndarray,
+        embeddings: np.ndarray,
     ) -> bool:
         """Validates the embeddings for training and test datasets.
 
@@ -195,9 +196,7 @@ class AbstractEmbeddingGenerator(ABC):
         Returns:
             bool: True if the embeddings for both datasets are valid, otherwise False.
         """
-        shape_check = AbstractEmbeddingGenerator._check_emb_shape(
-            embeddings
-        )
+        shape_check = AbstractEmbeddingGenerator._check_emb_shape(embeddings)
         nan_check = AbstractEmbeddingGenerator._check_nan(embeddings)
 
         return shape_check and nan_check
@@ -238,14 +237,14 @@ class AbstractEmbeddingGenerator(ABC):
             Exception: If the embeddings generated for training and testing data
                 contain NaN values.
         """
-        X_train = self._preprocess_data(
+        X_train_preprocessed = self._preprocess_data(
             X_train, train=True, outlier=outlier, **kwargs
         )
 
-        self._fit_model(X_train, **kwargs)
+        self._fit_model(X_train_preprocessed, **kwargs)
 
         start_time = time.time()
-        train_embeddings = self._compute_embeddings(X_train, **kwargs)
+        train_embeddings = self._compute_embeddings(X_train_preprocessed, **kwargs)
         compute_embeddings_time = time.time() - start_time
 
         if not self._validate_embeddings(train_embeddings):
