@@ -205,8 +205,8 @@ def run_tabarena_benchmark(
                                 mape_score = mean_absolute_percentage_error(
                                     y_test, test_prediction
                                 )
-                                new_row_dict["mape_score"] = [mape_score]
                                 new_row_dict["task"] = ["regression"]
+                                new_row_dict["mape_score"] = [mape_score]
                             if task.task_type == "Supervised Classification":
                                 n_classes = test_prediction.shape[1]
                                 if n_classes == 2:
