@@ -88,7 +88,7 @@ model = SomeEmbeddingModel(param1=value1)
 model.name = "custom-model-name"
 
 # 2. Embedding Generation
-train_emb, test_emb, time_taken = model.compute_embeddings(X_train, X_test)
+train_emb, test_emb, time_taken = model.generate_embeddings(X_train, X_test)
 
 # 3. State Reset (between datasets)
 model.reset_embedding_model()
@@ -118,10 +118,11 @@ A geometric embedding approach that projects tabular data onto high-dimensional 
 - `random_state`: Random seed for reproducibility
 
 #### Usage:
+
 ```python
 model = SphereBasedEmbedding(embed_dim=128)
 model.name = "sphere-128d"
-embeddings = model.compute_embeddings(X_train, X_test)
+embeddings = model.generate_embeddings(X_train, X_test)
 ```
 
 ### 2. TabICLEmbedding (`tabicl_embedding.py`)
@@ -149,10 +150,11 @@ Neural embedding model based on TabICL (Tabular In-Context Learning) architectur
 - Model-specific parameters passed to underlying TabICL architecture
 
 #### Usage:
+
 ```python
 model = TabICLEmbedding(preprocess_tabicl_data=True)
 model.name = "tabicl-preprocessed"
-embeddings = model.compute_embeddings(X_train, X_test)
+embeddings = model.generate_embeddings(X_train, X_test)
 ```
 
 ### 3. UniversalTabPFNEmbedding (`tabpfn_embedding.py`)
@@ -177,10 +179,11 @@ Embedding model based on TabPFN (Tabular Prior-Fitted Networks) architecture.
 - Task-specific settings
 
 #### Usage:
+
 ```python
 model = UniversalTabPFNEmbedding()
 model.name = "tabpfn-universal"
-embeddings = model.compute_embeddings(X_train, X_test)
+embeddings = model.generate_embeddings(X_train, X_test)
 ```
 
 ### 4. TabVectorizerEmbedding (`tabvectorizer_embedding.py`)
@@ -203,10 +206,11 @@ Traditional embedding approach using table vectorization techniques.
 - Vectorizer-specific parameters
 
 #### Usage:
+
 ```python
 model = TabVectorizerEmbedding(optimize=True)
 model.name = "tabvectorizer-optimized"
-embeddings = model.compute_embeddings(X_train, X_test)
+embeddings = model.generate_embeddings(X_train, X_test)
 ```
 
 ## Integration with Benchmarking Framework

@@ -140,7 +140,7 @@ def run_tabarena_benchmark(
                     try:
                         (train_embeddings, test_embeddings, compute_embeddings_time,
                          compute_test_embeddings_time) = (
-                            embedding_model.compute_embeddings(
+                            embedding_model.generate_embeddings(
                                 X_train,
                                 X_test,
                                 categorical_indices=categorical_indices

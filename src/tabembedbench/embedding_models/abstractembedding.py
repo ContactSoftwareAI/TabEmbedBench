@@ -31,7 +31,7 @@ class AbstractEmbeddingGenerator(ABC):
         self._name = name
 
     @property
-    def task_only(self) -> bool:
+    def is_computing_embeddings(self) -> bool:
         """
         Indicates whether the current object is restricted to a task-only context.
 
@@ -42,7 +42,7 @@ class AbstractEmbeddingGenerator(ABC):
         Returns:
             bool: False, representing that the object is not task-only.
         """
-        return False
+        return True
 
     @property
     def name(self) -> str:
@@ -204,7 +204,7 @@ class AbstractEmbeddingGenerator(ABC):
 
         return shape_check and nan_check
 
-    def compute_embeddings(
+    def generate_embeddings(
         self,
         X_train: np.ndarray,
         X_test: np.ndarray = None,

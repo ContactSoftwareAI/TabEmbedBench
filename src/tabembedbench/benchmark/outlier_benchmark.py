@@ -156,7 +156,7 @@ def run_outlier_benchmark(
                     continue
                 try:
                     embeddings, compute_embeddings_time = (
-                        embedding_model.compute_embeddings(X, outlier=True)
+                        embedding_model.generate_embeddings(X, outlier=True)
                     )
                     embed_dim = embeddings.shape[-1]
                 except Exception as e:
