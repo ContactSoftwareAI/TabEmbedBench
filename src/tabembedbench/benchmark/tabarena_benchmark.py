@@ -254,7 +254,6 @@ def run_tabarena_benchmark(
                         f"Finished experiment for {embedding_model.name} and "
                         f"resetting the model."
                     )
-                    embedding_model.reset_embedding_model()
 
                     logger.debug(f"Dataframe rows: {result_df.shape[0]}")
 

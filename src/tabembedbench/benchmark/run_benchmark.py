@@ -39,7 +39,7 @@ def benchmark_context(models_to_process, main_logger, context_name="benchmark"):
         main_logger.info(f"Cleaning up {context_name} at {datetime.now()}")
         for model in models_to_process:
             try:
-                model.reset_embedding_model()
+                model._reset_embedding_model()
             except Exception as e:
                 main_logger.warning(f"Error occurred during resetting "
                                     f"{model.name}: {e}")
@@ -60,7 +60,7 @@ def run_benchmark(
     tabarena_version: str = "tabarena-v0.1",
     tabarena_lite: bool = True,
     upper_bound_dataset_size: int = 10000,
-    upper_bound_num_feautres: int = 500,
+    upper_bound_num_features: int = 500,
     run_outlier: bool = True,
     run_task_specific: bool = True,
     data_dir: str | Path = "data",
@@ -113,7 +113,7 @@ def run_benchmark(
                     dataset_paths=adbench_dataset_path,
                     exclude_datasets=exclude_adbench_datasets,
                     upper_bound_num_samples=upper_bound_dataset_size,
-                    upper_bound_num_features=upper_bound_num_feautres,
+                    upper_bound_num_features=upper_bound_num_features,
                     result_dir=result_dir,
                     timestamp=timestamp,
                 )
@@ -133,7 +133,7 @@ def run_benchmark(
                     tabarena_version=tabarena_version,
                     tabarena_lite=tabarena_lite,
                     upper_bound_num_samples=upper_bound_dataset_size,
-                    upper_bound_num_features=upper_bound_num_feautres,
+                    upper_bound_num_features=upper_bound_num_features,
                     timestamp=timestamp,
                     result_dir=result_dir,
                 )

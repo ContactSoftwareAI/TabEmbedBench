@@ -155,7 +155,7 @@ def run_outlier_benchmark(
                 if embedding_model.task_only:
                     continue
                 try:
-                    embeddings, compute_embeddings_time = (
+                    embeddings, compute_embeddings_time, _ = (
                         embedding_model.generate_embeddings(X, outlier=True)
                     )
                     embed_dim = embeddings.shape[-1]
@@ -215,7 +215,6 @@ def run_outlier_benchmark(
                         f"Finished experiment for {embedding_model.name} and "
                         f"resetting the model."
                     )
-                embedding_model.reset_embedding_model()
 
                 if save_result_dataframe:
                     save_result_df(result_df=result_df,
