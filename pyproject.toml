@@ -17,7 +17,7 @@ dependencies = [
     "huggingface-hub>=0.34.4",
     "openml>=0.15.1",
     "skrub>=0.6.1",
-    "tabpfn-extensions[all] @ git+https://github.com/PriorLabs/tabpfn-extensions.git",
+    "tabpfn-extensions[all]",
     "click>=8.2.1",
     "ray>=2.49.2",
     "optuna>=4.5.0",
@@ -68,6 +68,9 @@ convention = "google"
 
 [tool.ruff.lint.isort]
 known-third-party = []
+
+[tool.uv.sources]
+tabpfn-extensions = { git = "https://github.com/PriorLabs/tabpfn-extensions.git" }
 
 [dependency-groups]
 dev = [

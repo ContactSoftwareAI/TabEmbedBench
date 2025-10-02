@@ -204,15 +204,17 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
 
         return embeddings
 
-    def _preprocess_data(
-        self, data: np.ndarray, train: bool = True, outlier: bool = False,
+    def _preprocess_data(self, data: np.ndarray, train: bool = True, outlier: bool = False,
+            categorical_indices: list[int] | None = None,):
+        return data
+
+    def _fit_model(
+        self, data: np.ndarray, train: bool = True,
             categorical_indices: list[int] | None = None,
             **kwargs
     ):
         if train:
             self.fit(data, categorical_indices=categorical_indices)
-
-        return data
 
     def _compute_embeddings(self, data: np.ndarray, **kwargs):
         return self.transform(data)

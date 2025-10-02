@@ -243,6 +243,10 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
 
         return X_preprocess
 
+    def _fit_model(self, X_preprocessed: np.ndarray, train: bool = True,
+                   **kwargs):
+        return X_preprocessed
+
     def _compute_embeddings(
         self,
         X: np.ndarray,

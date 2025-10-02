@@ -95,9 +95,18 @@ class AbstractEmbeddingGenerator(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def _fit_model(self,
+                   X_preprocessed: np.ndarray,
+                   y_preprocessed: Optional[np.ndarray] = None,
+                   train: bool = True,
+                   **kwargs):
+        raise NotImplementedError
+
+
+    @abstractmethod
     def _compute_embeddings(
         self,
-        X: np.ndarray,
+        X_preprocessed: np.ndarray,
         **kwargs,
     ) -> np.ndarray:
         """Computes embeddings for the given input data.
@@ -233,6 +242,8 @@ class AbstractEmbeddingGenerator(ABC):
         X_train = self._preprocess_data(
             X_train, train=True, outlier=outlier, **kwargs
         )
+
+        self._fit_model(X_train, **kwargs)
 
         start_time = time.time()
         train_embeddings = self._compute_embeddings(X_train, **kwargs)
