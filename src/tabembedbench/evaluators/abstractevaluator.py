@@ -352,8 +352,8 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         Returns:
             dict: Dictionary containing evaluator configuration and optimization results.
                 Always includes n_trials, cv_folds, random_state, sampler, and pruner.
-                If optimization has been run, also includes best_hyperparameters and
-                best_cv_score.
+                If optimization has been run, also includes the best hyperparameters
+                (flattened with 'best_' prefix) and best_cv_score.
         """
         params = {
             "n_trials": self.n_trials,
@@ -364,7 +364,10 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         }
 
         if self.best_params is not None:
-            params["best_hyperparameters"] = self.best_params
+            # Flatten best hyperparameters into individual parameters with 'best_' prefix
+            # This avoids nested data structures in the result DataFrame
+            for param_name, param_value in self.best_params.items():
+                params[f"best_{param_name}"] = param_value
             params["best_cv_score"] = self.best_score
 
         return params
