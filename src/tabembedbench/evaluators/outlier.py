@@ -1,6 +1,8 @@
 import numpy as np
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.ensemble import IsolationForest
+from pyod.models.ecod import ECOD
+from pyod.models.deep_svdd import DeepSVDD
 
 from tabembedbench.evaluators import AbstractEvaluator
 
@@ -34,6 +36,82 @@ class LocalOutlierFactorEvaluator(AbstractEvaluator):
     def reset_evaluator(self):
         self.lof = LocalOutlierFactor(
             **self.model_params
+        )
+
+    def get_parameters(self):
+        return self.model_params
+
+
+class ECODEvaluator(AbstractEvaluator):
+    def __init__(
+            self,
+            model_params: dict = None,
+    ):
+        super().__init__(
+            name="ECOD",
+            task_type="Outlier Detection"
+        )
+
+        self.model_params = model_params or {}
+
+        self.ecod = ECOD(
+            **self.model_params
+        )
+
+    def get_prediction(
+            self,
+            embeddings: np.ndarray,
+            y = None,
+            train = True,
+    ):
+        self.ecod.fit(embeddings)
+        prediction = self.ecod.decision_function(embeddings)
+
+        return prediction, None
+
+    def reset_evaluator(self):
+        self.ecod = ECOD(
+            **self.model_params
+        )
+
+    def get_parameters(self):
+        return self.model_params
+
+
+class DeepSVDDEvaluator(AbstractEvaluator):
+    def __init__(
+            self,
+            model_params: dict = None,
+            random_seed: int = 42
+    ):
+        super().__init__(
+            name="DeepSVDD",
+            task_type="Outlier Detection"
+        )
+
+        self.model_params = model_params or {}
+        self.random_seed = random_seed
+
+        self.deep_svdd = DeepSVDD(
+            **self.model_params,
+            random_state=self.random_seed
+        )
+
+    def get_prediction(
+            self,
+            embeddings: np.ndarray,
+            y = None,
+            train = True,
+    ):
+        self.deep_svdd.fit(embeddings)
+        prediction = self.deep_svdd.decision_function(embeddings)
+
+        return prediction, None
+
+    def reset_evaluator(self):
+        self.deep_svdd = DeepSVDD(
+            **self.model_params,
+            random_state=self.random_seed
         )
 
     def get_parameters(self):
@@ -77,6 +155,3 @@ class IsolationForestEvaluator(AbstractEvaluator):
 
     def get_parameters(self):
         return self.model_params
-
-
-
