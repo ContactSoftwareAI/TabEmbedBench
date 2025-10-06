@@ -1,4 +1,3 @@
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -7,23 +6,295 @@ import openml
 import polars as pl
 from sklearn.metrics import (
     mean_absolute_percentage_error,
-    mean_squared_error,
     roc_auc_score,
     log_loss
 )
-from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.preprocessing import LabelEncoder
 from tabicl.sklearn.preprocessing import TransformToNumerical
 
+from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
 from tabembedbench.embedding_models.abstractembedding import AbstractEmbeddingGenerator
 from tabembedbench.evaluators.abstractevaluator import AbstractEvaluator
-from tabembedbench.utils.logging_utils import get_benchmark_logger
-from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
-from tabembedbench.utils.tracking_utils import save_result_df
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-logger = get_benchmark_logger("TabEmbedBench_TabArena")
+
+class TabArenaBenchmark(AbstractBenchmark):
+    """Benchmark for TabArena classification and regression tasks.
+
+    This benchmark evaluates embedding models on supervised learning tasks
+    from the OpenML TabArena benchmark suite.
+    """
+
+    def __init__(
+        self,
+        tabarena_version: str = "tabarena-v0.1",
+        tabarena_lite: bool = True,
+        result_dir: str | Path = "result_tabarena",
+        timestamp: str = TIMESTAMP,
+        save_result_dataframe: bool = True,
+        upper_bound_num_samples: int = 100000,
+        upper_bound_num_features: int = 500,
+    ):
+        """Initialize the TabArena benchmark.
+
+        Args:
+            tabarena_version: OpenML suite identifier.
+            tabarena_lite: Whether to use lite mode (fewer folds/repeats).
+            result_dir: Directory for saving results.
+            timestamp: Timestamp string for result file naming.
+            save_result_dataframe: Whether to save results to disk.
+            upper_bound_num_samples: Maximum dataset size to process.
+            upper_bound_num_features: Maximum number of features to process.
+        """
+        super().__init__(
+            logger_name="TabEmbedBench_TabArena",
+            result_dir=result_dir,
+            timestamp=timestamp,
+            save_result_dataframe=save_result_dataframe,
+            upper_bound_num_samples=upper_bound_num_samples,
+            upper_bound_num_features=upper_bound_num_features,
+        )
+
+        self.tabarena_version = tabarena_version
+        self.tabarena_lite = tabarena_lite
+        self.benchmark_suite = None
+        self.task_ids = None
+
+    def _load_datasets(self, **kwargs):
+        """Load TabArena tasks from OpenML.
+
+        Returns:
+            List of dictionaries containing task information.
+        """
+        self.benchmark_suite = openml.study.get_suite(self.tabarena_version)
+        self.task_ids = self.benchmark_suite.tasks
+
+        datasets = []
+        for task_id in self.task_ids:
+            task = openml.tasks.get_task(task_id)
+            dataset = task.get_dataset()
+            folds, repeats = self._get_task_configuration(dataset, task)
+
+            datasets.append({
+                "task_id": task_id,
+                "task": task,
+                "dataset": dataset,
+                "folds": folds,
+                "repeats": repeats,
+            })
+        
+        return datasets
+
+    def _should_skip_dataset(self, dataset_info, **kwargs) -> tuple[bool, str | None]:
+        """Check if a dataset should be skipped.
+
+        Args:
+            dataset_info: Dictionary containing task and dataset information.
+            **kwargs: Additional parameters (unused).
+
+        Returns:
+            Tuple of (should_skip, reason).
+        """
+        dataset = dataset_info["dataset"]
+        num_samples = dataset.qualities["NumberOfInstances"]
+        num_features = dataset.qualities["NumberOfFeatures"]
+
+        # Check size constraints
+        should_skip, reason = self._check_dataset_size_constraints(
+            num_samples, num_features, dataset.name
+        )
+
+        if not should_skip:
+            task = dataset_info["task"]
+            self.logger.info(
+                f"Starting experiments for dataset {dataset.name} "
+                f"and task {task.task_type}"
+            )
+
+        return should_skip, reason
+
+    def _prepare_data(self, dataset_info, **kwargs):
+        """Prepare data from a TabArena task.
+
+        This method handles the cross-validation splits and data preprocessing
+        for TabArena tasks.
+
+        Args:
+            dataset_info: Dictionary containing task and dataset information.
+            **kwargs: Additional parameters (unused).
+
+        Returns:
+            Generator yielding prepared data for each fold/repeat combination.
+        """
+        task = dataset_info["task"]
+        dataset = dataset_info["dataset"]
+        folds = dataset_info["folds"]
+        repeats = dataset_info["repeats"]
+
+        # Iterate through all folds and repeats
+        for repeat in range(repeats):
+            for fold in range(folds):
+                # Get data
+                X, y, categorical_indicator, attribute_names = dataset.get_data(
+                    target=task.target_name, dataset_format="dataframe"
+                )
+
+                categorical_indices = np.nonzero(categorical_indicator)[0]
+                categorical_indices = categorical_indices.tolist()
+
+                # Get train/test split
+                train_indices, test_indices = task.get_train_test_split_indices(
+                    fold=fold,
+                    repeat=repeat,
+                )
+
+                X_train = X.iloc[train_indices]
+                y_train = y.iloc[train_indices]
+                X_test = X.iloc[test_indices]
+                y_test = y.iloc[test_indices]
+
+                # Preprocess data
+                numerical_transformer = TransformToNumerical()
+                X_train = numerical_transformer.fit_transform(X_train)
+                X_test = numerical_transformer.transform(X_test)
+
+                # Encode labels for classification
+                if task.task_type == "Supervised Classification":
+                    label_encoder = LabelEncoder()
+                    y_train = label_encoder.fit_transform(y_train)
+                    y_test = label_encoder.transform(y_test)
+
+                yield {
+                    "data": X_train,
+                    "dataset_name": dataset.name,
+                    "dataset_size": X.shape[0],
+                    "task_type": task.task_type,
+                    "embedding_kwargs": {
+                        "X_test": X_test,
+                        "categorical_indices": categorical_indices,
+                    },
+                    "eval_kwargs": {
+                        "y_train": y_train,
+                        "y_test": y_test,
+                        "task_type": task.task_type,
+                    },
+                }
+
+    def _evaluate_embeddings(
+        self,
+        embedding_results,
+        evaluator: AbstractEvaluator,
+        dataset_info: dict,
+        **kwargs
+    ) -> dict:
+        """Evaluate embeddings for classification or regression.
+
+        Args:
+            embedding_results: Tuple of (train_embeddings, compute_time, test_embeddings, test_compute_time).
+            evaluator: The evaluator to use.
+            dataset_info: Dictionary with dataset metadata.
+            **kwargs: Additional parameters including 'y_train', 'y_test', and 'task_type'.
+
+        Returns:
+            Dictionary containing evaluation results.
+        """
+        train_embeddings = embedding_results[0]
+        test_embeddings = embedding_results[2]
+        y_train = kwargs.get("y_train")
+        y_test = kwargs.get("y_test")
+        task_type = kwargs.get("task_type")
+
+        # Train evaluator
+        prediction_train, _ = evaluator.get_prediction(
+            train_embeddings,
+            y_train,
+            train=True,
+        )
+
+        # Get test predictions
+        test_prediction, _ = evaluator.get_prediction(
+            test_embeddings,
+            train=False,
+        )
+
+        # Build result dictionary
+        result_dict = {
+            **dataset_info,
+        }
+
+        # Compute task-specific metrics
+        if task_type == "Supervised Regression":
+            mape_score = mean_absolute_percentage_error(y_test, test_prediction)
+            result_dict["task"] = ["regression"]
+            result_dict["mape_score"] = [mape_score]
+
+        elif task_type == "Supervised Classification":
+            n_classes = test_prediction.shape[1]
+            if n_classes == 2:
+                auc_score = roc_auc_score(y_test, test_prediction[:, 1])
+                result_dict["task"] = ["classification"]
+                result_dict["classification_type"] = ["binary"]
+            else:
+                auc_score = roc_auc_score(
+                    y_test, test_prediction, multi_class="ovr"
+                )
+                log_loss_score = log_loss(y_test, test_prediction)
+                result_dict["task"] = ["classification"]
+                result_dict["classification_type"] = ["multiclass"]
+                result_dict["log_loss_score"] = [log_loss_score]
+            result_dict["auc_score"] = [auc_score]
+
+        return result_dict
+
+    def _get_benchmark_name(self) -> str:
+        """Get the benchmark name for result saving.
+
+        Returns:
+            String identifier for the benchmark.
+        """
+        return "TabArena"
+
+    def _is_evaluator_compatible(self, evaluator: AbstractEvaluator, **kwargs) -> bool:
+        """Check if evaluator is compatible with the current task.
+
+        Args:
+            evaluator: The evaluator to check.
+            **kwargs: Additional parameters (unused).
+
+        Returns:
+            True if evaluator supports the task type.
+        """
+        # Get task type from prepared data
+        task_type = kwargs.get("task_type")
+        if task_type is None:
+            return False
+        return task_type == evaluator.task_type
+
+    def _get_task_configuration(self, dataset, task) -> tuple[int, int]:
+        """Get the number of folds and repeats for a task.
+
+        Args:
+            dataset: OpenML dataset object.
+            task: OpenML task object.
+
+        Returns:
+            Tuple of (n_folds, n_repeats).
+        """
+        if self.tabarena_lite:
+            return 1, 1
+
+        _, folds, _ = task.get_split_dimensions()
+        n_samples = dataset.qualities["NumberOfInstances"]
+
+        if n_samples < 2_500:
+            tabarena_repeats = 10
+        elif n_samples > 250_000:
+            tabarena_repeats = 1
+        else:
+            tabarena_repeats = 3
+
+        return folds, tabarena_repeats
 
 
 def run_tabarena_benchmark(
@@ -36,7 +307,7 @@ def run_tabarena_benchmark(
     result_dir: str | Path = "result_tabarena",
     save_result_dataframe: bool = True,
     timestamp: str = TIMESTAMP,
-):
+) -> pl.DataFrame:
     """Run the TabArena benchmark for a set of embedding models.
 
     This function evaluates the performance of specified embedding models on a suite
@@ -60,9 +331,9 @@ def run_tabarena_benchmark(
         upper_bound_num_features: Integer representing the maximum number of features
             considered for benchmarking. Datasets with more features than this value
             will be skipped. Defaults to 500.
-        result_dir:
-        save_result_dataframe:
-        timestamp:
+        result_dir: Directory path for saving results.
+        save_result_dataframe: Whether to save results to disk.
+        timestamp: Timestamp string for result file naming.
 
     Returns:
         polars.DataFrame: A dataframe summarizing the benchmark results. The columns
@@ -70,273 +341,14 @@ def run_tabarena_benchmark(
             metrics such as AUC/MSR scores, embedding computation time, and benchmark
             type.
     """
-    if isinstance(result_dir, str):
-        result_dir = Path(result_dir)
+    benchmark = TabArenaBenchmark(
+        tabarena_version=tabarena_version,
+        tabarena_lite=tabarena_lite,
+        result_dir=result_dir,
+        timestamp=timestamp,
+        save_result_dataframe=save_result_dataframe,
+        upper_bound_num_samples=upper_bound_num_samples,
+        upper_bound_num_features=upper_bound_num_features,
+    )
 
-    benchmark_suite = openml.study.get_suite(tabarena_version)
-    task_ids = benchmark_suite.tasks
-
-    result_df = pl.DataFrame()
-
-    for task_id in task_ids:
-        task = openml.tasks.get_task(task_id)
-        dataset = task.get_dataset()
-
-        if dataset.qualities["NumberOfInstances"] > upper_bound_num_samples:
-            logger.warning(
-                f"Skipping {dataset.name} - dataset size "
-                f"{dataset.qualities["NumberOfInstances"]} exceeds "
-                f"limit {upper_bound_num_samples}"
-            )
-            continue
-
-        if dataset.qualities["NumberOfFeatures"] > upper_bound_num_features:
-            logger.warning(
-                f"Skipping {dataset.name} - number of features size "
-                f"{dataset.qualities["NumberOfFeatures"]} exceeds "
-                f"limit {upper_bound_num_features}"
-            )
-            continue
-
-        folds, tabarena_repeats = _get_task_configuration(dataset,
-                                                          tabarena_lite,
-                                                          task)
-        logger.info(f"Starting experiments for dataset {dataset.name}"
-                    f" and task {task.task_type}"
-                    )
-        for repeat in range(tabarena_repeats):
-            for fold in range(folds):
-                X, y, categorical_indicator, attribute_names = dataset.get_data(
-                    target=task.target_name, dataset_format="dataframe"
-                )
-
-                categorical_indices = np.nonzero(categorical_indicator)[0]
-                categorical_indices = categorical_indices.tolist()
-
-                train_indices, test_indices = task.get_train_test_split_indices(
-                    fold=fold,
-                    repeat=repeat,
-                )
-
-                X_train = X.iloc[train_indices]
-                y_train = y.iloc[train_indices]
-                X_test = X.iloc[test_indices]
-                y_test = y.iloc[test_indices]
-
-                numerical_transformer = TransformToNumerical()
-                X_train = numerical_transformer.fit_transform(X_train)
-                X_test = numerical_transformer.transform(X_test)
-
-                if task.task_type == "Supervised Classification":
-                    label_encoder = LabelEncoder()
-                    y_train = label_encoder.fit_transform(y_train)
-                    y_test = label_encoder.transform(y_test)
-
-                for embedding_model in embedding_models:
-                    logger.info(
-                        f"Starting experiment for embedding model"
-                        f" {embedding_model.name}..."
-                    )
-                    try:
-                        (train_embeddings, test_embeddings, compute_embeddings_time,
-                         compute_test_embeddings_time) = (
-                            embedding_model.generate_embeddings(
-                                X_train,
-                                X_test,
-                                categorical_indices=categorical_indices
-                            )
-                        )
-                    except Exception as e:
-                        logger.exception(
-                            f"By computing embeddings, the following ValueError "
-                            f"occured: {e}. Skipping"
-                        )
-                        new_row_dict = {
-                            "dataset_name": [dataset.name],
-                            "dataset_size": [X.shape[0]],
-                            "embedding_model": [embedding_model.name],
-                        }
-
-                        new_row = pl.DataFrame(
-                                new_row_dict
-                            )
-
-                        result_df = pl.concat(
-                            [result_df, new_row],
-                            how="diagonal"
-                        )
-                        continue
-
-                    embed_dim = train_embeddings.shape[-1]
-
-                    for evaluator in evaluators:
-                        if task.task_type == evaluator.task_type:
-                            logger.debug(f"Starting experiment for evaluator "
-                                         f"{evaluator._name}...")
-                            prediction_train, _ = evaluator.get_prediction(
-                                train_embeddings,
-                                y_train,
-                                train=True,
-                            )
-
-                            test_prediction, _ = evaluator.get_prediction(
-                                test_embeddings,
-                                train=False,
-                            )
-
-                            parameters = evaluator.get_parameters()
-
-                            new_row_dict = {
-                                "dataset_name": [dataset.name],
-                                "dataset_size": [X.shape[0]],
-                                "embedding_model": [embedding_model.name],
-                                "embed_dim": [embed_dim],
-                                "time_to_compute_train_embedding": [
-                                    compute_embeddings_time
-                                ],
-                                "algorithm": [evaluator._name],
-                            }
-                            logger.debug(f"Parameters for {evaluator._name}: "
-                                         f"{new_row_dict}")
-
-                            for key, value in parameters.items():
-                                new_row_dict[f"algorithm_{key}"] = [value]
-
-                            if task.task_type == "Supervised Regression":
-                                mape_score = mean_absolute_percentage_error(
-                                    y_test, test_prediction
-                                )
-                                new_row_dict["task"] = ["regression"]
-                                new_row_dict["mape_score"] = [mape_score]
-                            if task.task_type == "Supervised Classification":
-                                n_classes = test_prediction.shape[1]
-                                if n_classes == 2:
-                                    auc_score = roc_auc_score(
-                                        y_test, test_prediction[:, 1]
-                                    )
-                                    new_row_dict["task"] = ["classification"]
-                                    new_row_dict["classification_type"] = [
-                                        "binary"]
-                                else:
-                                    auc_score = roc_auc_score(
-                                        y_test, test_prediction, multi_class="ovr"
-                                    )
-                                    log_loss_score = log_loss(
-                                        y_test, test_prediction, multi_class="ovr"
-                                    )
-                                    new_row_dict["task"] = ["classification"]
-                                    new_row_dict["classification_type"] = [
-                                        "multiclass"]
-                                    new_row_dict["log_loss_score"] = [log_loss_score]
-                                new_row_dict["auc_score"] = [auc_score]
-
-
-                            new_row = pl.DataFrame(
-                                new_row_dict
-                            )
-
-                            result_df = pl.concat(
-                                [result_df, new_row],
-                                how="diagonal"
-                            )
-
-                            if save_result_dataframe:
-                                save_result_df(
-                                    result_df=result_df,
-                                    output_path=result_dir,
-                                    benchmark_name="TabArena",
-                                    timestamp=timestamp,
-                                )
-
-                            evaluator.reset_evaluator()
-
-                    logger.debug(
-                        f"Finished experiment for {embedding_model.name} and "
-                        f"resetting the model."
-                    )
-
-                    logger.debug(f"Dataframe rows: {result_df.shape[0]}")
-
-                    if get_device() in ["cuda", "mps"]:
-                        empty_gpu_cache()
-    logger.info("TabArena benchmark completed.")
-
-    return result_df
-
-
-def _evaluate_classification(
-    X_train_embed: np.ndarray,
-    X_test_embed: np.ndarray,
-    y_train: np.ndarray,
-    y_test: np.ndarray,
-    num_neighbors: int,
-    distance_metric: str = "euclidean",
-):
-    """Evaluate classification task with KNN Classifier from scikit-learn.."""
-    try:
-        knn_params = {"n_neighbors": num_neighbors, "n_jobs": -1}
-        if distance_metric != "euclidean":
-            knn_params["metric"] = distance_metric
-
-        knn_classifier = KNeighborsClassifier(**knn_params)
-
-        start_predict_time = time.time()
-        knn_classifier.fit(X_train_embed, y_train)
-        y_pred_proba = knn_classifier.predict_proba(X_test_embed)
-        predict_time = time.time() - start_predict_time
-
-        n_classes = y_pred_proba.shape[1]
-        if n_classes == 2:
-            score_auc = roc_auc_score(y_test, y_pred_proba[:, 1])
-        else:
-            score_auc = roc_auc_score(y_test, y_pred_proba, multi_class="ovr")
-
-        return score_auc, predict_time, None
-    except Exception as e:
-        return None, None, e
-
-
-def _evaluate_regression(
-    X_train_embed: np.ndarray,
-    X_test_embed: np.ndarray,
-    y_train: np.ndarray,
-    y_test: np.ndarray,
-    num_neighbors: int,
-    distance_metric: str = "euclidean",
-):
-    """Evaluate regression task with KNN Regressor from scikit-learn."""
-    try:
-        knn_params = {"n_neighbors": num_neighbors, "n_jobs": -1}
-        if distance_metric != "euclidean":
-            knn_params["metric"] = distance_metric
-
-        knn_regressor = KNeighborsRegressor(**knn_params)
-
-        start_predict_time = time.time()
-        knn_regressor.fit(X_train_embed, y_train)
-        y_pred = knn_regressor.predict(X_test_embed)
-        predict_time = time.time() - start_predict_time
-
-        score_mse = mean_squared_error(y_test, y_pred)
-
-        return score_mse, predict_time, None
-    except Exception as e:
-        return None, None, e
-
-
-def _get_task_configuration(dataset, tabarena_lite: bool, task) -> tuple[int, int]:
-    """Get the number of folds and repeats for a task."""
-    if tabarena_lite:
-        return 1, 1
-
-    _, folds, _ = task.get_split_dimensions()
-    n_samples = dataset.qualities["NumberOfInstances"]
-
-    if n_samples < 2_500:
-        tabarena_repeats = 10
-    elif n_samples > 250_000:
-        tabarena_repeats = 1
-    else:
-        tabarena_repeats = 3
-
-    return folds, tabarena_repeats
+    return benchmark.run_benchmark(embedding_models, evaluators)
