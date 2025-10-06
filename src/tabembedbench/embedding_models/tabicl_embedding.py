@@ -5,6 +5,7 @@ from typing import Tuple, Union
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
+import polars as pl
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
@@ -14,6 +15,7 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 from sklearn.utils.validation import check_is_fitted
+from skrub import TableVectorizer
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
@@ -139,6 +141,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         model_path: str | None = None,
         normalize_embeddings: bool = False,
         preprocess_tabicl_data: bool = False,
+        tabvectorizer_preprocess: bool = False
     ):
         """Initializes the TabICLEmbedding class, handling configuration and setup
         for the tabular data embedder. Optionally loads a specific model
@@ -160,6 +163,8 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
 
         self.normalize_embeddings = normalize_embeddings
         self._preprocess_tabicl_data = preprocess_tabicl_data
+        self._tabvectorizer_preprocess = tabvectorizer_preprocess
+        self._tabvectorizer = TableVectorizer() if self._tabvectorizer_preprocess else None
         self.preprocess_pipeline = PreprocessingPipeline()
         self.outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
 
@@ -222,6 +227,9 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         X_preprocess = X
 
         if train and self._preprocess_tabicl_data:
+            if self._tabvectorizer_preprocess:
+                X_preprocess = pl.from_numpy(X_preprocess)
+                X_preprocess = self._tabvectorizer.fit_transform(X_preprocess)
             if outlier:
                 X_preprocess = self.outlier_preprocessing_pipeline.fit_transform(
                     X_preprocess
@@ -230,6 +238,9 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
                 X_preprocess = self.preprocess_pipeline.fit_transform(X_preprocess)
         else:
             if self._preprocess_tabicl_data:
+                if self._tabvectorizer_preprocess:
+                    X_preprocess = pl.from_numpy(X_preprocess)
+                    X_preprocess = self._tabvectorizer.transform(X_preprocess)
                 if outlier:
                     X_preprocess = self.outlier_preprocessing_pipeline.transform(
                         X_preprocess
@@ -286,6 +297,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         for a fresh evaluation or after model updates.
 
         """
+        self._tabvectorizer = TableVectorizer() if self._tabvectorizer_preprocess else None
         self.preprocess_pipeline = PreprocessingPipeline()
         self.outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
 

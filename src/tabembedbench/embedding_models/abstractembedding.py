@@ -28,6 +28,7 @@ class AbstractEmbeddingGenerator(ABC):
             name (str): The name associated with the instance.
         """
         self._name = name
+        self._is_fitted = False
 
     @property
     def is_computing_embeddings(self) -> bool:

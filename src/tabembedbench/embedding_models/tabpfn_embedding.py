@@ -7,7 +7,7 @@ from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.utils.torch_utils import get_device
 
 
-class UniversalTabPFNEmbedding(AbstractEmbeddingGenerator):
+class TabPFNEmbedding(AbstractEmbeddingGenerator):
     """Universal TabPFN-based embedding generator for tabular data.
 
     This class generates embeddings using TabPFN (Tabular Prior-data Fitted Networks)
@@ -92,11 +92,11 @@ class UniversalTabPFNEmbedding(AbstractEmbeddingGenerator):
         Returns:
             torch.Tensor: Preprocessed data as a float tensor on the specified device.
         """
-        return torch.from_numpy(X).float().to(self.device)
+        return X
 
     def _fit_model(
         self,
-        X_preprocessed: torch.Tensor,
+        X_preprocessed: np.ndarray,
         categorical_indices: list[int] | None = None,
         **kwargs,
     ):
@@ -121,6 +121,7 @@ class UniversalTabPFNEmbedding(AbstractEmbeddingGenerator):
         if categorical_indices is not None:
             self.categorical_indices = categorical_indices
         else:
+            # Convert CUDA tensor to CPU numpy array for categorical inference
             self.categorical_indices = infer_categorical_features(X_preprocessed)
 
         self.num_features = X_preprocessed.shape[-1]
@@ -129,7 +130,7 @@ class UniversalTabPFNEmbedding(AbstractEmbeddingGenerator):
 
     def _compute_embeddings(
         self,
-        X_preprocessed: torch.Tensor,
+        X_preprocessed: np.ndarray,
         **kwargs,
     ) -> np.ndarray:
         """Compute embeddings using TabPFN models.
@@ -144,7 +145,7 @@ class UniversalTabPFNEmbedding(AbstractEmbeddingGenerator):
         and TabPFNRegressor for continuous features.
 
         Args:
-            X_preprocessed (torch.Tensor): Preprocessed input data of shape
+            X_preprocessed (np.ndarray): Preprocessed input data of shape
                 (n_samples, n_features).
             **kwargs: Additional keyword arguments (unused).
 
@@ -164,12 +165,13 @@ class UniversalTabPFNEmbedding(AbstractEmbeddingGenerator):
         tmp_embeddings = []
 
         for column_idx in range(X_preprocessed.shape[1]):
-            mask = torch.zeros_like(X_preprocessed).bool()
+            # Create mask for the current column
+            mask = np.zeros_like(X_preprocessed, dtype=bool)
             mask[:, column_idx] = True
-            features, target = (
-                X_preprocessed[~mask].reshape(num_samples, -1),
-                X_preprocessed[mask],
-            )
+            
+            # Extract features (all columns except current) and target (current column)
+            features = X_preprocessed[~mask].reshape(num_samples, -1)
+            target = X_preprocessed[mask]
 
             model = (
                 self.tabpfn_clf
@@ -184,13 +186,17 @@ class UniversalTabPFNEmbedding(AbstractEmbeddingGenerator):
                 if self.estimator_agg == "mean":
                     estimator_embeddings = np.mean(estimator_embeddings, axis=0)
                 elif self.estimator_agg == "first_element":
-                    estimator_embeddings = estimator_embeddings[0, :]
+                    estimator_embeddings = np.squeeze(estimator_embeddings[0,:])
                 else:
                     raise NotImplementedError
+            else:
+                estimator_embeddings = np.squeeze(estimator_embeddings)
 
             tmp_embeddings += [estimator_embeddings]
 
-        concat_embeddings = np.concatenate(tmp_embeddings, axis=1).reshape(
+        concat_embeddings = np.concatenate(
+            tmp_embeddings, axis=1
+        ).reshape(
             tmp_embeddings[0].shape[0], -1
         )
 

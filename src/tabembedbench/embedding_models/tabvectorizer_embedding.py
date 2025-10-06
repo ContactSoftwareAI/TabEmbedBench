@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 import polars as pl
 from skrub import TableVectorizer
@@ -41,10 +43,18 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
         """
         X = pl.from_numpy(X)
 
-        if train:
-            self.tablevectorizer.fit(X)
-
         return X
+
+    def _fit_model(
+        self,
+        X_preprocessed: np.ndarray,
+        y_preprocessed: Optional[np.ndarray] = None,
+        train: bool = True,
+        **kwargs,
+    ):
+        if train:
+            self.tablevectorizer.fit(X_preprocessed)
+            self._is_fitted = True
 
     def _compute_embeddings(self, X: np.ndarray, **kwargs) -> np.ndarray:
         """
@@ -59,12 +69,16 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
         Returns:
             np.ndarray: The computed embeddings as a NumPy array.
         """
-        embeddings = self.tablevectorizer.transform(X)
+        if self._is_fitted:
+            embeddings = self.tablevectorizer.transform(X)
 
-        return embeddings.to_numpy()
+            return embeddings.to_numpy()
+        else:
+            raise ValueError("Model is not fitted.")
 
     def _optimize_tablevectorizer(self):
         raise NotImplementedError
 
     def _reset_embedding_model(self):
         self.tablevectorizer = TableVectorizer()
+        self._is_fitted = False
