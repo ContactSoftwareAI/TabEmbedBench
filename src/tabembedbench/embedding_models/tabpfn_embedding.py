@@ -179,7 +179,17 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
                 else self.tabpfn_reg
             )
 
-            model.fit(features, target)
+            try:
+                model.fit(features, target)
+            except ValueError as e:
+                # If a column is marked as categorical but has continuous values,
+                # fall back to using the regression model
+                if "Unknown label type: continuous" in str(e):
+                    model = self.tabpfn_reg
+                    model.fit(features, target)
+                else:
+                    raise
+            
             estimator_embeddings = model.get_embeddings(features)
 
             if self.num_estimators > 1:
