@@ -308,6 +308,7 @@ class AbstractBenchmark(ABC):
             dataset_info = {
                 "dataset_name": [prepared_data_item["dataset_name"]],
                 "dataset_size": [prepared_data_item["dataset_size"]],
+                "num_features": [prepared_data_item["num_features"]],
                 "embedding_model": [embedding_model.name],
                 "embed_dim": [embed_dim],
                 "time_to_compute_train_embedding": [embedding_results[1]],

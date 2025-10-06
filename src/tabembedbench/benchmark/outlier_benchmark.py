@@ -136,6 +136,7 @@ class OutlierBenchmark(AbstractBenchmark):
 
         dataset_name = dataset_file.stem
         num_samples = X.shape[0]
+        num_features = X.shape[1]
         outlier_ratio = y.sum() / y.shape[0]
 
         return {
@@ -143,6 +144,7 @@ class OutlierBenchmark(AbstractBenchmark):
             "labels": y,
             "dataset_name": dataset_name,
             "dataset_size": num_samples,
+            "num_features": num_features,
             "outlier_ratio": outlier_ratio,
             "embedding_kwargs": {"outlier": True},
             "eval_kwargs": {"y": y, "outlier_ratio": outlier_ratio},
