@@ -126,6 +126,13 @@ def get_evaluators(debug=False):
                 )
             )
 
+    evaluator_algorithms.extend(
+        [
+            ECODEvaluator(),
+            DeepSVDDEvaluator(),
+        ]
+    )
+
     return evaluator_algorithms
 
 def run_main(debug, max_samples, max_features, run_outlier,
