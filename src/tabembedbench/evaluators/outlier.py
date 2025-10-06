@@ -54,9 +54,7 @@ class ECODEvaluator(AbstractEvaluator):
 
         self.model_params = model_params or {}
 
-        self.ecod = ECOD(
-            **self.model_params
-        )
+        self.ecod = ECOD()
 
     def get_prediction(
             self,
@@ -70,9 +68,7 @@ class ECODEvaluator(AbstractEvaluator):
         return prediction, None
 
     def reset_evaluator(self):
-        self.ecod = ECOD(
-            **self.model_params
-        )
+        self.ecod = ECOD()
 
     def get_parameters(self):
         return self.model_params
@@ -92,10 +88,7 @@ class DeepSVDDEvaluator(AbstractEvaluator):
         self.model_params = model_params or {}
         self.random_seed = random_seed
 
-        self.deep_svdd = DeepSVDD(
-            **self.model_params,
-            random_state=self.random_seed
-        )
+        self.deep_svdd = None
 
     def get_prediction(
             self,
@@ -103,19 +96,23 @@ class DeepSVDDEvaluator(AbstractEvaluator):
             y = None,
             train = True,
     ):
+        if self.deep_svdd is None:
+            self.deep_svdd = DeepSVDD(
+                n_features=embeddings.shape[1],
+                random_state=self.random_seed,
+            )
         self.deep_svdd.fit(embeddings)
         prediction = self.deep_svdd.decision_function(embeddings)
 
         return prediction, None
 
     def reset_evaluator(self):
-        self.deep_svdd = DeepSVDD(
-            **self.model_params,
-            random_state=self.random_seed
-        )
+        self.deep_svdd = None
 
     def get_parameters(self):
-        return self.model_params
+        return {
+            "default": "Default Parameters from the package"
+        }
 
 
 class IsolationForestEvaluator(AbstractEvaluator):
