@@ -13,6 +13,12 @@ from tabembedbench.evaluators.classifier import KNNClassifierEvaluator
 from tabembedbench.evaluators.outlier import (
     IsolationForestEvaluator,
     LocalOutlierFactorEvaluator,
+    DeepSVDDEvaluator,
+    ECODEvaluator
+)
+from tabembedbench.evaluators.mlp_evaluator import (
+    MLPClassifierEvaluator,
+    MLPRegressorEvaluator
 )
 from tabembedbench.evaluators.regression import KNNRegressorEvaluator
 
@@ -65,23 +71,25 @@ def get_evaluators(debug=False):
     evaluator_algorithms = []
 
     if debug:
-        evaluator_algorithms.extend([
-            KNNRegressorEvaluator(
-                num_neighbors=5,
-                weights="uniform",
-                metric="euclidean"
-            ),
-            KNNClassifierEvaluator(
-                num_neighbors=5,
-                weights="uniform",
-                metric="euclidean"
-            ),
-            LocalOutlierFactorEvaluator(
-                model_params={
-                    "n_neighbors": 5,
-                }
-            )
-        ])
+        evaluator_algorithms.extend(
+            [
+                KNNRegressorEvaluator(
+                    num_neighbors=5, weights="uniform", metric="euclidean"
+                ),
+                KNNClassifierEvaluator(
+                    num_neighbors=5, weights="uniform", metric="euclidean"
+                ),
+                MLPClassifierEvaluator(n_trials=5, cv_folds=2, verbose=False),
+                MLPRegressorEvaluator(n_trials=5, cv_folds=2, verbose=False),
+                ECODEvaluator(),
+                DeepSVDDEvaluator(),
+                LocalOutlierFactorEvaluator(
+                    model_params={
+                        "n_neighbors": 5,
+                    }
+                ),
+            ]
+        )
         return evaluator_algorithms
 
     for num_neighbors in range(0, 50, 5):
