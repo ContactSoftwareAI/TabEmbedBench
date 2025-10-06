@@ -3,9 +3,11 @@ import logging
 import click
 
 from tabembedbench.benchmark.run_benchmark import run_benchmark
-from tabembedbench.embedding_models import TabICLEmbedding, TabVectorizerEmbedding
-from tabembedbench.embedding_models.spherebased_embedding import (
-    SphereBasedEmbedding,
+from tabembedbench.embedding_models import (
+    TabICLEmbedding,
+    TabVectorizerEmbedding,
+    TabPFNEmbedding,
+    SphereBasedEmbedding
 )
 from tabembedbench.evaluators.classifier import KNNClassifierEvaluator
 from tabembedbench.evaluators.outlier import (
@@ -28,12 +30,28 @@ def get_embedding_models(debug=False):
 
     tabicl_with_preproccessing.name = "tabicl-classifier-v1.1-0506_preprocessed"
 
+    tabicl_with_tabvectorizer_preprocessing = TabICLEmbedding(
+        preprocess_tabicl_data=True,
+        tabvectorizer_preprocess=True
+    )
+
+    tabicl_with_tabvectorizer_preprocessing.name = (
+        "tabicl-classifier-v1.1-0506_with_tabvectorizer_preprocessed"
+    )
+
     tablevector = TabVectorizerEmbedding()
 
-    embedding_models.extend([tablevector, tabicl_with_preproccessing])
+    tabpfn_embedder = TabPFNEmbedding()
+
+    embedding_models.extend([
+        tablevector,
+        tabicl_with_preproccessing,
+        tabicl_with_tabvectorizer_preprocessing,
+        tabpfn_embedder
+    ])
 
     if debug:
-        embedding_models = [tablevector, tabicl_with_preproccessing]
+        embedding_models = [tablevector, tabicl_with_tabvectorizer_preprocessing]
         sphere_model = SphereBasedEmbedding(embed_dim=8)
         sphere_model.name = "sphere-model-d8-debug"
 
@@ -123,7 +141,7 @@ def run_main(debug, max_samples, max_features, run_outlier,
         adbench_dataset_path=adbench_dataset_path,
         exclude_adbench_datasets=["3_backdoor.npz"],
         upper_bound_dataset_size= max_samples,
-        upper_bound_num_feautres= max_features,
+        upper_bound_num_features= max_features,
         run_outlier=run_outlier,
         run_task_specific=run_task_specific,
         logging_level=logging.DEBUG,
@@ -136,7 +154,8 @@ def run_main(debug, max_samples, max_features, run_outlier,
 @click.option('--max-features', default=500, help='Upper bound for number of features')
 @click.option('--run-outlier/--no-run-outlier', default=True, help='Run outlier detection')
 @click.option('--run-task-specific/--no-run-task-specific', default=True, help='Run task-specific evaluations')
-@click.option('--adbench-data', default='data', help='Run task-specific '
+@click.option('--adbench-data', default='data/adbench_tabular_datasets',
+              help='Run task-specific '
                                                  'evaluations')
 def main(debug, max_samples, max_features, run_outlier, run_task_specific,
          adbench_data):
