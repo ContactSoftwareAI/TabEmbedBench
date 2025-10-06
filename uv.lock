@@ -1655,6 +1655,23 @@ wheels = [
 ]
 
 [[package]]
+name = "pyod"
+version = "2.0.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "joblib" },
+    { name = "matplotlib" },
+    { name = "numba" },
+    { name = "numpy" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9b/08/285c2fa790a095a212c9300ed77b69bf1e90233853cb260ac0edcbb1b029/pyod-2.0.5.tar.gz", hash = "sha256:c1c2d2f3e8ebfb047c9b5da556cce924e64f7eeb1ad9d5af1455843ec13cb3d1", size = 169761, upload-time = "2025-04-29T22:26:59.531Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/29/38/dee2fc597010654c3a7588f0990192680c5f2d405fbf6f2e5f5c4df1c736/pyod-2.0.5-py3-none-any.whl", hash = "sha256:1a3182529c68e388be0671840bb11f83d5d1deb738ad931d294881f7d50e4fdb", size = 200628, upload-time = "2025-04-29T22:26:57.284Z" },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.2.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2335,6 +2352,7 @@ dependencies = [
     { name = "openml" },
     { name = "optuna" },
     { name = "polars" },
+    { name = "pyod" },
     { name = "ray" },
     { name = "scikit-learn" },
     { name = "skrub" },
@@ -2357,6 +2375,7 @@ requires-dist = [
     { name = "openml", specifier = ">=0.15.1" },
     { name = "optuna", specifier = ">=4.5.0" },
     { name = "polars", specifier = ">=1.32.2" },
+    { name = "pyod", specifier = ">=2.0.2" },
     { name = "ray", specifier = ">=2.49.2" },
     { name = "scikit-learn", specifier = ">=1.6.1" },
     { name = "skrub", specifier = ">=0.6.1" },
