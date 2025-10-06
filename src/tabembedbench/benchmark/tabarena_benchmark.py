@@ -169,6 +169,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                     "data": X_train,
                     "dataset_name": dataset.name,
                     "dataset_size": X.shape[0],
+                    "num_features": X.shape[1],
                     "task_type": task.task_type,
                     "embedding_kwargs": {
                         "X_test": X_test,
