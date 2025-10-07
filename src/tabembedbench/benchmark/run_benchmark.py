@@ -41,8 +41,9 @@ def benchmark_context(models_to_process, main_logger, context_name="benchmark"):
             try:
                 model._reset_embedding_model()
             except Exception as e:
-                main_logger.warning(f"Error occurred during resetting "
-                                    f"{model.name}: {e}")
+                main_logger.warning(
+                    f"Error occurred during resetting {model.name}: {e}"
+                )
 
         gc.collect()
 
@@ -65,8 +66,59 @@ def run_benchmark(
     run_task_specific: bool = True,
     data_dir: str | Path = "data",
     save_logs: bool = True,
-    logging_level = logging.INFO,
+    logging_level=logging.INFO,
 ) -> pl.DataFrame:
+    """Run comprehensive benchmark evaluation for embedding models.
+
+    This function orchestrates the complete benchmarking process, running both
+    outlier detection and task-specific (classification/regression) benchmarks
+    on the provided embedding models. It handles result collection, logging,
+    and resource management.
+
+    Args:
+        embedding_models (list[AbstractEmbeddingGenerator]): List of embedding model
+            instances to evaluate.
+        evaluator_algorithms (list[AbstractEvaluator]): List of evaluator instances
+            to use for assessment.
+        adbench_dataset_path (str | Path | None, optional): Path to ADBench datasets.
+            If None, uses default path. Defaults to None.
+        exclude_adbench_datasets (list[str] | None, optional): List of ADBench dataset
+            filenames to exclude. Defaults to None.
+        tabarena_version (str, optional): OpenML TabArena suite version identifier.
+            Defaults to "tabarena-v0.1".
+        tabarena_lite (bool, optional): Whether to use lite mode for faster execution
+            with fewer cross-validation folds. Defaults to True.
+        upper_bound_dataset_size (int, optional): Maximum number of samples to process.
+            Datasets exceeding this will be skipped. Defaults to 10000.
+        upper_bound_num_features (int, optional): Maximum number of features to process.
+            Datasets exceeding this will be skipped. Defaults to 500.
+        run_outlier (bool, optional): Whether to run outlier detection benchmark.
+            Defaults to True.
+        run_task_specific (bool, optional): Whether to run TabArena task-specific
+            benchmark. Defaults to True.
+        data_dir (str | Path, optional): Directory for saving results and logs.
+            Defaults to "data".
+        save_logs (bool, optional): Whether to save logs to file. Defaults to True.
+        logging_level (int, optional): Logging verbosity level. Defaults to logging.INFO.
+
+    Returns:
+        pl.DataFrame: Polars DataFrame containing combined results from all benchmarks,
+            including performance metrics, timing information, and model parameters.
+
+    Example:
+        >>> from tabembedbench.embedding_models import TabPFNEmbedding
+        >>> from tabembedbench.evaluators import KNNClassifierEvaluator
+        >>>
+        >>> models = [TabPFNEmbedding()]
+        >>> evaluators = [KNNClassifierEvaluator(num_neighbors=5, weights="uniform", metric="euclidean")]
+        >>>
+        >>> results = run_benchmark(
+        ...     embedding_models=models,
+        ...     evaluator_algorithms=evaluators,
+        ...     run_outlier=True,
+        ...     run_task_specific=True
+        ... )
+    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     if data_dir is not None:
@@ -105,8 +157,9 @@ def run_benchmark(
     if run_outlier:
         main_logger.info("Running outlier detection benchmark...")
         try:
-            with benchmark_context(models_to_process, main_logger,
-                                   "ADBench Outlier Detection"):
+            with benchmark_context(
+                models_to_process, main_logger, "ADBench Outlier Detection"
+            ):
                 result_outlier_df = run_outlier_benchmark(
                     embedding_models=models_to_process,
                     evaluators=evaluators_to_use,
@@ -118,8 +171,9 @@ def run_benchmark(
                     timestamp=timestamp,
                 )
         except Exception as e:
-            main_logger.exception(f"Error occurred during "
-                              f"outlier detection benchmark: {e}")
+            main_logger.exception(
+                f"Error occurred during outlier detection benchmark: {e}"
+            )
             result_outlier_df = pl.DataFrame()
     else:
         result_outlier_df = pl.DataFrame()
@@ -138,39 +192,55 @@ def run_benchmark(
                     result_dir=result_dir,
                 )
         except Exception as e:
-            main_logger.exception(f"Error occurred during task-specific "
-                               f"benchmark: {e}")
+            main_logger.exception(f"Error occurred during task-specific benchmark: {e}")
             result_tabarena_df = pl.DataFrame()
 
     else:
         result_tabarena_df = pl.DataFrame()
         main_logger.info("Skipping task-specific benchmark.")
 
-    result_df = pl.concat(
-        [result_outlier_df, result_tabarena_df], how="diagonal"
-    )
+    result_df = pl.concat([result_outlier_df, result_tabarena_df], how="diagonal")
 
     return result_df
 
 
 def validate_embedding_models(embedding_models):
+    """Validate and filter embedding model instances.
+
+    Args:
+        embedding_models: Single model instance or list of model instances.
+
+    Returns:
+        list: List of validated AbstractEmbeddingGenerator instances.
+    """
     if not isinstance(embedding_models, list):
         models_to_check = [embedding_models]
     else:
         models_to_check = embedding_models
 
     return [
-        model for model in models_to_check if isinstance(model, AbstractEmbeddingGenerator)
+        model
+        for model in models_to_check
+        if isinstance(model, AbstractEmbeddingGenerator)
     ]
 
+
 def validate_evaluator_models(evaluator_algorithms):
+    """Validate and filter evaluator algorithm instances.
+
+    Args:
+        evaluator_algorithms: Single evaluator instance or list of evaluator instances.
+
+    Returns:
+        list: List of validated AbstractEvaluator instances.
+    """
     if not isinstance(evaluator_algorithms, list):
         algorithms_to_check = [evaluator_algorithms]
     else:
         algorithms_to_check = evaluator_algorithms
 
     return [
-        algorithm for algorithm in algorithms_to_check if isinstance(algorithm,
-                                                                     AbstractEvaluator)
+        algorithm
+        for algorithm in algorithms_to_check
+        if isinstance(algorithm, AbstractEvaluator)
     ]
-

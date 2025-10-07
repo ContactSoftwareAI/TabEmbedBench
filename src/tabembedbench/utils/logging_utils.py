@@ -8,12 +8,15 @@ NEIGHBORS_PROGRESS = 5
 
 logging.addLevelName(NEIGHBORS_PROGRESS, "NEIGHBORS_PROGRESS")
 
+
 def neighbors_progress(self, message, *args, **kwargs):
     """Log 'message % args' with severity 'NEIGHBORS_PROGRESS'."""
     if self.isEnabledFor(NEIGHBORS_PROGRESS):
         self._log(NEIGHBORS_PROGRESS, message, args, **kwargs)
 
+
 logging.Logger.neighbors_progress = neighbors_progress
+
 
 def setup_unified_logging(
     save_logs: bool = True,
@@ -51,8 +54,10 @@ def setup_unified_logging(
 
     logging.basicConfig(
         level=logging.INFO,
-        format=("%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%("
-                "lineno)d - %(message)s"),
+        format=(
+            "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%("
+            "lineno)d - %(message)s"
+        ),
         handlers=handlers,
         force=True,
     )
@@ -71,7 +76,7 @@ def setup_unified_logging(
 
     return log_file
 
+
 def get_benchmark_logger(name: str) -> logging.Logger:
     """Get a logger with custom benchmark logging methods."""
     return logging.getLogger(name)
-

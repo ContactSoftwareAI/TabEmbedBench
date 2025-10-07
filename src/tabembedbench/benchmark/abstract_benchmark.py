@@ -50,12 +50,12 @@ class AbstractBenchmark(ABC):
         """
         self.logger = get_benchmark_logger(logger_name)
         self.result_df = pl.DataFrame()
-        
+
         if isinstance(result_dir, str):
             result_dir = Path(result_dir)
         result_dir.mkdir(parents=True, exist_ok=True)
         self.result_dir = result_dir
-        
+
         self.timestamp = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
         self.save_result_dataframe = save_result_dataframe
         self.upper_bound_num_samples = upper_bound_num_samples
@@ -108,11 +108,7 @@ class AbstractBenchmark(ABC):
 
     @abstractmethod
     def _evaluate_embeddings(
-        self,
-        embeddings,
-        evaluator: AbstractEvaluator,
-        dataset_info: dict,
-        **kwargs
+        self, embeddings, evaluator: AbstractEvaluator, dataset_info: dict, **kwargs
     ) -> dict:
         """Evaluate embeddings using the provided evaluator.
 
@@ -137,10 +133,7 @@ class AbstractBenchmark(ABC):
         raise NotImplementedError
 
     def _check_dataset_size_constraints(
-        self,
-        num_samples: int,
-        num_features: int,
-        dataset_name: str
+        self, num_samples: int, num_features: int, dataset_name: str
     ) -> tuple[bool, str | None]:
         """Check if dataset exceeds size constraints.
 
@@ -169,10 +162,7 @@ class AbstractBenchmark(ABC):
         return False, None
 
     def _generate_embeddings(
-        self,
-        embedding_model: AbstractEmbeddingGenerator,
-        data,
-        **kwargs
+        self, embedding_model: AbstractEmbeddingGenerator, data, **kwargs
     ):
         """Generate embeddings using the provided model.
 
@@ -232,7 +222,9 @@ class AbstractBenchmark(ABC):
         # If it's a generator, iterate through it; otherwise, wrap in a list
         try:
             # Try to iterate (works for generators and lists)
-            if hasattr(prepared_data, '__iter__') and not isinstance(prepared_data, dict):
+            if hasattr(prepared_data, "__iter__") and not isinstance(
+                prepared_data, dict
+            ):
                 return iter(prepared_data)
             else:
                 return [prepared_data]
@@ -241,9 +233,7 @@ class AbstractBenchmark(ABC):
             return [prepared_data]
 
     def _process_embedding_generation(
-        self,
-        embedding_model: AbstractEmbeddingGenerator,
-        prepared_data_item: dict
+        self, embedding_model: AbstractEmbeddingGenerator, prepared_data_item: dict
     ) -> tuple | None:
         """Generate embeddings for a prepared data item.
 
@@ -258,15 +248,13 @@ class AbstractBenchmark(ABC):
             embedding_results = self._generate_embeddings(
                 embedding_model,
                 prepared_data_item["data"],
-                **prepared_data_item.get("embedding_kwargs", {})
+                **prepared_data_item.get("embedding_kwargs", {}),
             )
             embeddings = embedding_results[0]
             embed_dim = embeddings.shape[-1]
             return embedding_results, embed_dim
         except Exception as e:
-            self.logger.exception(
-                f"Error generating embeddings: {e}. Skipping."
-            )
+            self.logger.exception(f"Error generating embeddings: {e}. Skipping.")
             # Add error row if dataset info is available
             if "dataset_name" in prepared_data_item:
                 error_row = {
@@ -283,7 +271,7 @@ class AbstractBenchmark(ABC):
         embedding_results,
         prepared_data_item: dict,
         embedding_model: AbstractEmbeddingGenerator,
-        embed_dim: int
+        embed_dim: int,
     ):
         """Process a single evaluation with an evaluator.
 
@@ -299,9 +287,7 @@ class AbstractBenchmark(ABC):
         ):
             return
 
-        self.logger.debug(
-            f"Starting evaluation with {evaluator._name}..."
-        )
+        self.logger.debug(f"Starting evaluation with {evaluator._name}...")
 
         try:
             # Prepare dataset info for evaluation
@@ -320,7 +306,7 @@ class AbstractBenchmark(ABC):
                 embedding_results,
                 evaluator,
                 dataset_info,
-                **prepared_data_item.get("eval_kwargs", {})
+                **prepared_data_item.get("eval_kwargs", {}),
             )
 
             # Add evaluator parameters to results
@@ -334,9 +320,7 @@ class AbstractBenchmark(ABC):
             # Reset evaluator
             evaluator.reset_evaluator()
 
-            self.logger.debug(
-                f"Finished evaluation with {evaluator._name}"
-            )
+            self.logger.debug(f"Finished evaluation with {evaluator._name}")
 
         except Exception as e:
             self.logger.exception(
@@ -347,7 +331,7 @@ class AbstractBenchmark(ABC):
         self,
         embedding_model: AbstractEmbeddingGenerator,
         prepared_data_item: dict,
-        evaluators: list[AbstractEvaluator]
+        evaluators: list[AbstractEvaluator],
     ):
         """Process a single embedding model for a prepared data item.
 
@@ -356,9 +340,7 @@ class AbstractBenchmark(ABC):
             prepared_data_item: Dictionary containing prepared data and metadata.
             evaluators: List of evaluators to use.
         """
-        self.logger.info(
-            f"Starting experiment for {embedding_model.name}..."
-        )
+        self.logger.info(f"Starting experiment for {embedding_model.name}...")
 
         # Generate embeddings
         result = self._process_embedding_generation(embedding_model, prepared_data_item)
@@ -374,7 +356,7 @@ class AbstractBenchmark(ABC):
                 embedding_results,
                 prepared_data_item,
                 embedding_model,
-                embed_dim
+                embed_dim,
             )
 
         # Save intermediate results
@@ -383,16 +365,14 @@ class AbstractBenchmark(ABC):
         # Cleanup
         self._cleanup_gpu_cache()
 
-        self.logger.debug(
-            f"Finished experiment for {embedding_model.name}"
-        )
+        self.logger.debug(f"Finished experiment for {embedding_model.name}")
 
     def _process_dataset(
         self,
         dataset,
         embedding_models: list[AbstractEmbeddingGenerator],
         evaluators: list[AbstractEvaluator],
-        **kwargs
+        **kwargs,
     ):
         """Process a single dataset with all embedding models and evaluators.
 
@@ -423,16 +403,14 @@ class AbstractBenchmark(ABC):
             # Process each embedding model
             for embedding_model in embedding_models:
                 self._process_embedding_model(
-                    embedding_model,
-                    prepared_data_item,
-                    evaluators
+                    embedding_model, prepared_data_item, evaluators
                 )
 
     def run_benchmark(
         self,
         embedding_models: list[AbstractEmbeddingGenerator],
         evaluators: list[AbstractEvaluator],
-        **kwargs
+        **kwargs,
     ) -> pl.DataFrame:
         """Run the benchmark with the provided models and evaluators.
 

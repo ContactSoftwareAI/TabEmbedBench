@@ -168,7 +168,7 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
             # Create mask for the current column
             mask = np.zeros_like(X_preprocessed, dtype=bool)
             mask[:, column_idx] = True
-            
+
             # Extract features (all columns except current) and target (current column)
             features = X_preprocessed[~mask].reshape(num_samples, -1)
             target = X_preprocessed[mask]
@@ -189,14 +189,14 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
                     model.fit(features, target)
                 else:
                     raise
-            
+
             estimator_embeddings = model.get_embeddings(features)
 
             if self.num_estimators > 1:
                 if self.estimator_agg == "mean":
                     estimator_embeddings = np.mean(estimator_embeddings, axis=0)
                 elif self.estimator_agg == "first_element":
-                    estimator_embeddings = np.squeeze(estimator_embeddings[0,:])
+                    estimator_embeddings = np.squeeze(estimator_embeddings[0, :])
                 else:
                     raise NotImplementedError
             else:
@@ -204,9 +204,7 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
 
             tmp_embeddings += [estimator_embeddings]
 
-        concat_embeddings = np.concatenate(
-            tmp_embeddings, axis=1
-        ).reshape(
+        concat_embeddings = np.concatenate(tmp_embeddings, axis=1).reshape(
             tmp_embeddings[0].shape[0], -1
         )
 

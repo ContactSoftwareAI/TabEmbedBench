@@ -96,13 +96,17 @@ def update_batch_dict(
     batch_dict["dataset_size"].append(dataset_size)
     batch_dict["embedding_model"].append(embedding_model_name)
     batch_dict["num_neighbors"].append(num_neighbors)
-    batch_dict["time_to_compute_train_embeddings"].append(time_to_compute_train_embeddings)
+    batch_dict["time_to_compute_train_embeddings"].append(
+        time_to_compute_train_embeddings
+    )
     batch_dict["distance_metric"].append(distance_metric)
     batch_dict["task"].append(task)
     batch_dict["algorithm"].append(algorithm)
     batch_dict["emb_dim"].append(embedding_dimension)
     batch_dict["prediction_time"].append(prediction_time)
-    batch_dict["time_to_compute_test_embeddings"].append(time_to_compute_test_embeddings)
+    batch_dict["time_to_compute_test_embeddings"].append(
+        time_to_compute_test_embeddings
+    )
 
     if auc_score is not None:
         batch_dict["auc_score"].append(auc_score)
@@ -159,10 +163,10 @@ def update_result_df(
 
 
 def save_result_df(
-        result_df: pl.DataFrame,
-        output_path: str | Path,
-        benchmark_name:str,
-        timestamp: str,
+    result_df: pl.DataFrame,
+    output_path: str | Path,
+    benchmark_name: str,
+    timestamp: str,
 ):
     """
     Saves the provided Polars DataFrame to both Parquet and CSV formats in the

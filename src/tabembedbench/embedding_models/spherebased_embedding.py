@@ -7,9 +7,30 @@ from tabembedbench.utils.preprocess_utils import infer_categorical_columns
 
 
 class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
+    """Sphere-based embedding generator for tabular data.
+
+    This embedding model projects tabular data onto high-dimensional spheres,
+    treating categorical and numerical features differently. Categorical features
+    are embedded as points in small regions around random sphere points, while
+    numerical features are embedded along radial directions.
+
+    Attributes:
+        embed_dim (int): Dimensionality of the embedding space.
+        categorical_indices (list[int] | None): Indices of categorical columns.
+        column_properties (list): List storing embedding properties for each column.
+        n_cols (int | None): Number of columns in the fitted data.
+    """
+
     def __init__(
         self, embed_dim: int, categorical_indices: list[int] | None = None
     ) -> None:
+        """Initialize the sphere-based embedding generator.
+
+        Args:
+            embed_dim (int): Dimensionality of the embedding space.
+            categorical_indices (list[int] | None, optional): Indices of categorical
+                columns. If None, will be inferred automatically. Defaults to None.
+        """
         super().__init__(name=f"SphereBasedEmbedding_d{embed_dim}")
         self.categorical_indices = categorical_indices
         self.embed_dim = embed_dim
@@ -18,9 +39,19 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
 
     @property
     def task_only(self) -> bool:
+        """Indicates whether this model requires task labels.
+
+        Returns:
+            bool: False, as this is an unsupervised embedding method.
+        """
         return False
 
     def _generate_random_sphere_point(self) -> np.ndarray:
+        """Generate a random point on the unit sphere.
+
+        Returns:
+            np.ndarray: Random point on the unit sphere of dimension embed_dim.
+        """
         point = np.random.randn(self.embed_dim)
 
         return point / np.linalg.norm(point)
@@ -31,6 +62,20 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
         y=None,
         categorical_indices: list[int] | None = None,
     ):
+        """Fit the embedding model to the data.
+
+        Learns embedding properties for each column, including sphere points
+        for categorical features and min/max ranges for numerical features.
+
+        Args:
+            data (pd.DataFrame | np.ndarray): Input data to fit.
+            y: Unused parameter, kept for sklearn compatibility. Defaults to None.
+            categorical_indices (list[int] | None, optional): Indices of categorical
+                columns. If None, will be inferred. Defaults to None.
+
+        Returns:
+            self: The fitted embedding model.
+        """
         if isinstance(data, pd.DataFrame):
             data = data.values
         else:
@@ -118,26 +163,17 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
     def _embed_numerical_column(
         self, column_data: np.ndarray, col_idx: int
     ) -> np.ndarray:
-        """Embeds a numerical column into a multidimensional representation based on normalization
-        and a pre-calculated sphere point.
+        """Embed a numerical column into the embedding space.
 
-        This method processes a numerical column of data and embeds each value into a
-        specified embedding dimension space. It normalizes the values within the column
-        to derive the radial distance for embedding and scales the result based on
-        stored column properties. The embedding is calculated by placing points
-        at scaled distances along the sphere-point direction.
+        Normalizes values to a radius between 0.5 and 1.5, then places points
+        along a random sphere direction at the computed radius.
 
-        Parameters:
-            column_data : np.ndarray
-                The input numerical data for the column to be embedded.
-            col_idx : int
-                The index of the column being processed, which is used to retrieve the
-                corresponding column properties.
+        Args:
+            column_data (np.ndarray): The numerical data for the column.
+            col_idx (int): Index of the column being processed.
 
         Returns:
-        np.ndarray
-            A 2D numpy array of shape (len(column_data), embed_dim), representing the
-            embedded values for the input column.
+            np.ndarray: Embedded values of shape (len(column_data), embed_dim).
         """
         embeddings = np.zeros((len(column_data), self.embed_dim))
         col_min = self.column_properties[col_idx][0]
@@ -167,21 +203,21 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
     def _embed_categorical_column(
         self, column_data: np.ndarray, col_idx: int
     ) -> np.ndarray:
-        """Embeds a categorical column into a numerical array representation based on predefined
-        center points and generates embeddings for unknown categories dynamically.
+        """Embed a categorical column into the embedding space.
 
-        Parameters
-        ----------
-        column_data : np.ndarray
-            The categorical data of the column to be embedded.
-        col_idx : int
-            The index of the column in the context of all columns of the data.
+        Maps each category to a point in a small region around a random center point.
+        Unknown categories encountered during transform are assigned new points
+        dynamically.
+
+        Args:
+            column_data (np.ndarray): The categorical data for the column.
+            col_idx (int): Index of the column being processed.
 
         Returns:
-        -------
-        np.ndarray
-            A 2D array representing the embedded numerical values for each category
-            in the input column data.
+            np.ndarray: Embedded values of shape (len(column_data), embed_dim).
+
+        Raises:
+            ValueError: If unique_category_embeddings is not a dictionary.
         """
         center_point = self.column_properties[col_idx][0]
         unique_category_embeddings = self.column_properties[col_idx][1]
@@ -212,6 +248,18 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
         outlier: bool = False,
         categorical_indices: list[int] | None = None,
     ):
+        """Preprocess input data (no-op for this model).
+
+        Args:
+            data (np.ndarray): Input data.
+            train (bool, optional): Whether this is training data. Defaults to True.
+            outlier (bool, optional): Whether this is outlier data. Defaults to False.
+            categorical_indices (list[int] | None, optional): Categorical column indices.
+                Defaults to None.
+
+        Returns:
+            np.ndarray: The input data unchanged.
+        """
         return data
 
     def _fit_model(
@@ -221,13 +269,35 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
         categorical_indices: list[int] | None = None,
         **kwargs,
     ):
+        """Fit the embedding model to preprocessed data.
+
+        Args:
+            data (np.ndarray): Preprocessed input data.
+            train (bool, optional): Whether to fit the model. Defaults to True.
+            categorical_indices (list[int] | None, optional): Categorical column indices.
+                Defaults to None.
+            **kwargs: Additional keyword arguments (unused).
+        """
         if train:
             self.fit(data, categorical_indices=categorical_indices)
 
     def _compute_embeddings(self, data: np.ndarray, **kwargs):
+        """Compute embeddings for the input data.
+
+        Args:
+            data (np.ndarray): Input data to embed.
+            **kwargs: Additional keyword arguments (unused).
+
+        Returns:
+            np.ndarray: Embeddings of shape (n_samples, embed_dim).
+        """
         return self.transform(data)
 
     def _reset_embedding_model(self):
+        """Reset the embedding model to its initial state.
+
+        Clears all fitted column properties and metadata.
+        """
         self.column_properties = []
         self.categorical_indices = None
         self.n_cols = None

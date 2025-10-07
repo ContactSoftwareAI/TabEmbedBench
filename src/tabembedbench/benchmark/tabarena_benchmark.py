@@ -4,11 +4,7 @@ from pathlib import Path
 import numpy as np
 import openml
 import polars as pl
-from sklearn.metrics import (
-    mean_absolute_percentage_error,
-    roc_auc_score,
-    log_loss
-)
+from sklearn.metrics import mean_absolute_percentage_error, roc_auc_score, log_loss
 from sklearn.preprocessing import LabelEncoder
 from tabicl.sklearn.preprocessing import TransformToNumerical
 
@@ -76,14 +72,16 @@ class TabArenaBenchmark(AbstractBenchmark):
             dataset = task.get_dataset()
             folds, repeats = self._get_task_configuration(dataset, task)
 
-            datasets.append({
-                "task_id": task_id,
-                "task": task,
-                "dataset": dataset,
-                "folds": folds,
-                "repeats": repeats,
-            })
-        
+            datasets.append(
+                {
+                    "task_id": task_id,
+                    "task": task,
+                    "dataset": dataset,
+                    "folds": folds,
+                    "repeats": repeats,
+                }
+            )
+
         return datasets
 
     def _should_skip_dataset(self, dataset_info, **kwargs) -> tuple[bool, str | None]:
@@ -187,7 +185,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         embedding_results,
         evaluator: AbstractEvaluator,
         dataset_info: dict,
-        **kwargs
+        **kwargs,
     ) -> dict:
         """Evaluate embeddings for classification or regression.
 
@@ -237,9 +235,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                 result_dict["task"] = ["classification"]
                 result_dict["classification_type"] = ["binary"]
             else:
-                auc_score = roc_auc_score(
-                    y_test, test_prediction, multi_class="ovr"
-                )
+                auc_score = roc_auc_score(y_test, test_prediction, multi_class="ovr")
                 log_loss_score = log_loss(y_test, test_prediction)
                 result_dict["task"] = ["classification"]
                 result_dict["classification_type"] = ["multiclass"]

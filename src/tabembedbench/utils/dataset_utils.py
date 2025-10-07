@@ -132,8 +132,10 @@ def prepare_data_for_torch(X: np.ndarray, device: str = "cpu") -> torch.Tensor:
     X = torch.from_numpy(X).to(device)
     return X
 
+
 def check_tabpfn_dataset_restrictions(X: np.ndarray) -> bool:
     raise NotImplementedError
+
 
 def check_tabicl_dataset_restrictions(X: np.ndarray) -> bool:
     raise NotImplementedError

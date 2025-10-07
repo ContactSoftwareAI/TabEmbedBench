@@ -155,7 +155,7 @@ class OutlierBenchmark(AbstractBenchmark):
         embedding_results,
         evaluator: AbstractEvaluator,
         dataset_info: dict,
-        **kwargs
+        **kwargs,
     ) -> dict:
         """Evaluate embeddings for outlier detection.
 

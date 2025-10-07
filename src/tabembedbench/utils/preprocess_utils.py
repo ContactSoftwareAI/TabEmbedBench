@@ -70,16 +70,18 @@ def infer_categorical_features(
             continue
 
         # Get unique values - handle differently for pandas and numpy
-        n_unique = data.iloc[:, i].nunique() if is_pandas else len(np.unique(data[:, i]))
+        n_unique = (
+            data.iloc[:, i].nunique() if is_pandas else len(np.unique(data[:, i]))
+        )
 
         # Filter categorical features, with too many unique values
         if (
             i in categorical_features
             and n_unique <= max_unique_values_as_categorical_feature
         ) or (
-                i not in categorical_features
-                and n_unique < min_unique_values_as_numerical_feature
-                and data.shape[0] > 100
+            i not in categorical_features
+            and n_unique < min_unique_values_as_numerical_feature
+            and data.shape[0] > 100
         ):
             _categorical_features.append(i)
 

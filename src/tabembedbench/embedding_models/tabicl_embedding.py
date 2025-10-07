@@ -112,28 +112,27 @@ class TabICLRowEmbedding(nn.Module):
 
 
 class TabICLEmbedding(AbstractEmbeddingGenerator):
-    """Generates embeddings from TabICL models with preprocessing capabilities and
-    optional embedding normalization.
+    """TabICL-based embedding generator for tabular data.
 
-    The TabICLEmbedding class is designed to create embeddings using
-    pre-trained TabICL models. It supports preprocessing for input data and
-    provides an option for embedding normalization. The class also allows
-    working with pretrained TabICL model checkpoints or downloading them
-    automatically if not provided. It encapsulates preprocessing pipelines for
-    outlier and non-outlier data handling, and provides functionalities for
-    resetting and configuring the preprocess pipelines.
+    This embedding model uses the TabICL (Tabular In-Context Learning) architecture
+    to generate embeddings. It supports optional preprocessing pipelines and can
+    download pre-trained models from HuggingFace Hub.
 
     Attributes:
-        model_path (Optional[Path]): Path to the TabICL model checkpoint;
-            downloads from HF Hub if not provided or path doesn't exist.
-        tabicl_row_embedder (TabICLRowEmbedding): The row embedding model is
-            loaded with specific weights and configuration.
-        normalize_embeddings (bool): Specifies whether generated embeddings
-            should be normalized.
-        preprocess_pipeline (PreprocessingPipeline): Pipeline for preprocessing
-            input data.
-        outlier_preprocessing_pipeline (OutlierPreprocessingPipeline):
-            Dedicated pipeline for preprocessing outlier data.
+        model_path (Path | None): Path to the TabICL model checkpoint.
+        tabicl_row_embedder (TabICLRowEmbedding): The row embedding model loaded
+            with pre-trained weights.
+        normalize_embeddings (bool): Whether to normalize generated embeddings.
+        preprocess_pipeline (PreprocessingPipeline): Pipeline for standard preprocessing.
+        outlier_preprocessing_pipeline (OutlierPreprocessingPipeline): Pipeline for
+            outlier detection preprocessing.
+        _preprocess_tabicl_data (bool): Whether to apply TabICL-specific preprocessing.
+        _tabvectorizer_preprocess (bool): Whether to apply TableVectorizer preprocessing.
+        _tabvectorizer (TableVectorizer | None): TableVectorizer instance if enabled.
+
+    References:
+        Qu, J. et al. (2025). Tabicl: A tabular foundation model for in-context
+        learning on large data. arXiv preprint arXiv:2502.05564.
     """
 
     def __init__(
@@ -141,20 +140,20 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         model_path: str | None = None,
         normalize_embeddings: bool = False,
         preprocess_tabicl_data: bool = False,
-        tabvectorizer_preprocess: bool = False
+        tabvectorizer_preprocess: bool = False,
     ):
-        """Initializes the TabICLEmbedding class, handling configuration and setup
-        for the tabular data embedder. Optionally loads a specific model
-        path and applies settings for embedding normalization and data
-        preprocessing.
+        """Initialize the TabICL embedding generator.
 
         Args:
-            model_path: Optional path to the model file as a string. If None, no model
-                is loaded.
-            normalize_embeddings: Boolean flag indicating whether to normalize
-                embeddings or not.
-            preprocess_tabicl_data: Boolean flag to determine whether to preprocess
-                Tabicl data.
+            model_path (str | None, optional): Path to the model checkpoint file.
+                If None or path doesn't exist, downloads from HuggingFace Hub.
+                Defaults to None.
+            normalize_embeddings (bool, optional): Whether to normalize embeddings.
+                Defaults to False.
+            preprocess_tabicl_data (bool, optional): Whether to apply TabICL-specific
+                preprocessing. Defaults to False.
+            tabvectorizer_preprocess (bool, optional): Whether to apply TableVectorizer
+                preprocessing before TabICL preprocessing. Defaults to False.
         """
         super().__init__(name="tabicl-classifier-v1.1-0506")
 
@@ -164,11 +163,19 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         self.normalize_embeddings = normalize_embeddings
         self._preprocess_tabicl_data = preprocess_tabicl_data
         self._tabvectorizer_preprocess = tabvectorizer_preprocess
-        self._tabvectorizer = TableVectorizer() if self._tabvectorizer_preprocess else None
+        self._tabvectorizer = (
+            TableVectorizer() if self._tabvectorizer_preprocess else None
+        )
         self.preprocess_pipeline = PreprocessingPipeline()
         self.outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
 
     def get_tabicl_model(self):
+        """Load or download the TabICL model.
+
+        Returns:
+            TabICLRowEmbedding: The loaded TabICL row embedding model with
+                pre-trained weights and frozen parameters.
+        """
         if self.model_path is not None and self.model_path.exists():
             model_ckpt_path = self.model_path
         else:
@@ -202,27 +209,22 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
 
     def _preprocess_data(
         self, X: np.ndarray, train: bool = True, outlier: bool = False, **kwargs
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Preprocesses the input data based on the specified mode (training or inference) and
-        whether the data contains outliers.
+    ) -> np.ndarray:
+        """Preprocess input data using TabICL-specific pipelines.
 
-        This function applies preprocessing pipelines to the input data depending on the training
-        or inference mode and handles outlier data if specified. If training mode is enabled, the
-        method fits and transforms the data using the appropriate preprocessing pipeline, either
-        for outlier or standard data. During inference or non-training mode, it only transforms
-        the data using the respective pipeline.
+        Applies optional TableVectorizer preprocessing followed by either standard
+        or outlier-specific preprocessing pipelines based on the data type.
 
         Args:
-            X: Input data to be preprocessed, passed as a numpy array.
-            train: Boolean flag indicating whether the data is in training mode. If True, the
-                method fits and transforms the data; otherwise, it only performs transformation.
-            outlier: Boolean flag indicating if the input data contains outliers. If True,
-                the outlier-specific preprocessing pipeline is used; otherwise, the standard
-                preprocessing pipeline is applied.
+            X (np.ndarray): Input data to preprocess.
+            train (bool, optional): Whether to fit the preprocessing pipelines.
+                Defaults to True.
+            outlier (bool, optional): Whether to use outlier-specific preprocessing.
+                Defaults to False.
+            **kwargs: Additional keyword arguments (unused).
 
         Returns:
-            np.ndarray: Preprocessed data after applying the corresponding preprocessing steps.
+            np.ndarray: Preprocessed data ready for embedding computation.
         """
         X_preprocess = X
 
@@ -251,28 +253,35 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         return X_preprocess
 
     def _fit_model(self, X_preprocessed: np.ndarray, train: bool = True, **kwargs):
+        """Fit the model (no-op for TabICL as it uses pre-trained weights).
+
+        Args:
+            X_preprocessed (np.ndarray): Preprocessed input data.
+            train (bool, optional): Whether this is training mode. Defaults to True.
+            **kwargs: Additional keyword arguments (unused).
+
+        Returns:
+            np.ndarray: The preprocessed data unchanged.
+        """
         return X_preprocessed
 
     def _compute_embeddings(
         self, X: np.ndarray, device: torch.device | None = None, **kwargs
     ) -> np.ndarray:
-        """
-        Computes the embeddings for the given input data.
-
-        The method processes 2D or 3D input arrays and computes embeddings using
-        a row embedder. The input tensor is sent to the specified device, converted
-        to float type, and processed through the forward method of the embedder.
-        The resulting embeddings are returned as a NumPy array.
+        """Compute embeddings using the TabICL model.
 
         Args:
-            X (np.ndarray): The input data for which embeddings are to be computed.
-                Must be a 2D or 3D array.
-            device (torch.device | None): The device on which to perform the
-                computation. If None, the default device is determined using
-                `get_device()`.
+            X (np.ndarray): Input data of shape (n_samples, n_features) or
+                (batch_size, n_samples, n_features).
+            device (torch.device | None, optional): Device for computation.
+                If None, uses default device. Defaults to None.
+            **kwargs: Additional keyword arguments (unused).
 
         Returns:
-            np.ndarray: The computed embeddings as a NumPy array.
+            np.ndarray: Computed embeddings.
+
+        Raises:
+            ValueError: If input is not 2D or 3D array.
         """
         if device is None:
             device = get_device()
@@ -288,21 +297,27 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         return self.tabicl_row_embedder.forward(X).cpu().squeeze().numpy()
 
     def _reset_embedding_model(self):
-        """
-        Resets the embedding model by reinitializing preprocessing pipelines.
+        """Reset the embedding model to its initial state.
 
-        This method reinitializes both the primary preprocessing pipeline and the
-        outlier-specific preprocessing pipeline to their original states. It is
-        useful when you need to reset the state of the preprocessing components
-        for a fresh evaluation or after model updates.
-
+        Reinitializes all preprocessing pipelines to clear fitted state.
         """
-        self._tabvectorizer = TableVectorizer() if self._tabvectorizer_preprocess else None
+        self._tabvectorizer = (
+            TableVectorizer() if self._tabvectorizer_preprocess else None
+        )
         self.preprocess_pipeline = PreprocessingPipeline()
         self.outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
 
 
 def filter_params_for_class(cls, params_dict):
+    """Filter parameters dictionary to only include valid parameters for a class.
+
+    Args:
+        cls: The class to filter parameters for.
+        params_dict (dict): Dictionary of parameters to filter.
+
+    Returns:
+        dict: Filtered dictionary containing only valid parameters for the class.
+    """
     sig = inspect.signature(cls.__init__)
 
     valid_params = set(sig.parameters.keys()) - {"self"}
@@ -313,17 +328,52 @@ def filter_params_for_class(cls, params_dict):
 # The code is taken from the original TabICL repo, only the
 # OutlierRemover is removed. The rest is similar to the original code.
 class OutlierPreprocessingPipeline(TransformerMixin, BaseEstimator):
+    """Preprocessing pipeline for outlier detection tasks.
+
+    This pipeline applies standard scaling followed by optional normalization
+    using various methods (power transform, quantile transform, etc.).
+
+    Attributes:
+        normalization_method (str): Method for normalization.
+        outlier_threshold (float): Threshold for outlier detection.
+        random_state (int | None): Random seed for reproducibility.
+        standard_scaler_ (CustomStandardScaler): Fitted standard scaler.
+        normalizer_ (Pipeline | None): Fitted normalization pipeline.
+        X_min_ (np.ndarray): Minimum values for clipping.
+        X_max_ (np.ndarray): Maximum values for clipping.
+    """
+
     def __init__(
         self,
         normalization_method: str = "power",
         outlier_threshold: float = 4.0,
         random_state: int | None = None,
     ):
+        """Initialize the outlier preprocessing pipeline.
+
+        Args:
+            normalization_method (str, optional): Normalization method to use.
+                Options: 'power', 'quantile', 'quantile_rtdl', 'robust', 'none'.
+                Defaults to "power".
+            outlier_threshold (float, optional): Threshold for outlier detection.
+                Defaults to 4.0.
+            random_state (int | None, optional): Random seed for reproducibility.
+                Defaults to None.
+        """
         self.normalization_method = normalization_method
         self.outlier_threshold = outlier_threshold
         self.random_state = random_state
 
     def fit(self, X, y=None):
+        """Fit the preprocessing pipeline to the data.
+
+        Args:
+            X: Input data to fit.
+            y: Unused parameter, kept for sklearn compatibility. Defaults to None.
+
+        Returns:
+            self: The fitted pipeline.
+        """
         X = self._validate_data(X)
 
         # 1. Apply standard scaling
@@ -369,17 +419,13 @@ class OutlierPreprocessingPipeline(TransformerMixin, BaseEstimator):
         return self
 
     def transform(self, X):
-        """Apply the preprocessing pipeline.
+        """Apply the preprocessing pipeline to the data.
 
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            The input data.
+        Args:
+            X: Input data of shape (n_samples, n_features).
 
         Returns:
-        -------
-        X_out : ndarray
-            Preprocessed data.
+            np.ndarray: Preprocessed data.
         """
         check_is_fitted(self)
         X = self._validate_data(X, reset=False, copy=True)

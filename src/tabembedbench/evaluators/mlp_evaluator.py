@@ -33,18 +33,19 @@ class PyTorchMLPWrapper(BaseEstimator):
         scaler (StandardScaler): Feature scaler.
         is_fitted_ (bool): Whether the model has been fitted.
     """
+
     def __init__(
-            self,
-            input_dim: int,
-            hidden_dims: list[int],
-            output_dim: int,
-            dropout: float = 0.0,
-            learning_rate: float = 0.001,
-            batch_size: int = 32,
-            epochs: int = 100,
-            task_type: str = "classification",
-            device: Optional[str] = None,
-            early_stopping_patience: int = 10,
+        self,
+        input_dim: int,
+        hidden_dims: list[int],
+        output_dim: int,
+        dropout: float = 0.0,
+        learning_rate: float = 0.001,
+        batch_size: int = 32,
+        epochs: int = 100,
+        task_type: str = "classification",
+        device: Optional[str] = None,
+        early_stopping_patience: int = 10,
     ):
         """Initialize the PyTorchMLPWrapper.
 
@@ -114,11 +115,10 @@ class PyTorchMLPWrapper(BaseEstimator):
         Returns:
             PyTorchMLPWrapper: The fitted model instance.
         """
-        if hasattr(X, 'values'):
+        if hasattr(X, "values"):
             X = X.values
-        if hasattr(y, 'values'):
+        if hasattr(y, "values"):
             y = y.values
-
 
         # Scale features
         X_scaled = self.scaler.fit_transform(X)
@@ -135,10 +135,7 @@ class PyTorchMLPWrapper(BaseEstimator):
 
         # Build model
         self.model = self._build_model().to(self.device)
-        optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=self.learning_rate
-        )
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
         # Training loop
         dataset = torch.utils.data.TensorDataset(X_tensor, y_tensor)
@@ -146,7 +143,7 @@ class PyTorchMLPWrapper(BaseEstimator):
             dataset, batch_size=self.batch_size, shuffle=True
         )
 
-        best_loss = float('inf')
+        best_loss = float("inf")
         patience_counter = 0
 
         self.model.train()
@@ -250,12 +247,12 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
     """
 
     def __init__(
-            self,
-            n_trials: int = 50,
-            cv_folds: int = 5,
-            random_state: int = 42,
-            device: Optional[str] = None,
-            verbose: bool = False,
+        self,
+        n_trials: int = 50,
+        cv_folds: int = 5,
+        random_state: int = 42,
+        device: Optional[str] = None,
+        verbose: bool = False,
     ):
         """Initialize the MLPClassifierEvaluator.
 
@@ -297,7 +294,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
             "dropout": {"type": "float", "low": 0.0, "high": 0.5},
             "learning_rate": {"type": "float", "low": 1e-4, "high": 1e-2, "log": True},
             "batch_size": {"type": "categorical", "choices": [16, 32, 64, 128]},
-            "epochs": {"type": "int", "low": 50, "high": 200}
+            "epochs": {"type": "int", "low": 50, "high": 200},
         }
 
     def create_model(self, trial: optuna.Trial):
@@ -318,7 +315,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
         n_layers = trial.suggest_int(
             "n_layers",
             search_space["n_layers"]["low"],
-            search_space["n_layers"]["high"]
+            search_space["n_layers"]["high"],
         )
 
         # Hidden layer dimensions
@@ -328,15 +325,13 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
                 f"hidden_dim_{i}",
                 search_space["hidden_dim_base"]["low"],
                 search_space["hidden_dim_base"]["high"],
-                log=search_space["hidden_dim_base"]["log"]
+                log=search_space["hidden_dim_base"]["log"],
             )
             hidden_dims.append(hidden_dim)
 
         # Dropout rate
         dropout = trial.suggest_float(
-            "dropout",
-            search_space["dropout"]["low"],
-            search_space["dropout"]["high"]
+            "dropout", search_space["dropout"]["low"], search_space["dropout"]["high"]
         )
 
         # Learning rate
@@ -344,20 +339,17 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
             "learning_rate",
             search_space["learning_rate"]["low"],
             search_space["learning_rate"]["high"],
-            log=search_space["learning_rate"]["log"]
+            log=search_space["learning_rate"]["log"],
         )
 
         # Batch size
         batch_size = trial.suggest_categorical(
-            "batch_size",
-            search_space["batch_size"]["choices"]
+            "batch_size", search_space["batch_size"]["choices"]
         )
 
         # Epochs
         epochs = trial.suggest_int(
-            "epochs",
-            search_space["epochs"]["low"],
-            search_space["epochs"]["high"]
+            "epochs", search_space["epochs"]["low"], search_space["epochs"]["high"]
         )
 
         return PyTorchMLPWrapper(
@@ -394,10 +386,10 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
         return model.predict_proba(embeddings)
 
     def get_prediction(
-            self,
-            embeddings: np.ndarray,
-            y: np.ndarray | None = None,
-            train: bool = True,
+        self,
+        embeddings: np.ndarray,
+        y: np.ndarray | None = None,
+        train: bool = True,
     ) -> tuple:
         """Get predictions from the MLP classifier.
 
@@ -442,12 +434,12 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
     """
 
     def __init__(
-            self,
-            n_trials: int = 50,
-            cv_folds: int = 5,
-            random_state: int = 42,
-            device: Optional[str] = None,
-            verbose: bool = False,
+        self,
+        n_trials: int = 50,
+        cv_folds: int = 5,
+        random_state: int = 42,
+        device: Optional[str] = None,
+        verbose: bool = False,
     ):
         """Initialize the MLPRegressorEvaluator.
 
@@ -488,7 +480,7 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
             "dropout": {"type": "float", "low": 0.0, "high": 0.5},
             "learning_rate": {"type": "float", "low": 1e-4, "high": 1e-2, "log": True},
             "batch_size": {"type": "categorical", "choices": [16, 32, 64, 128]},
-            "epochs": {"type": "int", "low": 50, "high": 200}
+            "epochs": {"type": "int", "low": 50, "high": 200},
         }
 
     def create_model(self, trial: optuna.Trial):
@@ -509,7 +501,7 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
         n_layers = trial.suggest_int(
             "n_layers",
             search_space["n_layers"]["low"],
-            search_space["n_layers"]["high"]
+            search_space["n_layers"]["high"],
         )
 
         # Hidden layer dimensions
@@ -519,15 +511,13 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
                 f"hidden_dim_{i}",
                 search_space["hidden_dim_base"]["low"],
                 search_space["hidden_dim_base"]["high"],
-                log=search_space["hidden_dim_base"]["log"]
+                log=search_space["hidden_dim_base"]["log"],
             )
             hidden_dims.append(hidden_dim)
 
         # Dropout rate
         dropout = trial.suggest_float(
-            "dropout",
-            search_space["dropout"]["low"],
-            search_space["dropout"]["high"]
+            "dropout", search_space["dropout"]["low"], search_space["dropout"]["high"]
         )
 
         # Learning rate
@@ -535,20 +525,17 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
             "learning_rate",
             search_space["learning_rate"]["low"],
             search_space["learning_rate"]["high"],
-            log=search_space["learning_rate"]["log"]
+            log=search_space["learning_rate"]["log"],
         )
 
         # Batch size
         batch_size = trial.suggest_categorical(
-            "batch_size",
-            search_space["batch_size"]["choices"]
+            "batch_size", search_space["batch_size"]["choices"]
         )
 
         # Epochs
         epochs = trial.suggest_int(
-            "epochs",
-            search_space["epochs"]["low"],
-            search_space["epochs"]["high"]
+            "epochs", search_space["epochs"]["low"], search_space["epochs"]["high"]
         )
 
         return PyTorchMLPWrapper(
@@ -585,10 +572,10 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
         return model.predict(embeddings)
 
     def get_prediction(
-            self,
-            embeddings: np.ndarray,
-            y: np.ndarray | None = None,
-            train: bool = True,
+        self,
+        embeddings: np.ndarray,
+        y: np.ndarray | None = None,
+        train: bool = True,
     ) -> tuple:
         """Get predictions from the MLP regressor.
 

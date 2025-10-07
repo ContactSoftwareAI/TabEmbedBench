@@ -7,18 +7,17 @@ from tabembedbench.embedding_models import (
     TabICLEmbedding,
     TabVectorizerEmbedding,
     TabPFNEmbedding,
-    SphereBasedEmbedding
+    SphereBasedEmbedding,
 )
 from tabembedbench.evaluators.classifier import KNNClassifierEvaluator
 from tabembedbench.evaluators.outlier import (
     IsolationForestEvaluator,
     LocalOutlierFactorEvaluator,
     DeepSVDDEvaluator,
-    ECODEvaluator
 )
 from tabembedbench.evaluators.mlp_evaluator import (
     MLPClassifierEvaluator,
-    MLPRegressorEvaluator
+    MLPRegressorEvaluator,
 )
 from tabembedbench.evaluators.regression import KNNRegressorEvaluator
 
@@ -37,8 +36,7 @@ def get_embedding_models(debug=False):
     tabicl_with_preproccessing.name = "tabicl-classifier-v1.1-0506_preprocessed"
 
     tabicl_with_tabvectorizer_preprocessing = TabICLEmbedding(
-        preprocess_tabicl_data=True,
-        tabvectorizer_preprocess=True
+        preprocess_tabicl_data=True, tabvectorizer_preprocess=True
     )
 
     tabicl_with_tabvectorizer_preprocessing.name = (
@@ -49,12 +47,14 @@ def get_embedding_models(debug=False):
 
     tabpfn_embedder = TabPFNEmbedding()
 
-    embedding_models.extend([
-        tablevector,
-        tabicl_with_preproccessing,
-        tabicl_with_tabvectorizer_preprocessing,
-        tabpfn_embedder
-    ])
+    embedding_models.extend(
+        [
+            tablevector,
+            tabicl_with_preproccessing,
+            tabicl_with_tabvectorizer_preprocessing,
+            tabpfn_embedder,
+        ]
+    )
 
     if debug:
         embedding_models = [tablevector, tabicl_with_tabvectorizer_preprocessing]
@@ -66,6 +66,7 @@ def get_embedding_models(debug=False):
         return embedding_models
 
     return embedding_models
+
 
 def get_evaluators(debug=False):
     evaluator_algorithms = []
@@ -99,18 +100,20 @@ def get_evaluators(debug=False):
         if num_neighbors > 0:
             for metric in ["euclidean", "cosine"]:
                 for weights in ["uniform", "distance"]:
-                    evaluator_algorithms.extend([
-                        KNNRegressorEvaluator(
-                            num_neighbors=num_neighbors,
-                            weights=weights,
-                            metric=metric
-                        ),
-                        KNNClassifierEvaluator(
-                            num_neighbors=num_neighbors,
-                            weights=weights,
-                            metric=metric
-                        )
-                    ])
+                    evaluator_algorithms.extend(
+                        [
+                            KNNRegressorEvaluator(
+                                num_neighbors=num_neighbors,
+                                weights=weights,
+                                metric=metric,
+                            ),
+                            KNNClassifierEvaluator(
+                                num_neighbors=num_neighbors,
+                                weights=weights,
+                                metric=metric,
+                            ),
+                        ]
+                    )
                 evaluator_algorithms.append(
                     LocalOutlierFactorEvaluator(
                         model_params={
@@ -138,13 +141,19 @@ def get_evaluators(debug=False):
 
     return evaluator_algorithms
 
-def run_main(debug, max_samples, max_features, run_outlier,
-             run_task_specific, adbench_dataset_path):
+
+def run_main(
+    debug,
+    max_samples,
+    max_features,
+    run_outlier,
+    run_task_specific,
+    adbench_dataset_path,
+):
     if debug:
         logger.info("Running in DEBUG mode")
         max_samples = 800
         max_features = 50
-
 
     embedding_models = get_embedding_models(debug)
 
@@ -158,32 +167,42 @@ def run_main(debug, max_samples, max_features, run_outlier,
         evaluator_algorithms=evaluators,
         adbench_dataset_path=adbench_dataset_path,
         exclude_adbench_datasets=["3_backdoor.npz"],
-        upper_bound_dataset_size= max_samples,
-        upper_bound_num_features= max_features,
+        upper_bound_dataset_size=max_samples,
+        upper_bound_num_features=max_features,
         run_outlier=run_outlier,
         run_task_specific=run_task_specific,
         logging_level=logging.DEBUG,
     )
 
+
 @click.command()
-@click.option('--debug', is_flag=True, help='Run in debug mode ')
-@click.option('--max-samples', default=100001, help='Upper bound for dataset '
-                                                  'size')
-@click.option('--max-features', default=500, help='Upper bound for number of features')
-@click.option('--run-outlier/--no-run-outlier', default=True, help='Run outlier detection')
-@click.option('--run-task-specific/--no-run-task-specific', default=True, help='Run task-specific evaluations')
-@click.option('--adbench-data', default='data/adbench_tabular_datasets',
-              help='Run task-specific '
-                                                 'evaluations')
-def main(debug, max_samples, max_features, run_outlier, run_task_specific,
-         adbench_data):
+@click.option("--debug", is_flag=True, help="Run in debug mode ")
+@click.option("--max-samples", default=100001, help="Upper bound for dataset size")
+@click.option("--max-features", default=500, help="Upper bound for number of features")
+@click.option(
+    "--run-outlier/--no-run-outlier", default=True, help="Run outlier detection"
+)
+@click.option(
+    "--run-task-specific/--no-run-task-specific",
+    default=True,
+    help="Run task-specific evaluations",
+)
+@click.option(
+    "--adbench-data",
+    default="data/adbench_tabular_datasets",
+    help="Run task-specific evaluations",
+)
+def main(
+    debug, max_samples, max_features, run_outlier, run_task_specific, adbench_data
+):
     run_main(
         debug=debug,
         max_samples=max_samples,
         max_features=max_features,
         run_outlier=run_outlier,
         run_task_specific=run_task_specific,
-        adbench_dataset_path=adbench_data)
+        adbench_dataset_path=adbench_data,
+    )
 
 
 if __name__ == "__main__":

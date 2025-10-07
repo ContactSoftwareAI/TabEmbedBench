@@ -4,6 +4,7 @@ import numpy as np
 import optuna
 from sklearn.model_selection import cross_val_score
 
+
 class AbstractEvaluator(ABC):
     """Abstract base class for model evaluators.
 
@@ -15,11 +16,7 @@ class AbstractEvaluator(ABC):
         task_type (str): Type of task (e.g., 'classification', 'regression').
     """
 
-    def __init__(
-            self,
-            name: str,
-            task_type: str
-    ):
+    def __init__(self, name: str, task_type: str):
         """Initialize the AbstractEvaluator.
 
         Args:
@@ -31,10 +28,10 @@ class AbstractEvaluator(ABC):
 
     @abstractmethod
     def get_prediction(
-            self,
-            embeddings: np.ndarray,
-            y: np.ndarray | None = None,
-            train: bool = True,
+        self,
+        embeddings: np.ndarray,
+        y: np.ndarray | None = None,
+        train: bool = True,
     ) -> tuple:
         """Get predictions from the evaluator.
 
@@ -96,15 +93,15 @@ class AbstractHPOEvaluator(AbstractEvaluator):
     """
 
     def __init__(
-            self,
-            name: str,
-            task_type: str,
-            n_trials: int = 50,
-            cv_folds: int = 5,
-            random_state: int = 42,
-            optuna_sampler: optuna.samplers.BaseSampler | None = None,
-            optuna_pruner: optuna.pruners.BasePruner | None = None,
-            verbose: bool = False,
+        self,
+        name: str,
+        task_type: str,
+        n_trials: int = 50,
+        cv_folds: int = 5,
+        random_state: int = 42,
+        optuna_sampler: optuna.samplers.BaseSampler | None = None,
+        optuna_pruner: optuna.pruners.BasePruner | None = None,
+        verbose: bool = False,
     ):
         """Initialize the AbstractHPOEvaluator.
 
@@ -158,7 +155,9 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         """
         pass
 
-    def objective(self, trial: optuna.Trial, embeddings: np.ndarray, y: np.ndarray) -> float:
+    def objective(
+        self, trial: optuna.Trial, embeddings: np.ndarray, y: np.ndarray
+    ) -> float:
         """Optuna objective function for hyperparameter optimization.
 
         Args:
@@ -173,22 +172,17 @@ class AbstractHPOEvaluator(AbstractEvaluator):
 
         scoring = self.get_scoring_metric()
         scores = cross_val_score(
-            model,
-            embeddings,
-            y,
-            cv=self.cv_folds,
-            scoring=scoring,
-            n_jobs=-1
+            model, embeddings, y, cv=self.cv_folds, scoring=scoring, n_jobs=-1
         )
 
         # Return mean score
         return scores.mean()
 
     def optimize_hyperparameters(
-            self,
-            embeddings: np.ndarray,
-            y: np.ndarray,
-            study_name: str | None = None,
+        self,
+        embeddings: np.ndarray,
+        y: np.ndarray,
+        study_name: str | None = None,
     ) -> dict:
         """Optimize hyperparameters using Optuna.
 
@@ -243,7 +237,6 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         """
         pass
 
-
     def fit_best_model(self, embeddings: np.ndarray, y: np.ndarray):
         """Fit a model using the best hyperparameters found during optimization.
 
@@ -268,10 +261,10 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         self.best_model.fit(embeddings, y)
 
     def get_prediction(
-            self,
-            embeddings: np.ndarray,
-            y: np.ndarray | None = None,
-            train: bool = True,
+        self,
+        embeddings: np.ndarray,
+        y: np.ndarray | None = None,
+        train: bool = True,
     ) -> tuple:
         """Get predictions from the evaluator.
 
@@ -385,11 +378,13 @@ class AbstractHPOEvaluator(AbstractEvaluator):
 
         history = []
         for trial in self.study.trials:
-            history.append({
-                "number": trial.number,
-                "value": trial.value,
-                "params": trial.params,
-                "state": trial.state.name,
-            })
+            history.append(
+                {
+                    "number": trial.number,
+                    "value": trial.value,
+                    "params": trial.params,
+                    "state": trial.state.name,
+                }
+            )
 
         return history
