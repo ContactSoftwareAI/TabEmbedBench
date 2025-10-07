@@ -115,6 +115,12 @@ class PyTorchMLPWrapper(BaseEstimator):
         Returns:
             PyTorchMLPWrapper: The fitted model instance.
         """
+        if hasattr(X, 'values'):
+            X = X.values
+        if hasattr(y, 'values'):
+            y = y.values
+
+
         # Scale features
         X_scaled = self.scaler.fit_transform(X)
 
@@ -154,7 +160,7 @@ class PyTorchMLPWrapper(BaseEstimator):
                 if self.task_type == "classification":
                     loss = criterion(outputs, batch_y)
                 else:
-                    loss = criterion(outputs.squeeze(), batch_y)
+                    loss = criterion(outputs.squeeze(1), batch_y)
 
                 loss.backward()
                 optimizer.step()
@@ -200,7 +206,7 @@ class PyTorchMLPWrapper(BaseEstimator):
             if self.task_type == "classification":
                 predictions = torch.argmax(outputs, dim=1).cpu().numpy()
             else:
-                predictions = outputs.squeeze().cpu().numpy()
+                predictions = outputs.squeeze(1).cpu().numpy()
 
         return predictions
 
