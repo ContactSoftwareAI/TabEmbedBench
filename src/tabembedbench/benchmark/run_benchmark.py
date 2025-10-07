@@ -104,20 +104,6 @@ def run_benchmark(
     Returns:
         pl.DataFrame: Polars DataFrame containing combined results from all benchmarks,
             including performance metrics, timing information, and model parameters.
-
-    Example:
-        >>> from tabembedbench.embedding_models import TabPFNEmbedding
-        >>> from tabembedbench.evaluators import KNNClassifierEvaluator
-        >>>
-        >>> models = [TabPFNEmbedding()]
-        >>> evaluators = [KNNClassifierEvaluator(num_neighbors=5, weights="uniform", metric="euclidean")]
-        >>>
-        >>> results = run_benchmark(
-        ...     embedding_models=models,
-        ...     evaluator_algorithms=evaluators,
-        ...     run_outlier=True,
-        ...     run_task_specific=True
-        ... )
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
