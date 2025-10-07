@@ -33,7 +33,6 @@ class PyTorchMLPWrapper(BaseEstimator):
         scaler (StandardScaler): Feature scaler.
         is_fitted_ (bool): Whether the model has been fitted.
     """
-
     def __init__(
             self,
             input_dim: int,
