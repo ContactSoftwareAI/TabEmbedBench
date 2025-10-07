@@ -70,6 +70,9 @@ def get_embedding_models(debug=False):
 def get_evaluators(debug=False):
     evaluator_algorithms = []
 
+    deep_svdd_dynamic = DeepSVDDEvaluator(dynamic_hidden_neurons=True)
+    deep_svdd_dynamic._name = "DeepSVDD-dynamic"
+
     if debug:
         evaluator_algorithms.extend(
             [
@@ -81,8 +84,8 @@ def get_evaluators(debug=False):
                 ),
                 MLPClassifierEvaluator(n_trials=5, cv_folds=2, verbose=False),
                 MLPRegressorEvaluator(n_trials=5, cv_folds=2, verbose=False),
-                ECODEvaluator(),
                 DeepSVDDEvaluator(),
+                deep_svdd_dynamic,
                 LocalOutlierFactorEvaluator(
                     model_params={
                         "n_neighbors": 5,
@@ -128,7 +131,7 @@ def get_evaluators(debug=False):
 
     evaluator_algorithms.extend(
         [
-            ECODEvaluator(),
+            deep_svdd_dynamic,
             DeepSVDDEvaluator(),
         ]
     )
