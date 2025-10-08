@@ -173,6 +173,18 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
             features = X_preprocessed[~mask].reshape(num_samples, -1)
             target = X_preprocessed[mask]
 
+            is_categorical = column_idx in self.categorical_indices
+
+            if is_categorical:
+                n_classes = len(np.unique(target))
+                if n_classes > 10:
+                    model = self.tabpfn_reg
+                else:
+                    model = self.tabpfn_clf
+            else:
+                model = self.tabpfn_reg
+
+
             model = (
                 self.tabpfn_clf
                 if column_idx in self.categorical_indices
@@ -185,6 +197,10 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
                 # If a column is marked as categorical but has continuous values,
                 # fall back to using the regression model
                 if "Unknown label type: continuous" in str(e):
+                    model = self.tabpfn_reg
+                    model.fit(features, target)
+                elif "Number of classes" in str(e) and ("exceeds the maximal "
+                                                        "number" in str(e)):
                     model = self.tabpfn_reg
                     model.fit(features, target)
                 else:

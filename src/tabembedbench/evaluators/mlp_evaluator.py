@@ -289,7 +289,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
                 - epochs: Number of training epochs (50-200)
         """
         return {
-            "n_layers": {"type": "int", "low": 1, "high": 3},
+            "n_layers": {"type": "int", "low": 1, "high": 5},
             "hidden_dim_base": {"type": "int", "low": 32, "high": 512, "log": True},
             "dropout": {"type": "float", "low": 0.0, "high": 0.5},
             "learning_rate": {"type": "float", "low": 1e-4, "high": 1e-2, "log": True},

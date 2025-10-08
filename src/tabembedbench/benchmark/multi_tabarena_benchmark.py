@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import openml
 import polars as pl
-from sklearn.metrics import mean_absolute_percentage_error, roc_auc_score, log_loss
+from sklearn.metrics import roc_auc_score, log_loss
 from sklearn.preprocessing import LabelEncoder
 from tabicl.sklearn.preprocessing import TransformToNumerical
 
@@ -140,6 +140,8 @@ class MultiTabArenaBenchmark(AbstractBenchmark):
             y_train += label_offset
             y_test += label_offset
             label_offset += max_label + 1
+            for embedding_model embedding_models:
+
 
 
     def _evaluate_embeddings(

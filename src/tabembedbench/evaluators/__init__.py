@@ -3,7 +3,6 @@ from tabembedbench.evaluators.abstractevaluator import (
     AbstractHPOEvaluator,
 )
 from tabembedbench.evaluators.outlier import (
-    ECODEvaluator,
     DeepSVDDEvaluator,
     LocalOutlierFactorEvaluator,
     IsolationForestEvaluator,
@@ -12,7 +11,6 @@ from tabembedbench.evaluators.outlier import (
 __all__ = [
     "AbstractEvaluator",
     "AbstractHPOEvaluator",
-    "ECODEvaluator",
     "DeepSVDDEvaluator",
     "LocalOutlierFactorEvaluator",
     "IsolationForestEvaluator",
