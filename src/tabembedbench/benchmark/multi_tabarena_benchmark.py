@@ -140,7 +140,8 @@ class MultiTabArenaBenchmark(AbstractBenchmark):
             y_train += label_offset
             y_test += label_offset
             label_offset += max_label + 1
-            for embedding_model embedding_models:
+            for embedding_model in embedding_models:
+
 
 
 

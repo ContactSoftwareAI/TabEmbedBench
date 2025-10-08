@@ -1,223 +1,75 @@
-import plotly.express as px
-import plotly.graph_objects as go
 import polars as pl
+import scikit_posthocs as sp
+import matplotlib.pyplot as plt
 
 
-def create_boxplot(
-    result_df: pl.DataFrame, algorithm: str, score: str, embedding_model: str
+def create_critical_diagram(
+        result_df: pl.DataFrame,
+        algorithm: str,
+        metric: str = "auc_score",
+        output_file: str = None,
+        dpi: int = 300,
 ):
-    result_df = result_df.cast({score: pl.Float64, "neighbors": pl.Int64})
-
-    filtered_results = result_df.filter(
-        (pl.col("algorithm") == algorithm)
-        & (pl.col("embedding_model") == embedding_model)
-    ).select(["neighbors", score, "dataset", "samples", "features"])
-
-    stats_by_neighbors = (
-        filtered_results.group_by("neighbors")
-        .agg(
-            [
-                pl.col(score).mean().alias(f"avg_{score}"),
-            ]
+    filtered_algorithm_df = (
+        result_df.filter(
+            pl.col("algorithm") == algorithm,
+            pl.col("embedding_model") != "tabicl-classifier-v1.1-0506_with_tabvectorizer_preprocessed"
         )
-        .sort("neighbors")
-    )
-
-    fig_px = px.box(
-        data_frame=filtered_results,
-        x="neighbors",
-        y=f"{score}",
-        color="neighbors",
-        points="suspectedoutliers",
-        hover_data=["dataset", "samples", "features"],
-        title=f"Average {score} over datasets by Number of Neighbors, embedding model: {embedding_model}",
-    )
-
-    fig_px.update_traces(
-        hovertemplate="<b>Dataset:</b> %{customdata[0]}<br>"
-        + "<b>Samples:</b> %{customdata[1]}<br>"
-        + "<b>Features:</b> %{customdata[2]}<br>"
-        + f"<b>{score}:</b> %{{y}}<br>"
-        + "<extra></extra>"  # Removes the trace box
-    )
-
-    fig_px.add_scatter(
-        x=stats_by_neighbors["neighbors"],
-        y=stats_by_neighbors[f"avg_{score}"],
-        mode="lines+markers",
-        name="Average",
-        line=dict(color="black", width=2),
-        marker=dict(color="black", size=6),
-        hovertemplate="Neighbors: %{x}<br>Average: %{y:.3f}<extra></extra>",
-    )
-
-    return fig_px
-
-
-def create_quantile_lines_chart(
-    result_df: pl.DataFrame, algorithm: str, score: str, embedding_model: str
-):
-    result_df = result_df.cast({score: pl.Float64, "neighbors": pl.Int64})
-
-    filtered_results = result_df.filter(
-        (pl.col("algorithm") == algorithm)
-        & (pl.col("embedding_model") == embedding_model)
-    ).select(["neighbors", score, "dataset", "samples", "features"])
-
-    # Calculate statistics by neighbors
-    stats_by_neighbors = (
-        filtered_results.group_by("neighbors")
-        .agg(
-            [
-                pl.col(score).mean().alias(f"avg_{score}"),
-                pl.col(score).median().alias(f"median_{score}"),
-                pl.col(score).quantile(0.25).alias(f"q1_{score}"),
-                pl.col(score).quantile(0.75).alias(f"q3_{score}"),
-            ]
+        .select(
+            "dataset_name", "embedding_model", metric
         )
-        .sort("neighbors")
     )
 
-    # Create the base figure
-    fig_px = px.line(
-        title=f"Statistical Summary of {score} by Number of Neighbors, embedding model: {embedding_model}",
-        labels={"x": "Number of Neighbors", "y": score},
+    pivoted_dataframe = filtered_algorithm_df.pivot(
+        index="dataset_name",
+        on="embedding_model",
+        values=metric,
     )
 
-    # Add the four lines
-    fig_px.add_scatter(
-        x=stats_by_neighbors["neighbors"],
-        y=stats_by_neighbors[f"avg_{score}"],
-        mode="lines+markers",
-        name="Average",
-        line=dict(color="red", width=2),
-        marker=dict(color="red", size=6),
-        hovertemplate="Neighbors: %{x}<br>Average: %{y:.3f}<extra></extra>",
+    return pivoted_dataframe
+
+
+if __name__ == "__main__":
+    outlier_result = pl.read_parquet("/Users/lkl/PycharmProjects/TabEmbedBench/data/tabembedbench_20251007_115000/results_ADBench_Tabular_20251007_115000.parquet")
+
+    data_frame = create_critical_diagram(
+        result_df=outlier_result,
+        algorithm="DeepSVDD-dynamic",
+        metric="auc_score",
+        output_file="deepsvdd_critical_diagram.pdf",  # PDF for publication
+        dpi=300
+    )
+    print(data_frame.head())
+    print(data_frame.columns)
+    from aeon.visualisation import plot_critical_difference
+
+    columns = [estimator for estimator in data_frame.columns if estimator !=
+               "dataset_name"]
+
+    print(columns)
+
+    fig, ax = plot_critical_difference(
+        scores=data_frame.select(pl.exclude("dataset_name")).to_numpy(),
+        labels=columns,
+        width=20,
+        textspace=5,
+        reverse=False,
     )
 
-    fig_px.add_scatter(
-        x=stats_by_neighbors["neighbors"],
-        y=stats_by_neighbors[f"median_{score}"],
-        mode="lines+markers",
-        name="Median",
-        line=dict(color="blue", width=2),
-        marker=dict(color="blue", size=6),
-        hovertemplate="Neighbors: %{x}<br>Median: %{y:.3f}<extra></extra>",
-    )
+    fig.show()
 
-    fig_px.add_scatter(
-        x=stats_by_neighbors["neighbors"],
-        y=stats_by_neighbors[f"q1_{score}"],
-        mode="lines+markers",
-        name="Q1 (25th percentile)",
-        line=dict(color="green", width=2),
-        marker=dict(color="green", size=6),
-        hovertemplate="Neighbors: %{x}<br>Q1: %{y:.3f}<extra></extra>",
-    )
+    tabarena_result = pl.read_parquet("/Users/lkl/PycharmProjects/TabEmbedBench/data/tabembedbench_20251007_190514/results_TabArena_20251007_190514.parquet")
 
-    fig_px.add_scatter(
-        x=stats_by_neighbors["neighbors"],
-        y=stats_by_neighbors[f"q3_{score}"],
-        mode="lines+markers",
-        name="Q3 (75th percentile)",
-        line=dict(color="orange", width=2),
-        marker=dict(color="orange", size=6),
-        hovertemplate="Neighbors: %{x}<br>Q3: %{y:.3f}<extra></extra>",
-    )
-
-    # Update layout
-    fig_px.update_layout(
-        xaxis_title="Number of Neighbors",
-        yaxis_title=score,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    )
-
-    return fig_px
-
-
-def create_multi_model_quantile_lines_chart(
-    result_df: pl.DataFrame, algorithm: str, score: str
-):
-    """Create a chart with four lines (avg, median, Q1, Q3) for each embedding model."""
-    result_df = result_df.cast({score: pl.Float64, "neighbors": pl.Int64})
-
-    filtered_results = result_df.filter(pl.col("algorithm") == algorithm).select(
-        ["neighbors", score, "dataset", "samples", "features", "embedding_model"]
-    )
-
-    # Calculate statistics by neighbors and embedding model
-    stats_by_neighbors_and_model = (
-        filtered_results.group_by(["neighbors", "embedding_model"])
-        .agg(
-            [
-                pl.col(score).mean().alias(f"avg_{score}"),
-                pl.col(score).median().alias(f"median_{score}"),
-                pl.col(score).quantile(0.25).alias(f"q1_{score}"),
-                pl.col(score).quantile(0.75).alias(f"q3_{score}"),
-            ]
-        )
-        .sort(["embedding_model", "neighbors"])
-    )
-
-    # Create figure
-    fig = go.Figure()
-
-    # Define colors for different models
-    model_colors = px.colors.qualitative.Set1
-    models = stats_by_neighbors_and_model["embedding_model"].unique().to_list()
-
-    # Define line styles for different statistics
-    line_styles = {
-        "avg": dict(dash=None),  # solid line
-        "median": dict(dash="dash"),  # dashed line
-        "q1": dict(dash="dot"),  # dotted line
-        "q3": dict(dash="dashdot"),  # dash-dot line
+    mapping = {
+        "sphere-model-d8": "SphereBased Embedding (Dim 8)",
+        "sphere-model-d16": "SphereBased Embedding (Dim 16)",
+        "sphere-model-d32": "SphereBased Embedding (Dim 32)",
+        "sphere-model-d64": "SphereBased Embedding (Dim 64)",
+        "sphere-model-d128": "SphereBased Embedding (Dim 128)",
+        "sphere-model-d256": "SphereBased Embedding (Dim 256)",
+        "sphere-model-d512": "SphereBased Embedding (Dim 512)",
+        "TabVectorizerEmbedding": "TableVectorizer",
+        "tabicl-classifier-v1.1-0506_preprocessed": "TabICL"
     }
 
-    stat_names = {
-        "avg": "Average",
-        "median": "Median",
-        "q1": "Q1 (25th percentile)",
-        "q3": "Q3 (75th percentile)",
-    }
-
-    # Add traces grouped by statistic type
-    for stat_key, stat_name in stat_names.items():
-        for i, model in enumerate(models):
-            model_data = stats_by_neighbors_and_model.filter(
-                pl.col("embedding_model") == model
-            )
-            base_color = model_colors[i % len(model_colors)]
-
-            fig.add_trace(
-                go.Scatter(
-                    x=model_data["neighbors"].to_list(),
-                    y=model_data[f"{stat_key}_{score}"].to_list(),
-                    mode="lines+markers",
-                    name=f"{model}",
-                    legendgroup=stat_name,
-                    legendgrouptitle_text=stat_name,
-                    line=dict(color=base_color, width=2, **line_styles[stat_key]),
-                    marker=dict(color=base_color, size=4),
-                    hovertemplate=f"<b>Model:</b> {model}<br><b>Neighbors:</b> %{{x}}<br><b>{stat_name}:</b> %{{y:.3f}}<extra></extra>",
-                )
-            )
-
-    # Update layout
-    fig.update_layout(
-        title=f"Statistical Summary of {score} by Number of Neighbors (All Models)",
-        xaxis_title="Number of Neighbors",
-        yaxis_title=score,
-        legend=dict(
-            orientation="v",
-            yanchor="top",
-            y=1,
-            xanchor="left",
-            x=1.02,
-            groupclick="togglegroup",  # This enables group toggling
-        ),
-        margin=dict(r=200),  # Add right margin for legend
-        hovermode="x unified",
-    )
-
-    return fig
+    print(tabarena_result.columns)
