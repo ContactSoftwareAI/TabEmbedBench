@@ -326,6 +326,22 @@ def generate_summary_statistics(df: pl.DataFrame):
                   f"auc_score={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f}, "
                   f"Experimente={row['num_experiments']}")
 
+            # Performance nach Embedding-Modell und Algorithmus
+            print(f"\n--- Performance nach Embedding-Modell und Algorithmus ---")
+            model_algorithm_performance = (valid_auc_score
+                                           .group_by(["embedding_model", "algorithm"])
+                                           .agg([
+                pl.col("auc_score").mean().alias("avg_auc_score"),
+                pl.col("auc_score").std().alias("std_auc_score"),
+                pl.col("auc_score").count().alias("num_experiments")
+            ])
+                                           .sort(["embedding_model", "algorithm"]))
+
+            for row in model_algorithm_performance.iter_rows(named=True):
+                print(f"{row['embedding_model']} ({row['algorithm']}): "
+                      f"auc_score={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f}, "
+                      f"Experimente={row['num_experiments']}")
+
     # Berechnungszeit Statistiken (ausgewogene Daten)
     valid_time = df.filter(
         pl.col("time_to_compute_train_embedding").is_not_null() &
