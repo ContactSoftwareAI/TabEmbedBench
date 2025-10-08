@@ -1,14 +1,8 @@
 import polars as pl
 import plotly.express as px
-import matplotlib.pyplot as plt
-import seaborn as sns
-import plotly.graph_objects as go
 from pathlib import Path
 import numpy as np
-
-# Seaborn-Style einstellen
-plt.style.use('default')
-sns.set_palette("husl")
+import plotly.io as pio  # Für PNG Export hinzufügen
 
 
 # Pfad zur Parquet-Datei
@@ -40,10 +34,10 @@ def rename_embedding_models(df: pl.DataFrame) -> pl.DataFrame:
 def add_outlier_ratio_category(df: pl.DataFrame) -> pl.DataFrame:
     """Fügt eine Kategorie für Outlier Ratio hinzu."""
     return df.with_columns([
-        pl.when(pl.col("outlier_ratio") < 0.01)
-        .then(pl.lit("< 0.01"))
+        pl.when(pl.col("outlier_ratio") < 0.05)
+        .then(pl.lit("< 0.05"))
         .when(pl.col("outlier_ratio") < 0.1)
-        .then(pl.lit("0.01 - 0.1"))
+        .then(pl.lit("0.05 - 0.1"))
         .when(pl.col("outlier_ratio") < 0.25)
         .then(pl.lit("0.1 - 0.25"))
         .otherwise(pl.lit(">= 0.25"))
@@ -416,27 +410,27 @@ def main():
     fig10 = create_dataset_difficulty_analysis(balanced_data, "auc_score")
     fig10.show()
 
-    # Speichere die Plots als HTML (optional)
+    # Speichere die Plots als png (optional)
     output_dir = Path("benchmark_visualizations")
     output_dir.mkdir(exist_ok=True)
 
     plots = [
-        (fig1, "score_distribution_boxplot.html"),
-        (fig5, "algorithm_comparison.html"),
-        (fig7, "neighbors_effect_analysis.html"),
-        (fig10, "dataset_difficulty_analysis.html")
+        (fig1, "score_distribution_boxplot.png"),
+        (fig5, "algorithm_comparison.png"),
+        (fig7, "neighbors_effect_analysis.png"),
+        (fig10, "dataset_difficulty_analysis.png")
     ]
 
     print(f"\nSpeichere Plots als PNG in {output_dir}...")
     for fig, filename in plots:
         try:
-            fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight',
-                        facecolor='white', edgecolor='none')
-            plt.close(fig)  # Schließe Figur um Speicher zu sparen
+            # Für Plotly-Figures verwenden wir pio.write_image()
+            pio.write_image(fig, output_dir / filename,
+                          width=1200, height=800, scale=2,  # scale=2 für hohe Qualität
+                          format='png')
             print(f"  ✓ {filename}")
         except Exception as e:
             print(f"  ✗ Fehler beim Speichern von {filename}: {e}")
-
 
 print("Visualisierungen erfolgreich erstellt!")
 
