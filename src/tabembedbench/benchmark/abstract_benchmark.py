@@ -233,7 +233,9 @@ class AbstractBenchmark(ABC):
             return [prepared_data]
 
     def _process_embedding_generation(
-        self, embedding_model: AbstractEmbeddingGenerator, prepared_data_item: dict
+        self,
+        embedding_model: AbstractEmbeddingGenerator,
+        prepared_data_item: dict
     ) -> tuple | None:
         """Generate embeddings for a prepared data item.
 
@@ -358,6 +360,7 @@ class AbstractBenchmark(ABC):
                 embedding_model,
                 embed_dim,
             )
+            self._cleanup_gpu_cache()
 
         # Save intermediate results
         self._save_results()
