@@ -35,15 +35,6 @@ def get_embedding_models(debug=False):
 
     tabicl_with_preproccessing.name = "tabicl-classifier-v1.1-0506_preprocessed"
 
-    tabicl_with_tabvectorizer_preprocessing = TabICLEmbedding(
-        preprocess_tabicl_data=True,
-        tabvectorizer_preprocess=True
-    )
-
-    tabicl_with_tabvectorizer_preprocessing.name = (
-        "tabicl-classifier-v1.1-0506_with_tabvectorizer_preprocessed"
-    )
-
     tablevector = TabVectorizerEmbedding()
 
     tabpfn_embedder = TabPFNEmbedding()
@@ -51,12 +42,11 @@ def get_embedding_models(debug=False):
     embedding_models.extend([
         tablevector,
         tabicl_with_preproccessing,
-        tabicl_with_tabvectorizer_preprocessing,
         tabpfn_embedder
     ])
 
     if debug:
-        embedding_models = [tablevector, tabicl_with_tabvectorizer_preprocessing]
+        embedding_models = [tablevector, tabicl_with_preproccessing]
         sphere_model = SphereBasedEmbedding(embed_dim=8)
         sphere_model.name = "sphere-model-d8-debug"
 

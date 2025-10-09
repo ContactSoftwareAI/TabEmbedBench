@@ -4,15 +4,15 @@ from tabembedbench.benchmark.run_benchmark import run_benchmark
 from tabembedbench.embedding_models.spherebased_embedding import (
     SphereBasedEmbedding,
 )
-from tabembedbench.embedding_models import TabICLEmbedding
+from tabembedbench.embedding_models.tabicl_embedding import get_tabicl_embedding_model
 from tabembedbench.embedding_models.tabvectorizer_embedding import TabVectorizerEmbedding
 from tabembedbench.utils.torch_utils import get_device
 
 
 device = get_device()
 
-tabicl_with_preproccessing = TabICLEmbedding(
-    preprocess_data=True
+tabicl_with_preproccessing = get_tabicl_embedding_model(
+    model_path="auto", preprocess_data=True
 )
 
 tabicl_with_preproccessing.name = "tabicl-classifier-v1.1-0506_preprocessed"
@@ -34,8 +34,10 @@ result_df = run_benchmark(
     save_embeddings=False,
     exclude_adbench_datasets=["3_backdoor.npz"],
     exclude_adbench_image_datasets=True,
-    upper_bound_dataset_size=200,
+    adbench_dataset_path=r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\adbench_tabular_datasets",
+    upper_bound_dataset_size=800,
     upper_bound_num_feautres=500,
+    data_dir=r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data",
     run_outlier=True,
     run_task_specific=True,
     save_logs=True,
