@@ -8,3 +8,5 @@ data/
 /.coverage_reports/
 /.coverage/
 .aiignore
+
+*.env
