@@ -22,6 +22,8 @@ dependencies = [
     "ray>=2.49.2",
     "optuna>=4.5.0",
     "pyod>=2.0.5",
+    "seaborn>=0.13.2",
+    "python-dotenv>=1.1.1",
 ]
 
 [build-system]
