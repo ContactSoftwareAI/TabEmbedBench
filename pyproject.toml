@@ -24,6 +24,7 @@ dependencies = [
     "pyod>=2.0.5",
     "seaborn>=0.13.2",
     "python-dotenv>=1.1.1",
+    "aeon>=1.3.0",
 ]
 
 [build-system]

@@ -178,6 +178,42 @@ def clean_results(df: pl.DataFrame):
         pl.col("dataset_name").is_in(valid_datasets)
     )
 
+def create_descriptive_dataframe(
+        df: pl.DataFrame,
+        metric_col: str,
+):
+    """
+    Computes a descriptive statistics dataframe grouped by specific features.
+
+    This function takes a dataframe and calculates descriptive statistics for the provided
+    metric column, grouped by 'embedding_model' and 'algorithm'. Additionally, it computes
+    the average time to compute training embeddings and provides the number of unique datasets.
+
+    Args:
+        df (pl.DataFrame): Input dataframe containing the required columns for computation.
+        metric_col (str): The column in the dataframe whose descriptive statistics are
+            to be calculated.
+
+    Returns:
+        pl.DataFrame: A dataframe containing grouped descriptive statistics for the specified
+            metric column and additional computed statistics.
+    """
+    descriptive_statistic_df = (
+        df.group_by(["embedding_model", "algorithm"])
+        .agg(
+            pl.col(metric_col).mean().alias(f"average_{metric_col}"),
+            pl.col(metric_col).std().alias(f"std_{metric_col}"),
+            pl.col(metric_col).min().alias(f"min_{metric_col}"),
+            pl.col(metric_col).max().alias(f"max_{metric_col}"),
+            pl.col(metric_col).median().alias(f"median_{metric_col}"),
+            pl.col("time_to_compute_train_embedding").mean().alias(
+                f"average_embedding_compute_time_training"),
+            pl.col("dataset_name").n_unique().alias("num_datasets"),
+        )
+    )
+
+    return descriptive_statistic_df
+
 def create_detailed_boxplots(
         df: pl.DataFrame,
         metric_col: str,
@@ -404,11 +440,50 @@ def create_neighbors_effect_analysis(
 
     return lineplot
 
+def create_critical_difference_plot(
+        df: pl.DataFrame,
+        metric_col: str,
+        metric_name: str,
+        algorithm: str | None = None,
+        title: str | None = None,
+):
+    if algorithm:
+        filtered_df = df.filter(pl.col("algorithm") == algorithm)
+        plot_title = f"{title} ({metric_name}, {algorithm})"
+    else:
+        filtered_df = (
+            df.group_by(
+                ["dataset_name", "embedding_model"]
+            ).agg(
+                pl.col(metric_col).mean().alias("mean_score")
+            )
+            .select(
+                ["dataset_name", "embedding_model", "mean_score"]
+            )
+        )
+
+        metric_col = "mean_score"
+
+    pivoted_df = (
+        filtered_df.pivot(
+            on="embedding_model",
+            index="dataset_name",
+            values=metric_col
+        )
+    )
+    labels = pivoted_df.select(pl.exclude("dataset_name")).columns
+    scores = pivoted_df.select(pl.exclude("dataset_name")).to_numpy()
+
+
+
+
+
 def create_plots(
         df: pl.DataFrame,
         data_path: str,
         mapping: dict
 ):
+    data_path = Path(data_path)
     models_to_keep = [item for item in mapping.values()]
 
     df = rename_models(df, mapping)
@@ -439,6 +514,13 @@ def create_plots(
     # Process binary classification tasks
     for algorithm in binary_algorithms:
         logger.info(f"Processing binary classification with {algorithm}")
+
+        descriptive_df = create_descriptive_dataframe(binary, "auc_score")
+        print(descriptive_df)
+
+        descriptive_df.write_csv(
+            Path(data_path / "binary_auc_score_descriptive.csv")
+        )
 
         # Create boxplot
         ax_box = create_detailed_boxplots(
@@ -484,6 +566,13 @@ def create_plots(
     for algorithm in multiclass_algorithms:
         logger.info(f"Processing multiclass classification with "
                     f"{algorithm}_auc_score")
+        descriptive_df = create_descriptive_dataframe(multiclass,
+                                                      "auc_score")
+        print(descriptive_df)
+
+        descriptive_df.write_csv(
+            Path(data_path / "multiclass_auc_score_descriptive.csv")
+        )
 
         # Create boxplot
         ax_box = create_detailed_boxplots(
@@ -527,6 +616,13 @@ def create_plots(
         except ValueError as e:
             logger.warning(f"Skipping neighbors analysis for multiclass"
                            f" {algorithm}: {e}")
+
+        descriptive_df = create_descriptive_dataframe(multiclass,
+                                                      "log_loss_score")
+        print(descriptive_df)
+
+        descriptive_df.write_csv(Path(data_path /
+                                      "multiclass_log_loss_descriptive.csv"))
 
         ax_box = create_detailed_boxplots(
             multiclass,
@@ -572,6 +668,12 @@ def create_plots(
     # Process regression tasks
     for algorithm in regression_algorithms:
         logger.info(f"Processing regression with {algorithm}")
+
+        descriptive_df = create_descriptive_dataframe(regression, "mape_score")
+        print(descriptive_df)
+
+        descriptive_df.write_csv(Path(data_path /
+                                 "regression_descriptive.csv"))
 
         # Create boxplot (minimizing RMSE)
         ax_box = create_detailed_boxplots(
@@ -641,7 +743,12 @@ def main():
 
     tabarena_result_parquet_path = os.getenv("TABARENA_RESULT_PATH")
 
-    include_sphere = os.getenv("INCLUDE_SPHEREBASED_EMBEDDINGS", False)
+    include_sphere = os.getenv("INCLUDE_SPHEREBASED_EMBEDDINGS", "False").lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
 
     df = pl.read_parquet(
         tabarena_result_parquet_path
@@ -655,12 +762,17 @@ def main():
 
     data_path = "data/tabembedbench_20251007_190514/figures"
 
+    print(include_sphere)
     if include_sphere:
         for n in range(3, 10):
              mapping[f"sphere-model-d{2**n}"] = f"Sphere-Based (Dim {2**n})"
         data_path = "data/tabembedbench_20251007_190514/figures/sphere_included"
 
+    print(include_sphere)
+
     create_plots(df, data_path, mapping)
+
+    print(data_path)
 
 if __name__ == "__main__":
     main()
