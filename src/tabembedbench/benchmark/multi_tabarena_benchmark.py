@@ -55,7 +55,7 @@ class MultiTabArenaBenchmark(AbstractBenchmark):
             evaluators: list[AbstractEvaluator],
             **kwargs,
     ) -> pl.DataFrame:
-        dataset_batches = self._load_datasets(**kwargs)
+        dataset_batches = self._get_batches(**kwargs)
 
         for dataset_batch in dataset_batches:
             self._process_batch(
@@ -68,6 +68,110 @@ class MultiTabArenaBenchmark(AbstractBenchmark):
         self.logger.info(f"{self._get_benchmark_name()} benchmark completed.")
         return self.result_df
 
+    def _get_batches(self, **kwargs) -> list[dict]:
+        """
+        Retrieves batches of datasets filtered by certain dataset quality
+        constraints.
+
+        Args:
+            **kwargs: Arbitrary keyword arguments. Reserved for potential future extensions.
+
+        Returns:
+            list: A list of batches, where each batch is a list
+            of task IDs representing datasets to be processed with OpenML.
+
+        Raises:
+            openml.exceptions.OpenMLServerException: If there are issues retrieving data from the OpenML server.
+            openml.exceptions.OpenMLCacheException: If there are issues with cached data retrieval.
+        """
+        self.benchmark_suite = openml.study.get_suite(self.tabarena_version)
+        self.task_ids = self.benchmark_suite.tasks
+
+        classification_datasets = []
+
+        for task_id in self.task_ids:
+            task = openml.tasks.get_task(task_id)
+            if task.task_type == "Supervised Classification":
+                dataset = task.get_dataset()
+                if (
+                    dataset.qualities["NumberOfInstances"]
+                    > self.upper_bound_num_samples
+                ):
+                    continue
+                if (
+                    dataset.qualities["NumberOfFeatures"]
+                    > self.upper_bound_num_features
+                ):
+                    continue
+
+                classification_datasets.append(task_id)
+
+        batches = self._partition_datasets_into_batches(classification_datasets)
+
+        return batches
+
+    def _partition_datasets_into_batches(self, classification_ids):
+        """
+        Partitions a list of classification IDs into random batches based on the maximum
+        number of datasets allowed. The sizes of the batches are randomly determined within
+        the constraints of the maximum batch size and the number of remaining elements.
+
+        Args:
+            classification_ids (list[int]): A list of classification IDs to be grouped into
+                batches.
+
+        Returns:
+            list[numpy.ndarray]: A list of numpy arrays, where each array represents a batch
+                of classification IDs.
+
+        Raises:
+            ValueError: If the input list of classification IDs is empty or invalid.
+        """
+        ids_array = np.array(classification_ids)
+        self.rng.shuffle(ids_array)
+
+        batches = []
+        start = 0
+        while start < len(ids_array):
+            remaining = len(ids_array) - start
+            if remaining > 1:
+                size = self.rng.integers(
+                    2, min(self.max_number_of_dataset, remaining) + 1
+                )
+                batches.append(ids_array[start : start + size])
+            else:
+                size = 1
+                batches.append(ids_array[start : start + 1])
+            start += size
+
+        return batches
+
+    def _get_batches_metadata(
+        self, task_ids: np.ndarray, classification_type: str
+    ) -> dict:
+        """Get metadata for a batch of tasks.
+
+        Args:
+            task_ids: Array of task IDs in the batch.
+            classification_type: Type of classification ('binary' or 'multiclass').
+
+        Returns:
+            Dictionary containing batch metadata.
+        """
+        batch_metadata = []
+
+        for task_id in task_ids:
+            task = openml.tasks.get_task(task_id)
+            dataset = task.get_dataset()
+            batch_metadata.append(
+                {
+                    "task_id": task_id,
+                    "dataset_id": dataset.qualities["ID"],
+                }
+            )
+
+        return batch_metadata
+
     def _process_batch(
             self,
             dataset_batch,
@@ -75,63 +179,51 @@ class MultiTabArenaBenchmark(AbstractBenchmark):
             evaluators: list[AbstractEvaluator],
             **kwargs
     ):
-        for batch in dataset_batch:
-            prepared_batch = self._prepare_batch(batch)
+        prepared_batch = self._prepare_batch(dataset_batch)
 
-            for embedding_model in embedding_models:
-                for prepared_dataset in prepared_batch:
-                    X_train_emb = []
-                    X_test_emb = []
-                    y_train_emb = []
-                    y_test_emb = []
-                    try:
-                        embeddings_train, time_train_embeddings, embeddings_test, time_test_embeddings, \
-                            = embedding_model.generate_embeddings(
-                            X_train=prepared_dataset.X_train,
-                            X_test=prepared_dataset.X_test,
-                        )
-                    except Exception as e:
-                        print(e)
+        for embedding_model in embedding_models:
+            (
+                train_embeddings,
+                time_train_embeddings,
+                embeddings_test,
+                time_test_embeddings,
+            ) = self._generate_batch_embeddings(embedding_model, prepared_batch)
 
-                    X_train_emb.append(embeddings_train)
-                    X_test_emb.append(embeddings_test)
-                    y_train_emb.append(prepared_dataset.y_train)
-                    y_test_emb.append(prepared_dataset.y_test)
+            (y_train, y_pred) = self._get_batch_targets(prepared_batch)
 
-            #TODO: concat X_train_emb, and X_test_emb to get final input for
-            # evaluators, same for y_train.
+            for evaluator in evaluators:
+                prediction_train, _ = evaluator.get_prediction(
+                    train_embeddings,
+                    y_train,
+                    train=True,
+                )
 
-                result_dict = {}
-
-                for evaluator in evaluators:
-                    prediction_train, _ = evaluator.get_prediction(
-                        X_train_emb,
-                        y_train_emb,
-                        train=True,
-                    )
-
-                    prediction_test, _ = evaluator.get_prediction(
-                        X_test_emb,
-                        train=False,
-                    )
-
-                    n_classes = prediction_test.shape[1]
-                    if n_classes == 2:
-                        auc_score = roc_auc_score(y_test_emb, prediction_test[:,
-                        1])
-                        result_dict["task"] = ["classification"]
-                        result_dict["classification_type"] = ["binary"]
-                    else:
-                        auc_score = roc_auc_score(
-                            y_test_emb, prediction_test, multi_class="ovr"
-                        )
-                        log_loss_score = log_loss(y_test_emb, prediction_test)
-                        result_dict["task"] = ["classification"]
-                        result_dict["classification_type"] = ["multiclass"]
-                        result_dict["log_loss_score"] = [log_loss_score]
-                    result_dict["auc_score"] = [auc_score]
+                prediction_test, _ = evaluator.get_prediction(
+                    embeddings_test,
+                    train=False,
+                )
 
     def _prepare_batch(self, batch):
+        """
+        Prepares a batch of datasets for training and testing. The function processes each
+        task ID in the provided batch, retrieves the corresponding dataset and task
+        details, and performs necessary preprocessing steps. Preprocessing includes
+        splitting the dataset into training and testing subsets, encoding categorical
+        and numerical features, as well as label encoding. Labels are offset to ensure
+        there is no overlap across multiple datasets in the batch.
+
+        Args:
+            batch (list[int]): List of task IDs representing datasets to be processed.
+
+        Returns:
+            list[dict]: A list of dictionaries where each dictionary contains the
+                preprocessed training and testing data for a dataset. Each dictionary
+                includes the following keys:
+                - "X_train": Preprocessed training features.
+                - "y_train": Encoded training labels.
+                - "X_test": Preprocessed testing features.
+                - "y_test": Encoded testing labels.
+        """
         label_offset = 0
 
         prepared_batch = []
@@ -185,11 +277,85 @@ class MultiTabArenaBenchmark(AbstractBenchmark):
 
         return prepared_batch
 
+    def _generate_batch_embeddings(self, embedding_model, prepared_batch):
+        """
+        Generates embeddings for batches of data and calculates the total processing time
+        for train and test datasets. This method processes each dataset in the prepared
+        batch using the provided embedding model to create embeddings. It also handles
+        exceptions during embedding generation and concatenates the results for further use.
+
+        Args:
+            embedding_model: The embedding model with a method `generate_embeddings` that
+                generates embeddings for the given training and testing datasets.
+            prepared_batch: A list of preprocessed datasets, where each dataset is a dictionary
+                containing "X_train" (training data) and "X_test" (testing data).
+
+        Returns:
+            A tuple containing:
+                embeddings_train: Concatenated embeddings matrix for the training datasets.
+                time_train_embeddings: Total time taken to generate embeddings for the training sets.
+                embeddings_test: Concatenated embeddings matrix for the testing datasets.
+                time_test_embeddings: Total time taken to generate embeddings for the testing sets.
+        """
+        batch_embeddings_train = []
+        batch_embeddings_test = []
+        batch_time_train_embeddings = []
+        batch_time_test_embeddings = []
+        for prepared_dataset in prepared_batch:
+            try:
+                (ds_embeddings_train, time_train_embeddings,
+                 ds_embeddings_test, time_test_embeddings,) \
+                    = embedding_model.generate_embeddings(
+                    X_train=prepared_dataset["X_train"],
+                    X_test=prepared_dataset["X_test"],
+                )
+
+                batch_embeddings_train.append(ds_embeddings_train)
+                batch_embeddings_test.append(ds_embeddings_test)
+                batch_time_train_embeddings.append(time_train_embeddings)
+                batch_time_test_embeddings.append(time_test_embeddings)
+            except Exception as e:
+                print(f"Error in embedding generation: {e}")
+
+        embeddings_train = np.concatenate(batch_embeddings_train)
+        embeddings_test = np.concatenate(batch_embeddings_test)
+        time_train_embeddings = np.sum(batch_time_train_embeddings)
+        time_test_embeddings = np.sum(batch_time_test_embeddings)
+
+        return embeddings_train, time_train_embeddings, embeddings_test, time_test_embeddings
+
+    def _get_batch_targets(self, prepared_batch):
+        y_train = []
+        y_test = []
+
+        for prepared_dataset in prepared_batch:
+            y_train.append(prepared_dataset["y_train"])
+            y_test.append(prepared_dataset["y_test"])
+
+        return np.concatenate(y_train), np.concatenate(y_test)
+
     def _load_datasets(self, **kwargs):
         """Load TabArena tasks and create batches of datasets.
 
         Returns:
             List of dictionaries containing batch information.
+        """
+        pass
+
+    def _get_batches(self, **kwargs) -> list[dict]:
+        """
+        Retrieves batches of datasets based on their classification type (binary or multiclass),
+        filtered by certain dataset quality constraints, and provides metadata for each batch.
+
+        Args:
+            **kwargs: Arbitrary keyword arguments. Reserved for potential future extensions.
+
+        Returns:
+            list: A list of dataset batch metadata for both binary and multiclass classification tasks.
+
+        Raises:
+            openml.exceptions.OpenMLServerException: If there are issues retrieving data from the OpenML server.
+            openml.exceptions.OpenMLCacheException: If there are issues with cached data retrieval.
         """
         self.benchmark_suite = openml.study.get_suite(self.tabarena_version)
         self.task_ids = self.benchmark_suite.tasks
@@ -212,11 +378,9 @@ class MultiTabArenaBenchmark(AbstractBenchmark):
                     multiclass_datasets.append(task_id)
                 else:
                     binary_classification_datasets.append(task_id)
-            else:
-                continue
 
-        binary_batches = self._get_dataset_choices(binary_classification_datasets)
-        multiclass_batches = self._get_dataset_choices(multiclass_datasets)
+        binary_batches = self._partition_datasets_into_batches(binary_classification_datasets)
+        multiclass_batches = self._partition_datasets_into_batches(multiclass_datasets)
 
         # Create dataset info for each batch
         all_batches = []
@@ -231,7 +395,23 @@ class MultiTabArenaBenchmark(AbstractBenchmark):
 
         return all_batches
 
-    def _get_dataset_choices(self, classification_ids):
+    def _partition_datasets_into_batches(self, classification_ids):
+        """
+        Partitions a list of classification IDs into random batches based on the maximum
+        number of datasets allowed. The sizes of the batches are randomly determined within
+        the constraints of the maximum batch size and the number of remaining elements.
+
+        Args:
+            classification_ids (list[int]): A list of classification IDs to be grouped into
+                batches.
+
+        Returns:
+            list[numpy.ndarray]: A list of numpy arrays, where each array represents a batch
+                of classification IDs.
+
+        Raises:
+            ValueError: If the input list of classification IDs is empty or invalid.
+        """
         ids_array = np.array(classification_ids)
         self.rng.shuffle(ids_array)
 
@@ -261,11 +441,6 @@ class MultiTabArenaBenchmark(AbstractBenchmark):
         Returns:
             Dictionary containing batch metadata.
         """
-        tasks = []
-        datasets = []
-        total_samples = 0
-        total_features = 0
-
         batch_metadata = []
         
         for task_id in task_ids:
@@ -273,21 +448,10 @@ class MultiTabArenaBenchmark(AbstractBenchmark):
             dataset = task.get_dataset()
             batch_metadata.append({
                 "task_id": task_id,
-                "task": task,
                 "dataset_id": dataset.qualities["ID"],
             })
         
-        return {
-            "task_ids": task_ids.tolist(),
-            "tasks": tasks,
-            "datasets": datasets,
-            "classification_type": classification_type,
-            "num_datasets": len(task_ids),
-            "total_samples": total_samples,
-            "total_features": total_features,
-            "folds": 1,
-            "repeats": 1,
-        }
+        return batch_metadata
 
     def _should_skip_dataset(self, dataset_info, **kwargs) -> tuple[bool, str | None]:
         """Check if a batch should be skipped.
