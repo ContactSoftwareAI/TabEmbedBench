@@ -1,4 +1,5 @@
 import time
+import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -29,6 +30,7 @@ class AbstractEmbeddingGenerator(ABC):
         """
         self._name = name
         self._is_fitted = False
+        self._logger = logging.getLogger(__name__)
 
     @property
     def is_computing_embeddings(self) -> bool:
