@@ -3,6 +3,7 @@ import logging
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Tuple
 
 import polars as pl
 import torch
@@ -66,8 +67,9 @@ def run_benchmark(
     run_task_specific: bool = True,
     data_dir: str | Path = "data",
     save_logs: bool = True,
+    run_tabpfn_subset: bool = False,
     logging_level=logging.INFO,
-) -> pl.DataFrame:
+) -> Tuple[pl.DataFrame, pl.DataFrame, Path]:
     """Run comprehensive benchmark evaluation for embedding models.
 
     This function orchestrates the complete benchmarking process, running both
@@ -176,6 +178,7 @@ def run_benchmark(
                     upper_bound_num_features=upper_bound_num_features,
                     timestamp=timestamp,
                     result_dir=result_dir,
+                    run_tabpfn_subset=run_tabpfn_subset,
                 )
         except Exception as e:
             main_logger.exception(f"Error occurred during task-specific benchmark: {e}")
@@ -185,9 +188,7 @@ def run_benchmark(
         result_tabarena_df = pl.DataFrame()
         main_logger.info("Skipping task-specific benchmark.")
 
-    result_df = pl.concat([result_outlier_df, result_tabarena_df], how="diagonal")
-
-    return result_df
+    return result_outlier_df, result_tabarena_df, result_dir
 
 
 def validate_embedding_models(embedding_models):

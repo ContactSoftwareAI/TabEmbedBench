@@ -28,7 +28,7 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
                 Currently not implemented. Defaults to False.
             **kwargs: Additional keyword arguments to pass to TableVectorizer.
         """
-        super().__init__(name="TabVectorizerEmbedding")
+        super().__init__(name="TableVectorizerEmbedding")
         self.optimize = optimize
 
         self.tablevectorizer = TableVectorizer(**kwargs)

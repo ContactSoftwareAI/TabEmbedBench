@@ -102,6 +102,7 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         optuna_sampler: optuna.samplers.BaseSampler | None = None,
         optuna_pruner: optuna.pruners.BasePruner | None = None,
         verbose: bool = False,
+        direction: str = "maximize",
     ):
         """Initialize the AbstractHPOEvaluator.
 
@@ -123,6 +124,7 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         self.cv_folds = cv_folds
         self.random_state = random_state
         self.verbose = verbose
+        self.direction = direction
 
         # Set default sampler and pruner if not provided
         self.sampler = optuna_sampler or optuna.samplers.TPESampler(seed=random_state)
@@ -171,8 +173,9 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         model = self.create_model(trial)
 
         scoring = self.get_scoring_metric()
+
         scores = cross_val_score(
-            model, embeddings, y, cv=self.cv_folds, scoring=scoring, n_jobs=-1
+            model, embeddings, y, cv=self.cv_folds, scoring=scoring, n_jobs=1,
         )
 
         # Return mean score
@@ -200,7 +203,7 @@ class AbstractHPOEvaluator(AbstractEvaluator):
 
         self.study = optuna.create_study(
             study_name=study_name,
-            direction="maximize",
+            direction=self.direction,
             sampler=self.sampler,
             pruner=self.pruner,
         )

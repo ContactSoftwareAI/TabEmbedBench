@@ -31,7 +31,7 @@ class SphereBasedEmbedding(TransformerMixin, AbstractEmbeddingGenerator):
             categorical_indices (list[int] | None, optional): Indices of categorical
                 columns. If None, will be inferred automatically. Defaults to None.
         """
-        super().__init__(name=f"SphereBasedEmbedding_d{embed_dim}")
+        super().__init__(name=f"Sphere-Based (Dim {embed_dim})")
         self.categorical_indices = categorical_indices
         self.embed_dim = embed_dim
         self.column_properties = []

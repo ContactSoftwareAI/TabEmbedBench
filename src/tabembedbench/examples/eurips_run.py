@@ -1,5 +1,6 @@
 import logging
-
+from pathlib import Path
+import seaborn as sns
 import click
 
 from tabembedbench.benchmark.run_benchmark import run_benchmark
@@ -20,6 +21,7 @@ from tabembedbench.evaluators.mlp_evaluator import (
     MLPRegressorEvaluator
 )
 from tabembedbench.evaluators.regression import KNNRegressorEvaluator
+from tabembedbench.examples.eda_utils import create_tabarena_plots, create_outlier_plots
 
 logger = logging.getLogger("EuRIPS_Run_Benchmark")
 
@@ -33,9 +35,10 @@ def get_embedding_models(debug=False):
 
     tabicl_with_preproccessing = TabICLEmbedding(preprocess_tabicl_data=True)
 
-    tabicl_with_preproccessing.name = "tabicl-classifier-v1.1-0506_preprocessed"
+    tabicl_with_preproccessing.name = "TabICL"
 
     tablevector = TabVectorizerEmbedding()
+    tablevector.name = "TableVectorizer"
 
     tabpfn_embedder = TabPFNEmbedding()
 
@@ -144,7 +147,7 @@ def run_main(debug, max_samples, max_features, run_outlier,
     logger.info(f"Using {len(embedding_models)} embedding model(s)")
     logger.info(f"Using {len(evaluators)} evaluator(s)")
 
-    run_benchmark(
+    outlier_result_df, tabarena_result_df, result_dir = run_benchmark(
         embedding_models=embedding_models,
         evaluator_algorithms=evaluators,
         adbench_dataset_path=adbench_dataset_path,
@@ -155,6 +158,35 @@ def run_main(debug, max_samples, max_features, run_outlier,
         run_task_specific=run_task_specific,
         logging_level=logging.DEBUG,
     )
+
+    models_to_keep = outlier_result_df.get_column("embedding_model").unique().to_list()
+    colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
+    color_mapping = {
+        model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+        for model, (r, g, b) in zip(models_to_keep, colors)
+    }
+
+    result_sphere_dir = Path(result_dir / "sphere_included")
+    result_sphere_dir.mkdir(exist_ok=True)
+
+    create_tabarena_plots(tabarena_result_df, data_path=result_sphere_dir,
+                          color_mapping=color_mapping)
+    create_outlier_plots(outlier_result_df, data_path=result_sphere_dir, color_mapping=color_mapping)
+
+    models_to_keep = ["TabICL", "TabPFN", "TableVectorizer"]
+    color_mapping_small = {
+        key: item for key, item in color_mapping.items() if key in models_to_keep
+    }
+    create_tabarena_plots(tabarena_result_df,
+                          data_path=result_dir,
+                          color_mapping=color_mapping_small,
+                          models_to_keep=models_to_keep)
+    create_outlier_plots(outlier_result_df,
+                         data_path=result_dir,
+                         color_mapping=color_mapping_small,
+                         models_to_keep=models_to_keep)
+
+
 
 @click.command()
 @click.option('--debug', is_flag=True, help='Run in debug mode ')

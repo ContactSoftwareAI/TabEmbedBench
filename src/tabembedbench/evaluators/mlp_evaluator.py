@@ -173,6 +173,9 @@ class PyTorchMLPWrapper(BaseEstimator):
                 if patience_counter >= self.early_stopping_patience:
                     break
 
+        if self.device.type == 'cuda':
+            torch.cuda.empty_cache()
+
         self.is_fitted_ = True
         return self
 
@@ -231,6 +234,9 @@ class PyTorchMLPWrapper(BaseEstimator):
         with torch.no_grad():
             probabilities = self.model(X_tensor).cpu().numpy()
 
+        if self.device.type == 'cuda':
+            torch.cuda.empty_cache()
+
         return probabilities
 
 
@@ -248,7 +254,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
 
     def __init__(
         self,
-        n_trials: int = 50,
+        n_trials: int = 10,
         cv_folds: int = 5,
         random_state: int = 42,
         device: Optional[str] = None,
@@ -369,9 +375,9 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
         """Return the scoring metric for classification.
 
         Returns:
-            str: The scoring metric name ('accuracy').
+            str: The scoring metric name ('roc_auc').
         """
-        return "accuracy"
+        return "roc_auc"
 
     def _get_model_predictions(self, model, embeddings: np.ndarray):
         """Get probability predictions from the model.
@@ -435,7 +441,7 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
 
     def __init__(
         self,
-        n_trials: int = 50,
+        n_trials: int = 10,
         cv_folds: int = 5,
         random_state: int = 42,
         device: Optional[str] = None,
@@ -458,6 +464,7 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
             cv_folds=cv_folds,
             random_state=random_state,
             verbose=verbose,
+            direction="minimize",
         )
         self.device = device if device is not None else get_device()
         self.input_dim = None
@@ -555,9 +562,9 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
         """Return the scoring metric for regression.
 
         Returns:
-            str: The scoring metric name ('neg_mean_squared_error').
+            str: The scoring metric name ('mean_squared_error').
         """
-        return "neg_mean_squared_error"
+        return "mean_squared_error"
 
     def _get_model_predictions(self, model, embeddings: np.ndarray):
         """Get predictions from the model.

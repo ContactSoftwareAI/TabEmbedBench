@@ -14,6 +14,43 @@ from tabembedbench.evaluators.abstractevaluator import AbstractEvaluator
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+TABARENA_TABPFN_SUBSET = [
+    363621,
+    363629,
+    363614,
+    363698,
+    363626,
+    363685,
+    363625,
+    363696,
+    363675,
+    363707,
+    363671,
+    363612,
+    363615,
+    363711,
+    363682,
+    363684,
+    363674,
+    363700,
+    363702,
+    363704,
+    363623,
+    363694,
+    363708,
+    363706,
+    363689,
+    363624,
+    363619,
+    363676,
+    363712,
+    363632,
+    363691,
+    363681,
+    363686,
+    363679,
+]
+
 
 class TabArenaBenchmark(AbstractBenchmark):
     """Benchmark for TabArena classification and regression tasks.
@@ -31,6 +68,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         save_result_dataframe: bool = True,
         upper_bound_num_samples: int = 100000,
         upper_bound_num_features: int = 500,
+        run_tabpfn_subset: bool = False,
     ):
         """Initialize the TabArena benchmark.
 
@@ -42,6 +80,7 @@ class TabArenaBenchmark(AbstractBenchmark):
             save_result_dataframe: Whether to save results to disk.
             upper_bound_num_samples: Maximum dataset size to process.
             upper_bound_num_features: Maximum number of features to process.
+            run_tabpfn_subset: Whether to run only a subset of TabPFN tasks.
         """
         super().__init__(
             logger_name="TabEmbedBench_TabArena",
@@ -56,6 +95,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         self.tabarena_lite = tabarena_lite
         self.benchmark_suite = None
         self.task_ids = None
+        self.run_tabpfn_subset = run_tabpfn_subset
 
     def _load_datasets(self, **kwargs):
         """Load TabArena tasks from OpenML.
@@ -94,6 +134,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         Returns:
             Tuple of (should_skip, reason).
         """
+        task_id = dataset_info["task_id"]
         dataset = dataset_info["dataset"]
         num_samples = dataset.qualities["NumberOfInstances"]
         num_features = dataset.qualities["NumberOfFeatures"]
@@ -104,11 +145,14 @@ class TabArenaBenchmark(AbstractBenchmark):
         )
 
         if not should_skip:
-            task = dataset_info["task"]
-            self.logger.info(
-                f"Starting experiments for dataset {dataset.name} "
-                f"and task {task.task_type}"
-            )
+            if self.run_tabpfn_subset and task_id not in TABARENA_TABPFN_SUBSET:
+                should_skip, reason = True, f"{reason} Not a TabArena task"
+            else:
+                task = dataset_info["task"]
+                self.logger.info(
+                    f"Starting experiments for dataset {dataset.name} "
+                    f"and task {task.task_type}"
+                )
 
         return should_skip, reason
 
@@ -304,6 +348,7 @@ def run_tabarena_benchmark(
     result_dir: str | Path = "result_tabarena",
     save_result_dataframe: bool = True,
     timestamp: str = TIMESTAMP,
+    run_tabpfn_subset: bool = False,
 ) -> pl.DataFrame:
     """Run the TabArena benchmark for a set of embedding models.
 
@@ -331,6 +376,7 @@ def run_tabarena_benchmark(
         result_dir: Directory path for saving results.
         save_result_dataframe: Whether to save results to disk.
         timestamp: Timestamp string for result file naming.
+        run_tabpfn_subset:
 
     Returns:
         polars.DataFrame: A dataframe summarizing the benchmark results. The columns
@@ -346,6 +392,7 @@ def run_tabarena_benchmark(
         save_result_dataframe=save_result_dataframe,
         upper_bound_num_samples=upper_bound_num_samples,
         upper_bound_num_features=upper_bound_num_features,
+        run_tabpfn_subset=run_tabpfn_subset
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)

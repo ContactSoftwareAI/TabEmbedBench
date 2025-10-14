@@ -440,58 +440,106 @@ def create_neighbors_effect_analysis(
 
     return lineplot
 
-def create_critical_difference_plot(
+def create_outlier_plots(
         df: pl.DataFrame,
-        metric_col: str,
-        metric_name: str,
-        algorithm: str | None = None,
-        title: str | None = None,
-):
-    if algorithm:
-        filtered_df = df.filter(pl.col("algorithm") == algorithm)
-        plot_title = f"{title} ({metric_name}, {algorithm})"
-    else:
-        filtered_df = (
-            df.group_by(
-                ["dataset_name", "embedding_model"]
-            ).agg(
-                pl.col(metric_col).mean().alias("mean_score")
-            )
-            .select(
-                ["dataset_name", "embedding_model", "mean_score"]
-            )
-        )
-
-        metric_col = "mean_score"
-
-    pivoted_df = (
-        filtered_df.pivot(
-            on="embedding_model",
-            index="dataset_name",
-            values=metric_col
-        )
-    )
-    labels = pivoted_df.select(pl.exclude("dataset_name")).columns
-    scores = pivoted_df.select(pl.exclude("dataset_name")).to_numpy()
-
-def create_plots(
-        df: pl.DataFrame,
-        data_path: str,
-        mapping: dict
+        data_path: str | Path = "data",
+        name_mapping: dict | None = None,
+        color_mapping: dict | None = None,
+        models_to_keep: list | None = None,
 ):
     data_path = Path(data_path)
-    models_to_keep = [item for item in mapping.values()]
+    data_path.mkdir(parents=True, exist_ok=True)
 
-    df = rename_models(df, mapping)
+    output_path = data_path / "outlier_plots"
+    output_path.mkdir(parents=True, exist_ok=True)
 
-    df = keeping_models(df, models_to_keep)
+    if name_mapping is not None:
+        df = rename_models(df, name_mapping)
+        df = keeping_models(df, models_to_keep)
 
-    colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
+    if models_to_keep is None:
+        models_to_keep = df.get_column("embedding_model").unique().to_list()
 
-    color_mapping = {
-        model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
-        for model, (r, g, b) in zip(models_to_keep, colors)
-    }
+    if color_mapping is None:
+        colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
+        color_mapping = {
+            model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+            for model, (r, g, b) in zip(models_to_keep, colors)
+        }
+
+    evaluator_algorithms = df.get_column("algorithm").unique().to_list()
+
+    descriptive_df = create_descriptive_dataframe(df, "auc_score")
+
+    descriptive_df.write_csv(Path(output_path / "binary_auc_score_descriptive.csv"))
+
+    for algorithm in evaluator_algorithms:
+        ax_box = create_detailed_boxplots(
+            df,
+            metric_col="auc_score",
+            metric_name="AUC Score",
+            algorithm=algorithm,
+            title="Outlier Detection Performance",
+            embedding_model_palette=color_mapping,
+            embedding_model_order=models_to_keep,
+        )
+        save_fig(ax_box, output_path, f"outlier_boxplot_{algorithm}")
+        plt.close()
+
+        ax_heat = create_dataset_performance_heatmaps(
+            df,
+            metric_col="auc_score",
+            metric_name="AUC Score",
+            algorithm=algorithm,
+            title="Outlier Detection Performance",
+            embedding_model_order=models_to_keep,
+        )
+        save_fig(ax_heat, output_path, f"outlier_heatmap_{algorithm}")
+        plt.close()
+
+        try:
+            ax_neighbors = create_neighbors_effect_analysis(
+                df,
+                metric_col="auc_score",
+                metric_name="AUC Score",
+                algorithm=algorithm,
+                num_neighbors_col="algorithm_n_neighbors",
+                title="Outlier Detection Performance",
+                embedding_model_palette=color_mapping,
+                embedding_model_order=models_to_keep,
+            )
+            save_fig(ax_neighbors, output_path, f"outlier_neighbors_{algorithm}")
+            plt.close()
+        except ValueError as e:
+            logger.warning(f"Skipping neighbors analysis for binary {algorithm}: {e}")
+
+
+def create_tabarena_plots(
+        df: pl.DataFrame,
+        data_path: str | Path = "data",
+        name_mapping: dict | None = None,
+        color_mapping: dict | None = None,
+        models_to_keep: list | None = None,
+):
+    data_path = Path(data_path)
+    data_path.mkdir(parents=True, exist_ok=True)
+
+    tabarena_path = data_path / "tabarena_plots"
+    tabarena_path.mkdir(parents=True, exist_ok=True)
+
+    if name_mapping is not None:
+        df = rename_models(df, name_mapping)
+        df = keeping_models(df, models_to_keep)
+
+    if models_to_keep is None:
+        models_to_keep = df.get_column("embedding_model").unique().to_list()
+
+    if color_mapping is None:
+        colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
+        color_mapping = {
+            model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+            for model, (r, g, b) in zip(models_to_keep, colors)
+        }
 
     binary, multiclass, regression = separate_by_task_type(df)
 
@@ -512,10 +560,9 @@ def create_plots(
         logger.info(f"Processing binary classification with {algorithm}")
 
         descriptive_df = create_descriptive_dataframe(binary, "auc_score")
-        print(descriptive_df)
 
         descriptive_df.write_csv(
-            Path(data_path / "binary_auc_score_descriptive.csv")
+            Path(tabarena_path / "binary_auc_score_descriptive.csv")
         )
 
         # Create boxplot
@@ -528,7 +575,7 @@ def create_plots(
             embedding_model_palette=color_mapping,
             embedding_model_order=models_to_keep,
         )
-        save_fig(ax_box, data_path, f"binary_boxplot_{algorithm}")
+        save_fig(ax_box, tabarena_path, f"binary_boxplot_{algorithm}")
         plt.close()
 
         # Create heatmap
@@ -540,7 +587,7 @@ def create_plots(
             title="Binary Classification Performance",
             embedding_model_order=models_to_keep,
         )
-        save_fig(ax_heat, data_path, f"binary_heatmap_{algorithm}")
+        save_fig(ax_heat, tabarena_path, f"binary_heatmap_{algorithm}")
         plt.close()
 
         try:
@@ -553,7 +600,7 @@ def create_plots(
                 embedding_model_palette=color_mapping,
                 embedding_model_order=models_to_keep,
             )
-            save_fig(ax_neighbors, data_path, f"binary_neighbors_{algorithm}")
+            save_fig(ax_neighbors, tabarena_path, f"binary_neighbors_{algorithm}")
             plt.close()
         except ValueError as e:
             logger.warning(f"Skipping neighbors analysis for binary {algorithm}: {e}")
@@ -564,10 +611,9 @@ def create_plots(
                     f"{algorithm}_auc_score")
         descriptive_df = create_descriptive_dataframe(multiclass,
                                                       "auc_score")
-        print(descriptive_df)
 
         descriptive_df.write_csv(
-            Path(data_path / "multiclass_auc_score_descriptive.csv")
+            Path(tabarena_path / "multiclass_auc_score_descriptive.csv")
         )
 
         # Create boxplot
@@ -580,7 +626,7 @@ def create_plots(
             embedding_model_palette=color_mapping,
             embedding_model_order=models_to_keep,
         )
-        save_fig(ax_box, data_path, f"multiclass_boxplot_{algorithm}_auc_score")
+        save_fig(ax_box, tabarena_path, f"multiclass_boxplot_{algorithm}_auc_score")
         plt.close()
 
         # Create heatmap
@@ -592,7 +638,7 @@ def create_plots(
             title="Multiclass Classification Performance",
             embedding_model_order=models_to_keep,
         )
-        save_fig(ax_heat, data_path, f"multiclass_heatmap_"
+        save_fig(ax_heat, tabarena_path, f"multiclass_heatmap_"
                                      f"{algorithm}_auc_score")
         plt.close()
 
@@ -606,7 +652,7 @@ def create_plots(
                 embedding_model_palette=color_mapping,
                 embedding_model_order=models_to_keep,
             )
-            save_fig(ax_neighbors, data_path, f"multiclass_neighbors"
+            save_fig(ax_neighbors, tabarena_path, f"multiclass_neighbors"
                                               f"_{algorithm}_auc_score")
             plt.close()
         except ValueError as e:
@@ -615,9 +661,8 @@ def create_plots(
 
         descriptive_df = create_descriptive_dataframe(multiclass,
                                                       "log_loss_score")
-        print(descriptive_df)
 
-        descriptive_df.write_csv(Path(data_path /
+        descriptive_df.write_csv(Path(tabarena_path /
                                       "multiclass_log_loss_descriptive.csv"))
 
         ax_box = create_detailed_boxplots(
@@ -629,7 +674,7 @@ def create_plots(
             embedding_model_palette=color_mapping,
             embedding_model_order=models_to_keep,
         )
-        save_fig(ax_box, data_path, f"multiclass_boxplot_{algorithm}_log_loss")
+        save_fig(ax_box, tabarena_path, f"multiclass_boxplot_{algorithm}_log_loss")
         plt.close()
 
         # Create heatmap
@@ -641,7 +686,7 @@ def create_plots(
             title="Multiclass Classification Performance",
             embedding_model_order=models_to_keep,
         )
-        save_fig(ax_heat, data_path, f"multiclass_heatmap_{algorithm}_log_loss")
+        save_fig(ax_heat, tabarena_path, f"multiclass_heatmap_{algorithm}_log_loss")
         plt.close()
 
         try:
@@ -654,7 +699,7 @@ def create_plots(
                 embedding_model_palette=color_mapping,
                 embedding_model_order=models_to_keep,
             )
-            save_fig(ax_neighbors, data_path, f"multiclass_neighbors"
+            save_fig(ax_neighbors, tabarena_path, f"multiclass_neighbors"
                                               f"_{algorithm}_log_loss")
             plt.close()
         except ValueError as e:
@@ -666,9 +711,8 @@ def create_plots(
         logger.info(f"Processing regression with {algorithm}")
 
         descriptive_df = create_descriptive_dataframe(regression, "mape_score")
-        print(descriptive_df)
 
-        descriptive_df.write_csv(Path(data_path /
+        descriptive_df.write_csv(Path(tabarena_path /
                                  "regression_descriptive.csv"))
 
         # Create boxplot (minimizing RMSE)
@@ -682,7 +726,7 @@ def create_plots(
             agg_algorithm="minimize",
             embedding_model_order=models_to_keep,
         )
-        save_fig(ax_box, data_path, f"regression_boxplot_{algorithm}")
+        save_fig(ax_box, tabarena_path, f"regression_boxplot_{algorithm}")
         plt.close()
 
         # Create heatmap (minimizing RMSE)
@@ -695,7 +739,7 @@ def create_plots(
             agg_algorithm="minimize",
             embedding_model_order=models_to_keep,
         )
-        save_fig(ax_heat, data_path, f"regression_heatmap_{algorithm}")
+        save_fig(ax_heat, tabarena_path, f"regression_heatmap_{algorithm}")
         plt.close()
 
         # Create neighbors effect analysis
@@ -709,67 +753,14 @@ def create_plots(
                 embedding_model_palette=color_mapping,
                 embedding_model_order=models_to_keep,
             )
-            save_fig(ax_neighbors, data_path, f"regression_neighbors_{algorithm}")
+            save_fig(ax_neighbors, tabarena_path, f"regression_neighbors_{algorithm}")
             plt.close()
         except ValueError as e:
             logger.warning(f"Skipping neighbors analysis for regression {algorithm}: {e}")
 
     logger.info("All visualizations completed successfully")
 
-
-def main():
-    """Main function to generate comprehensive benchmark visualizations.
-    
-    Loads benchmark results, processes them by task type (binary classification,
-    multiclass classification, regression), and generates various visualizations
-    including boxplots, heatmaps, and neighbor effect analyses for each
-    algorithm and metric combination.
-    
-    The function:
-        1. Loads results from a parquet file
-        2. Renames and filters embedding models
-        3. Separates results by task type
-        4. Cleans results to ensure consistent algorithm coverage
-        5. Generates visualizations for each task type and algorithm
-        6. Saves all figures as PDF files
-    """
-    import os
-
-    load_dotenv()
-
-    tabarena_result_parquet_path = os.getenv("TABARENA_RESULT_PATH")
-
-    include_sphere = os.getenv("INCLUDE_SPHEREBASED_EMBEDDINGS", "False").lower() in (
-        "true",
-        "1",
-        "yes",
-        "on",
-    )
-
-    df = pl.read_parquet(
-        tabarena_result_parquet_path
-    )
-
-    mapping = {
-        "tabicl-classifier-v1.1-0506_preprocessed": "TabICL",
-        "TabVectorizerEmbedding": "TableVectorizer",
-        "TabPFN": "TabPFN",
-    }
-
-    data_path = Path("data/tabembedbench_20251007_190514/figures")
-
-    if include_sphere:
-        for n in range(3, 10):
-             mapping[f"sphere-model-d{2**n}"] = f"Sphere-Based (Dim {2**n})"
-        data_path = Path("data/tabembedbench_20251007_190514/figures"
-                      "/sphere_included")
-
-    if not data_path.exists():
-        data_path.mkdir(parents=True)
-
-    create_plots(df, data_path, mapping)
-
 if __name__ == "__main__":
-    new_result = pl.read_csv("/Users/lkl/PycharmProjects/TabEmbedBench/data/result_tabpfn_embedding_363702/tabpfn_embedding_task_363702_20251010_040852.csv")
-    old_result = pl.read_csv("/Users/lkl/PycharmProjects/TabEmbedBench/data/tabembedbench_20251007_190514/results_TabArena_20251007_190514.csv")
-    print(new_result)
+    main()
+
+
