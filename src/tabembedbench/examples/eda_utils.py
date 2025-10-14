@@ -474,10 +474,6 @@ def create_critical_difference_plot(
     labels = pivoted_df.select(pl.exclude("dataset_name")).columns
     scores = pivoted_df.select(pl.exclude("dataset_name")).to_numpy()
 
-
-
-
-
 def create_plots(
         df: pl.DataFrame,
         data_path: str,
@@ -760,19 +756,20 @@ def main():
         "TabPFN": "TabPFN",
     }
 
-    data_path = "data/tabembedbench_20251007_190514/figures"
+    data_path = Path("data/tabembedbench_20251007_190514/figures")
 
-    print(include_sphere)
     if include_sphere:
         for n in range(3, 10):
              mapping[f"sphere-model-d{2**n}"] = f"Sphere-Based (Dim {2**n})"
-        data_path = "data/tabembedbench_20251007_190514/figures/sphere_included"
+        data_path = Path("data/tabembedbench_20251007_190514/figures"
+                      "/sphere_included")
 
-    print(include_sphere)
+    if not data_path.exists():
+        data_path.mkdir(parents=True)
 
     create_plots(df, data_path, mapping)
 
-    print(data_path)
-
 if __name__ == "__main__":
-    main()
+    new_result = pl.read_csv("/Users/lkl/PycharmProjects/TabEmbedBench/data/result_tabpfn_embedding_363702/tabpfn_embedding_task_363702_20251010_040852.csv")
+    old_result = pl.read_csv("/Users/lkl/PycharmProjects/TabEmbedBench/data/tabembedbench_20251007_190514/results_TabArena_20251007_190514.csv")
+    print(new_result)
