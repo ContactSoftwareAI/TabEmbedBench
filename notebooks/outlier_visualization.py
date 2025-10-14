@@ -3,6 +3,7 @@ import plotly.express as px
 from pathlib import Path
 import numpy as np
 import plotly.io as pio  # Für PNG Export hinzufügen
+from datetime import datetime
 
 
 # Pfad zur Parquet-Datei
@@ -46,6 +47,7 @@ def add_outlier_ratio_category(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def create_balanced_algorithm_comparison_data(df: pl.DataFrame, score_col: str = "auc_score",
+                                              selected_metrics: list[str] = None,
                                               selected_embedding_models: list[str] = None,
                                               save_files: bool = True,
                                               output_dir: str = "filtered_results"):
@@ -62,58 +64,87 @@ def create_balanced_algorithm_comparison_data(df: pl.DataFrame, score_col: str =
         save_files: Ob Dateien gespeichert werden sollen
         output_dir: Verzeichnis für Ausgabedateien
     """
+    # Konvertiere output_dir zu Path-Objekt
+    output_dir_path = Path(output_dir)
+    output_dir_path.mkdir(exist_ok=True)
+
     valid_data = df.filter(
         (pl.col(score_col) > -np.inf) &
         (pl.col(score_col) < np.inf) &
         pl.col(score_col).is_not_null()
     )
+    
+    if selected_metrics is not None:
+        print(f"Filtere nach Distanzmetrik: {selected_metrics}")
+        valid_data = valid_data.filter(
+            pl.col("algorithm_metric").is_in(selected_metrics) |
+            pl.col("algorithm_metric").is_null()
+        )
 
     # Filtere nach ausgewählten Embedding-Modellen
     if selected_embedding_models is not None:
         print(f"Filtere nach Embedding-Modellen: {selected_embedding_models}")
         valid_data = valid_data.filter(pl.col("embedding_model").is_in(selected_embedding_models))
 
-        if len(valid_data) == 0:
-            print(f"⚠️ Keine Daten nach Filterung gefunden!")
-            return pl.DataFrame()
-
-        # Ermittle alle verfügbaren Algorithmen
+    # Ermittle alle verfügbaren Algorithmen
     all_algorithms = valid_data["algorithm"].unique().to_list()
     print(f"Gefundene Algorithmen: {all_algorithms}")
 
     balanced_data_parts = []
 
-    # Für LocalOutlierFactor: Aggregiere über algorithm_n_neighbors und nehme maximalen AUC-Wert
     lof_data = (
         valid_data
         .filter(pl.col("algorithm") == "LocalOutlierFactor")
+        .with_columns(
+            # Erstelle Ranking nach Score (höchste zuerst)
+            pl.col(score_col).rank(method="max", descending=True).over(
+                ["dataset_name", "embedding_model", "algorithm_metric", "algorithm",
+                 "dataset_size", "embed_dim", "outlier_ratio"]
+            ).alias("score_rank")
+        )
+        .filter(pl.col("score_rank") == 1)  # Nur die besten
         .group_by(
-            ["dataset_name", "embedding_model", "algorithm_metric", "algorithm", "dataset_size", "embed_dim", "outlier_ratio"])
-        .agg([
-            pl.col(score_col).max().alias(score_col),
-            pl.col("time_to_compute_train_embedding").mean().alias("time_to_compute_train_embedding"),
-            pl.col("algorithm_n_neighbors").first().alias("algorithm_param"),
-            pl.col("task").first().alias("task")
+            ["dataset_name", "embedding_model", "algorithm_metric", "algorithm",
+             "dataset_size", "embed_dim", "outlier_ratio"]
+        )
+        .first()  # Falls mehrere den gleichen Maximalwert haben
+        .select([
+            "dataset_name", "embedding_model", "algorithm_metric", "algorithm",
+            "dataset_size", "embed_dim", "outlier_ratio", score_col,
+            "time_to_compute_train_embedding", "algorithm_n_neighbors", "task"
         ])
+        .rename({"algorithm_n_neighbors": "algorithm_param"})
     )
+
     if len(lof_data) > 0:
         balanced_data_parts.append(lof_data)
         print(f"✓ LocalOutlierFactor verarbeitet: {len(lof_data)} Experimente")
 
-    # Für IsolationForest: Aggregiere über algorithm_n_estimators
+    # Für IsolationForest: Wähle die Zeile mit dem maximalen Score
     isolation_data = (
         valid_data
         .filter(pl.col("algorithm") == "IsolationForest")
+        .with_columns(
+            # Erstelle Ranking nach Score (höchste zuerst)
+            pl.col(score_col).rank(method="max", descending=True).over(
+                ["dataset_name", "embedding_model", "algorithm_metric", "algorithm",
+                 "dataset_size", "embed_dim", "outlier_ratio"]
+            ).alias("score_rank")
+        )
+        .filter(pl.col("score_rank") == 1)  # Nur die besten
         .group_by(
-            ["dataset_name", "embedding_model", "algorithm_metric", "algorithm", "dataset_size", "embed_dim", "outlier_ratio"])
-        .agg([
-            pl.col(score_col).max().alias(score_col),
-            pl.col("time_to_compute_train_embedding").mean().alias("time_to_compute_train_embedding"),
-            pl.col("algorithm_n_estimators").filter(pl.col(score_col) == pl.col(score_col).max()).first().alias(
-                "algorithm_param"),
-            pl.col("task").first().alias("task")
+            ["dataset_name", "embedding_model", "algorithm_metric", "algorithm",
+             "dataset_size", "embed_dim", "outlier_ratio"]
+        )
+        .first()  # Falls mehrere den gleichen Maximalwert haben
+        .select([
+            "dataset_name", "embedding_model", "algorithm_metric", "algorithm",
+            "dataset_size", "embed_dim", "outlier_ratio", score_col,
+            "time_to_compute_train_embedding", "algorithm_n_estimators", "task"
         ])
+        .rename({"algorithm_n_estimators": "algorithm_param"})
     )
+
     if len(isolation_data) > 0:
         balanced_data_parts.append(isolation_data)
         print(f"✓ IsolationForest verarbeitet: {len(isolation_data)} Experimente")
@@ -146,13 +177,17 @@ def create_balanced_algorithm_comparison_data(df: pl.DataFrame, score_col: str =
         print("⚠️ Keine Algorithmen gefunden!")
         return pl.DataFrame()
 
+    if save_files:
+        # Erstelle aktuellen Zeitstempel
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
         # Speichere als Parquet
-        parquet_path = output_path / parquet_filename
+        parquet_path = output_dir_path / f"results_ADBench_Tabular_{timestamp}_balanced.parquet"
         balanced_data.write_parquet(parquet_path)
         print(f"💾 Parquet gespeichert: {parquet_path}")
 
         # Speichere als CSV
-        csv_path = output_path / csv_filename
+        csv_path = output_dir_path / f"results_ADBench_Tabular_{timestamp}_balanced.csv"
         balanced_data.write_csv(csv_path)
         print(f"💾 CSV gespeichert: {csv_path}")
 
@@ -162,7 +197,7 @@ def create_balanced_algorithm_comparison_data(df: pl.DataFrame, score_col: str =
 def create_score_distribution_boxplot(df: pl.DataFrame, score_col: str = "auc_score"):
     """Erstellt ein ausgewogenes Boxplot für die Verteilung der Scores nach Embedding-Modell."""
 
-    title = f"Verteilung der {score_col} nach Embedding-Modell"
+    title = f"Distribution of {score_col} with respect to embedding model"
 
     fig = px.box(
         df.to_pandas(),
@@ -256,9 +291,8 @@ def create_dataset_difficulty_analysis(df: pl.DataFrame, score_col: str = "auc_s
 def generate_summary_statistics(df: pl.DataFrame):
     """Erstellt eine Zusammenfassung der wichtigsten Statistiken basierend auf ausgewogenen Daten."""
 
-    print("\n=== BENCHMARK ERGEBNISSE ZUSAMMENFASSUNG (AUSGEWOGENE DATEN) ===")
+    print("\n=== BENCHMARK ERGEBNISSE ZUSAMMENFASSUNG ===")
     print(f"Rohdaten: {len(df)} Experimente")
-    print(f"Ausgewogene Daten: {len(df)} Experimente")
     print(f"Anzahl der Datensätze: {df['dataset_name'].n_unique()}")
     print(f"Anzahl der Embedding-Modelle: {df['embedding_model'].n_unique()}")
     print(f"Anzahl der Algorithmen: {df['algorithm'].n_unique()}")
@@ -267,15 +301,6 @@ def generate_summary_statistics(df: pl.DataFrame):
     print(f"Algorithmen: {df['algorithm'].unique().to_list()}")
     print(f"Distanzmetriken: {df['algorithm_metric'].unique().to_list()}")
 
-    # Outlier Ratio Verteilung
-    outlier_ratio_dist = (df
-                          .group_by("outlier_ratio_category")
-                          .agg(pl.col("dataset_name").count().alias("count"))
-                          .sort("outlier_ratio_category"))
-
-    print(f"\n--- Outlier Ratio Verteilung ---")
-    for row in outlier_ratio_dist.iter_rows(named=True):
-        print(f"Outlier Ratio {row['outlier_ratio_category']}: {row['count']} Experimente")
 
     # auc_score Score Statistiken (nur gültige Werte)
     valid_auc_score = df.filter(
@@ -285,30 +310,12 @@ def generate_summary_statistics(df: pl.DataFrame):
     )
 
     if len(valid_auc_score) > 0:
-        print(f"\n--- auc_score Score Statistiken (ausgewogen) ---")
+        print(f"\n--- auc_score Score Statistiken ---")
         print(f"Mittelwert: {valid_auc_score['auc_score'].mean():.4f}")
         print(f"Median: {valid_auc_score['auc_score'].median():.4f}")
         print(f"Min: {valid_auc_score['auc_score'].min():.4f}")
         print(f"Max: {valid_auc_score['auc_score'].max():.4f}")
         print(f"Standardabweichung: {valid_auc_score['auc_score'].std():.4f}")
-
-        # Performance nach Outlier Ratio
-        print(f"\n--- Performance nach Outlier Ratio (ausgewogen) ---")
-        outlier_ratio_performance = (valid_auc_score
-                                     .group_by("outlier_ratio_category")
-                                     .agg([
-            pl.col("auc_score").mean().alias("avg_auc_score"),
-            pl.col("auc_score").std().alias("std_auc_score"),
-            pl.col("auc_score").count().alias("num_experiments"),
-            pl.col("outlier_ratio").mean().alias("avg_outlier_ratio")
-        ])
-                                     .sort("outlier_ratio_category"))
-
-        for row in outlier_ratio_performance.iter_rows(named=True):
-            print(f"Outlier Ratio {row['outlier_ratio_category']}: "
-                  f"auc_score={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f}, "
-                  f"Durchschn. Ratio={row['avg_outlier_ratio']:.4f}, "
-                  f"Experimente={row['num_experiments']}")
 
         # Performance nach Embedding-Modell und Outlier Ratio
         print(f"\n--- Performance nach Embedding-Modell und Outlier Ratio ---")
@@ -326,21 +333,115 @@ def generate_summary_statistics(df: pl.DataFrame):
                   f"auc_score={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f}, "
                   f"Experimente={row['num_experiments']}")
 
-            # Performance nach Embedding-Modell und Algorithmus
-            print(f"\n--- Performance nach Embedding-Modell und Algorithmus ---")
-            model_algorithm_performance = (valid_auc_score
-                                           .group_by(["embedding_model", "algorithm"])
-                                           .agg([
-                pl.col("auc_score").mean().alias("avg_auc_score"),
-                pl.col("auc_score").std().alias("std_auc_score"),
-                pl.col("auc_score").count().alias("num_experiments")
-            ])
-                                           .sort(["embedding_model", "algorithm"]))
+        # Performance nach Embedding-Modell und Algorithmus
+        print(f"\n--- Performance nach Embedding-Modell und Algorithmus ---")
+        model_algorithm_performance = (valid_auc_score
+                                       .group_by(["embedding_model", "algorithm"])
+                                       .agg([
+            pl.col("auc_score").mean().alias("avg_auc_score"),
+            pl.col("auc_score").std().alias("std_auc_score"),
+            pl.col("auc_score").count().alias("num_experiments")
+        ])
+                                       .sort(["embedding_model", "algorithm"]))
 
-            for row in model_algorithm_performance.iter_rows(named=True):
-                print(f"{row['embedding_model']} ({row['algorithm']}): "
-                      f"auc_score={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f}, "
-                      f"Experimente={row['num_experiments']}")
+        for row in model_algorithm_performance.iter_rows(named=True):
+            print(f"{row['embedding_model']} ({row['algorithm']}): "
+                  f"auc_score={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f}, "
+                  f"Experimente={row['num_experiments']}")
+
+
+    print(f"\n--- Mehrdimensionale Performance-Analyse ---")
+
+    # 1. Hauptanalyse: Alle Dimensionen
+    full_performance = (valid_auc_score
+                        .group_by(["embedding_model", "algorithm", "outlier_ratio_category"])
+                        .agg([
+        pl.col("auc_score").mean().alias("avg_auc_score"),
+        pl.col("auc_score").std().alias("std_auc_score"),
+        pl.col("auc_score").count().alias("num_experiments")
+    ])
+                        .sort(["embedding_model", "algorithm", "outlier_ratio_category"]))
+
+    print("=== Detaillierte Matrix (Embedding × Algorithmus × Outlier Ratio) ===")
+    for row in full_performance.iter_rows(named=True):
+        print(f"{row['embedding_model']} | {row['algorithm']} | Ratio {row['outlier_ratio_category']}: "
+              f"AUC={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f} (n={row['num_experiments']})")
+
+    # 1. Randverteilung: Nach Embedding-Modell und Outlier Ratio
+    print(f"\n=== Randverteilung: Embedding-Modell × Outlier Ratio ===")
+    model_outlier_marginal = (valid_auc_score
+                              .group_by(["embedding_model", "outlier_ratio_category"])
+                              .agg([
+        pl.col("auc_score").mean().alias("avg_auc_score"),
+        pl.col("auc_score").std().alias("std_auc_score"),
+        pl.col("auc_score").count().alias("num_experiments")
+    ])
+                              .sort(["embedding_model", "outlier_ratio_category"]))
+
+    for row in model_outlier_marginal.iter_rows(named=True):
+        print(f"{row['embedding_model']} (Ratio {row['outlier_ratio_category']}): "
+              f"AUC={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f} (n={row['num_experiments']})")
+
+    # 2. Randverteilung: Nach Embedding-Modell und Algorithmus
+    print(f"\n=== Randverteilung: Embedding-Modell × Algorithmus ===")
+    model_algorithm_marginal = (valid_auc_score
+                                .group_by(["embedding_model", "algorithm"])
+                                .agg([
+        pl.col("auc_score").mean().alias("avg_auc_score"),
+        pl.col("auc_score").std().alias("std_auc_score"),
+        pl.col("auc_score").count().alias("num_experiments")
+    ])
+                                .sort(["embedding_model", "algorithm"]))
+
+    for row in model_algorithm_marginal.iter_rows(named=True):
+        print(f"{row['embedding_model']} ({row['algorithm']}): "
+              f"AUC={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f} (n={row['num_experiments']})")
+
+    # 3. Randverteilung: Nach Embedding-Modell (Gesamt)
+    print(f"\n=== Randverteilung: Embedding-Modell (Gesamt) ===")
+    model_total_marginal = (valid_auc_score
+                            .group_by(["embedding_model"])
+                            .agg([
+        pl.col("auc_score").mean().alias("avg_auc_score"),
+        pl.col("auc_score").std().alias("std_auc_score"),
+        pl.col("auc_score").count().alias("num_experiments")
+    ])
+                            .sort("avg_auc_score", descending=True))
+
+    for row in model_total_marginal.iter_rows(named=True):
+        print(f"{row['embedding_model']}: "
+              f"AUC={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f} (n={row['num_experiments']})")
+
+    # 4. Randverteilung: Nach Algorithmus (Gesamt)
+    print(f"\n=== Randverteilung: Algorithmus (Gesamt) ===")
+    algorithm_total_marginal = (valid_auc_score
+                                .group_by(["algorithm"])
+                                .agg([
+        pl.col("auc_score").mean().alias("avg_auc_score"),
+        pl.col("auc_score").std().alias("std_auc_score"),
+        pl.col("auc_score").count().alias("num_experiments")
+    ])
+                                .sort("avg_auc_score", descending=True))
+
+    for row in algorithm_total_marginal.iter_rows(named=True):
+        print(f"{row['algorithm']}: "
+              f"AUC={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f} (n={row['num_experiments']})")
+
+    # 5. Randverteilung: Nach Outlier Ratio (Gesamt)
+    print(f"\n=== Randverteilung: Outlier Ratio (Gesamt) ===")
+    outlier_total_marginal = (valid_auc_score
+                              .group_by(["outlier_ratio_category"])
+                              .agg([
+        pl.col("auc_score").mean().alias("avg_auc_score"),
+        pl.col("auc_score").std().alias("std_auc_score"),
+        pl.col("auc_score").count().alias("num_experiments")
+    ])
+                              .sort("avg_auc_score", descending=True))
+
+    for row in outlier_total_marginal.iter_rows(named=True):
+        print(f"Outlier Ratio {row['outlier_ratio_category']}: "
+              f"AUC={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f} (n={row['num_experiments']})")
+
 
     # Berechnungszeit Statistiken (ausgewogene Daten)
     valid_time = df.filter(
@@ -373,22 +474,6 @@ def generate_summary_statistics(df: pl.DataFrame):
               f"Zeit={row['avg_time']:.4f}s, "
               f"Experimente={row['num_experiments']}")
 
-    # Algorithmus-Performance (ausgewogene Daten)
-    print(f"\n--- Performance nach Algorithmus (ausgewogen) ---")
-    algorithm_performance = (valid_auc_score
-                             .group_by("algorithm")
-                             .agg([
-        pl.col("auc_score").mean().alias("avg_auc_score"),
-        pl.col("auc_score").std().alias("std_auc_score"),
-        pl.col("auc_score").count().alias("num_experiments")
-    ])
-                             .sort("avg_auc_score", descending=True))
-
-    for row in algorithm_performance.iter_rows(named=True):
-        print(f"{row['algorithm']}: "
-              f"auc_score={row['avg_auc_score']:.4f}±{row['std_auc_score']:.4f}, "
-              f"Experimente={row['num_experiments']}")
-
 
 def main():
     """Hauptfunktion zur Ausführung der Visualisierungen."""
@@ -399,8 +484,9 @@ def main():
         return
 
     selected_embedding_models = ["TabVectorizerEmbedding", "tabicl-classifier-v1.1-0506_preprocessed", "TabPFN"]
+    selected_metrics = ["euclidean", None]
     # Erstelle ausgewogene Daten für konsistente Statistiken
-    balanced_data = create_balanced_algorithm_comparison_data(data, "auc_score", selected_embedding_models)
+    balanced_data = create_balanced_algorithm_comparison_data(data, "auc_score", selected_metrics, selected_embedding_models, True, save_path_to_balanced_file)
     balanced_data = rename_embedding_models(balanced_data)
 
     # Zeige grundlegende Statistiken
