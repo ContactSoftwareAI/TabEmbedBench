@@ -3,6 +3,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
+import pandas as pd
 import polars as pl
 import seaborn as sns
 
@@ -349,10 +350,20 @@ def create_dataset_performance_heatmaps(
     if title is None:
         plot_title = None
 
-    pivoted_df = pivoted_df.select(["dataset_name"] + embedding_model_order)
+    if embedding_model_order:
+        available_columns = [col for col in embedding_model_order if col in pivoted_df.columns]
+        columns_to_select = ["dataset_name"] + available_columns
+        pivoted_df = pivoted_df.select(columns_to_select)
+
+    heatmap_data = pivoted_df.to_pandas().set_index("dataset_name")
+
+    heatmap_data = heatmap_data.apply(pd.to_numeric, errors='coerce')
+
     heatmap = sns.heatmap(
-        data=pivoted_df.to_pandas().set_index("dataset_name"),
+        data=heatmap_data,
         cmap='viridis',
+        annot=True,
+        fmt='.3f'
     )
 
     heatmap.set_xlabel("Embedding Model")
@@ -440,50 +451,14 @@ def create_neighbors_effect_analysis(
 
     return lineplot
 
-def create_critical_difference_plot(
-        df: pl.DataFrame,
-        metric_col: str,
-        metric_name: str,
-        algorithm: str | None = None,
-        title: str | None = None,
-):
-    if algorithm:
-        filtered_df = df.filter(pl.col("algorithm") == algorithm)
-        plot_title = f"{title} ({metric_name}, {algorithm})"
-    else:
-        filtered_df = (
-            df.group_by(
-                ["dataset_name", "embedding_model"]
-            ).agg(
-                pl.col(metric_col).mean().alias("mean_score")
-            )
-            .select(
-                ["dataset_name", "embedding_model", "mean_score"]
-            )
-        )
-
-        metric_col = "mean_score"
-
-    pivoted_df = (
-        filtered_df.pivot(
-            on="embedding_model",
-            index="dataset_name",
-            values=metric_col
-        )
-    )
-    labels = pivoted_df.select(pl.exclude("dataset_name")).columns
-    scores = pivoted_df.select(pl.exclude("dataset_name")).to_numpy()
-
-
-
-
-
 def create_plots(
         df: pl.DataFrame,
         data_path: str,
         mapping: dict
 ):
     data_path = Path(data_path)
+    data_path.mkdir(parents=True, exist_ok=True)
+
     models_to_keep = [item for item in mapping.values()]
 
     df = rename_models(df, mapping)
@@ -670,7 +645,6 @@ def create_plots(
         logger.info(f"Processing regression with {algorithm}")
 
         descriptive_df = create_descriptive_dataframe(regression, "mape_score")
-        print(descriptive_df)
 
         descriptive_df.write_csv(Path(data_path /
                                  "regression_descriptive.csv"))
@@ -741,7 +715,7 @@ def main():
 
     load_dotenv()
 
-    tabarena_result_parquet_path = os.getenv("TABARENA_RESULT_PATH")
+    tabarena_result_path = Path(os.getenv("TABARENA_RESULT_PATH"))
 
     include_sphere = os.getenv("INCLUDE_SPHEREBASED_EMBEDDINGS", "False").lower() in (
         "true",
@@ -750,9 +724,16 @@ def main():
         "on",
     )
 
-    df = pl.read_parquet(
-        tabarena_result_parquet_path
-    )
+    file_suffix = tabarena_result_path.suffix.replace(".", "")
+
+    if file_suffix == "parquet":
+        df = pl.read_parquet(
+            tabarena_result_path
+        )
+    elif file_suffix == "csv":
+        df = pl.read_csv(
+            tabarena_result_path
+        )
 
     mapping = {
         "tabicl-classifier-v1.1-0506_preprocessed": "TabICL",
@@ -762,17 +743,12 @@ def main():
 
     data_path = "data/tabembedbench_20251007_190514/figures"
 
-    print(include_sphere)
     if include_sphere:
         for n in range(3, 10):
              mapping[f"sphere-model-d{2**n}"] = f"Sphere-Based (Dim {2**n})"
         data_path = "data/tabembedbench_20251007_190514/figures/sphere_included"
 
-    print(include_sphere)
-
     create_plots(df, data_path, mapping)
-
-    print(data_path)
 
 if __name__ == "__main__":
     main()
