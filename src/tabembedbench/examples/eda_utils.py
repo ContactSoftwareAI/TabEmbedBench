@@ -760,7 +760,5 @@ def create_tabarena_plots(
 
     logger.info("All visualizations completed successfully")
 
-if __name__ == "__main__":
-    main()
 
 

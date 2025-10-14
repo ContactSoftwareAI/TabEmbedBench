@@ -68,7 +68,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         save_result_dataframe: bool = True,
         upper_bound_num_samples: int = 100000,
         upper_bound_num_features: int = 500,
-        run_tabpfn_subset: bool = False,
+        run_tabpfn_subset: bool = True,
     ):
         """Initialize the TabArena benchmark.
 
@@ -348,7 +348,7 @@ def run_tabarena_benchmark(
     result_dir: str | Path = "result_tabarena",
     save_result_dataframe: bool = True,
     timestamp: str = TIMESTAMP,
-    run_tabpfn_subset: bool = False,
+    run_tabpfn_subset: bool = True,
 ) -> pl.DataFrame:
     """Run the TabArena benchmark for a set of embedding models.
 

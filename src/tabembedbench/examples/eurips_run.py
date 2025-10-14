@@ -28,10 +28,11 @@ logger = logging.getLogger("EuRIPS_Run_Benchmark")
 
 def get_embedding_models(debug=False):
     embedding_models = []
-    for n in range(3, 10):
-        sphere_model = SphereBasedEmbedding(embed_dim=2**n)
-        sphere_model.name = f"sphere-model-d{2**n}"
-        embedding_models.append(sphere_model)
+
+    # for n in range(5, 10):
+    #     sphere_model = SphereBasedEmbedding(embed_dim=2**n)
+    #     sphere_model.name = f"sphere-model-d{2**n}"
+    #     embedding_models.append(sphere_model)
 
     tabicl_with_preproccessing = TabICLEmbedding(preprocess_tabicl_data=True)
 
@@ -160,7 +161,9 @@ def run_main(debug, max_samples, max_features, run_outlier,
     )
 
     models_to_keep = outlier_result_df.get_column("embedding_model").unique().to_list()
+
     colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
+
     color_mapping = {
         model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
         for model, (r, g, b) in zip(models_to_keep, colors)
@@ -177,6 +180,7 @@ def run_main(debug, max_samples, max_features, run_outlier,
     color_mapping_small = {
         key: item for key, item in color_mapping.items() if key in models_to_keep
     }
+
     create_tabarena_plots(tabarena_result_df,
                           data_path=result_dir,
                           color_mapping=color_mapping_small,
@@ -190,7 +194,7 @@ def run_main(debug, max_samples, max_features, run_outlier,
 
 @click.command()
 @click.option('--debug', is_flag=True, help='Run in debug mode ')
-@click.option('--max-samples', default=100001, help='Upper bound for dataset '
+@click.option('--max-samples', default=15000, help='Upper bound for dataset '
                                                   'size')
 @click.option('--max-features', default=500, help='Upper bound for number of features')
 @click.option('--run-outlier/--no-run-outlier', default=True, help='Run outlier detection')
