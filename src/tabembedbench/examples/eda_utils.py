@@ -355,9 +355,12 @@ def create_dataset_performance_heatmaps(
         columns_to_select = ["dataset_name"] + available_columns
         pivoted_df = pivoted_df.select(columns_to_select)
 
-    heatmap_data = pivoted_df.to_pandas().set_index("dataset_name")
+    numeric_columns = [col for col in pivoted_df.columns if col != "dataset_name"]
+    pivoted_df = pivoted_df.with_columns([
+        pl.col(col).cast(pl.Float64, strict=False) for col in numeric_columns
+    ])
 
-    heatmap_data = heatmap_data.apply(pd.to_numeric, errors='coerce')
+    heatmap_data = pivoted_df.to_pandas().set_index("dataset_name")
 
     heatmap = sns.heatmap(
         data=heatmap_data,
@@ -491,7 +494,6 @@ def create_plots(
         logger.info(f"Processing binary classification with {algorithm}")
 
         descriptive_df = create_descriptive_dataframe(binary, "auc_score")
-        print(descriptive_df)
 
         descriptive_df.write_csv(
             Path(data_path / "binary_auc_score_descriptive.csv")
@@ -543,7 +545,6 @@ def create_plots(
                     f"{algorithm}_auc_score")
         descriptive_df = create_descriptive_dataframe(multiclass,
                                                       "auc_score")
-        print(descriptive_df)
 
         descriptive_df.write_csv(
             Path(data_path / "multiclass_auc_score_descriptive.csv")
@@ -594,7 +595,6 @@ def create_plots(
 
         descriptive_df = create_descriptive_dataframe(multiclass,
                                                       "log_loss_score")
-        print(descriptive_df)
 
         descriptive_df.write_csv(Path(data_path /
                                       "multiclass_log_loss_descriptive.csv"))
