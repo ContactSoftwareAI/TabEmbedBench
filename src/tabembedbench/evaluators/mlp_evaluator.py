@@ -377,7 +377,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
         Returns:
             str: The scoring metric name ('roc_auc').
         """
-        return "roc_auc"
+        return "neg_log_loss"
 
     def _get_model_predictions(self, model, embeddings: np.ndarray):
         """Get probability predictions from the model.
@@ -464,7 +464,6 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
             cv_folds=cv_folds,
             random_state=random_state,
             verbose=verbose,
-            direction="minimize",
         )
         self.device = device if device is not None else get_device()
         self.input_dim = None
@@ -564,7 +563,7 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
         Returns:
             str: The scoring metric name ('mean_squared_error').
         """
-        return "mean_squared_error"
+        return "neg_mean_squared_error"
 
     def _get_model_predictions(self, model, embeddings: np.ndarray):
         """Get predictions from the model.
