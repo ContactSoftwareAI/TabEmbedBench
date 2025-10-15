@@ -194,16 +194,6 @@ class TabArenaBenchmark(AbstractBenchmark):
                     repeat=repeat,
                 )
 
-                X_train = X.iloc[train_indices]
-                y_train = y.iloc[train_indices]
-                X_test = X.iloc[test_indices]
-                y_test = y.iloc[test_indices]
-
-                # Preprocess data
-                numerical_transformer = TransformToNumerical()
-                X_train = numerical_transformer.fit_transform(X_train)
-                X_test = numerical_transformer.transform(X_test)
-
                 # Encode labels for classification
                 if task.task_type == "Supervised Classification":
                     label_encoder = LabelEncoder()
@@ -211,16 +201,19 @@ class TabArenaBenchmark(AbstractBenchmark):
                     y_test = label_encoder.transform(y_test)
 
                 yield {
-                    "data": X_train,
+                    "data": X,
                     "dataset_name": dataset.name,
                     "dataset_size": X.shape[0],
                     "num_features": X.shape[1],
                     "task_type": task.task_type,
                     "embedding_kwargs": {
-                        "X_test": X_test,
                         "categorical_indices": categorical_indices,
+                        "train_indices": train_indices,
+                        "test_indices": test_indices,
                     },
                     "eval_kwargs": {
+                        "train_indices": train_indices,
+                        "test_indices": test_indices,
                         "y_train": y_train,
                         "y_test": y_test,
                         "task_type": task.task_type,
@@ -229,7 +222,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
     def _evaluate_embeddings(
         self,
-        embedding_results,
+        embeddings,
         evaluator: AbstractEvaluator,
         dataset_info: dict,
         **kwargs,
@@ -237,7 +230,8 @@ class TabArenaBenchmark(AbstractBenchmark):
         """Evaluate embeddings for classification or regression.
 
         Args:
-            embedding_results: Tuple of (train_embeddings, compute_time, test_embeddings, test_compute_time).
+            embeddings: Tuple of (train_embeddings, compute_time,
+            test_embeddings, test_compute_time).
             evaluator: The evaluator to use.
             dataset_info: Dictionary with dataset metadata.
             **kwargs: Additional parameters including 'y_train', 'y_test', and 'task_type'.
@@ -245,22 +239,26 @@ class TabArenaBenchmark(AbstractBenchmark):
         Returns:
             Dictionary containing evaluation results.
         """
-        train_embeddings = embedding_results[0]
-        test_embeddings = embedding_results[2]
+        train_indices = kwargs.get("train_indices")
+        test_indices = kwargs.get("test_indices")
+
+        X_train_embeddings = embeddings[train_indices]
+        X_test_embeddings = embeddings[test_indices]
+
         y_train = kwargs.get("y_train")
         y_test = kwargs.get("y_test")
         task_type = kwargs.get("task_type")
 
         # Train evaluator
         prediction_train, _ = evaluator.get_prediction(
-            train_embeddings,
+            X_train_embeddings,
             y_train,
             train=True,
         )
 
         # Get test predictions
         test_prediction, _ = evaluator.get_prediction(
-            test_embeddings,
+            X_test_embeddings,
             train=False,
         )
 

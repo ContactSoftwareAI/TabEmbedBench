@@ -162,7 +162,8 @@ class AbstractBenchmark(ABC):
         return False, None
 
     def _generate_embeddings(
-        self, embedding_model: AbstractEmbeddingGenerator, data, **kwargs
+        self, embedding_model: AbstractEmbeddingGenerator, prepared_data,
+            **kwargs
     ):
         """Generate embeddings using the provided model.
 
@@ -177,8 +178,10 @@ class AbstractBenchmark(ABC):
         Raises:
             Exception: If embedding generation fails.
         """
+        data = prepared_data["data"]
+        embedding_kwargs = prepared_data["embedding_kwargs"]
         try:
-            return embedding_model.generate_embeddings(data, **kwargs)
+            return embedding_model.generate_embeddings(data, **embedding_kwargs)
         except Exception as e:
             self.logger.exception(
                 f"Error computing embeddings with {embedding_model.name}: {e}"
@@ -249,8 +252,7 @@ class AbstractBenchmark(ABC):
         try:
             embedding_results = self._generate_embeddings(
                 embedding_model,
-                prepared_data_item["data"],
-                **prepared_data_item.get("embedding_kwargs", {}),
+                prepared_data_item,
             )
             embeddings = embedding_results[0]
             embed_dim = embeddings.shape[-1]
