@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 
 # Pfad zur Parquet-Datei
-path_to_data_file = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\results_TabArena_20250925_134113.parquet"
+path_to_data_file = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\results_TabArena_20251001_030811_fixed.parquet"
 
 
 def load_tabarena_results(file_path: str) -> pl.DataFrame:
@@ -32,11 +32,53 @@ def load_tabarena_results(file_path: str) -> pl.DataFrame:
         return None
 
 
+def create_balanced_tabarena_data(df: pl.DataFrame, metric_col: str):
+    """
+    Erstellt ausgewogene Daten für TabArena-Experimente, indem der beste Wert
+    über alle K-Nachbar-Werte pro Experiment genommen wird.
+    """
+    valid_data = df.filter(
+        pl.col(metric_col).is_not_null() &
+        (pl.col(metric_col) != np.inf) &
+        (pl.col(metric_col) != -np.inf)
+    )
+
+    if len(valid_data) == 0:
+        return valid_data
+
+    # Für jeden Experiment-Typ nehme den besten Wert über alle K-Nachbar-Werte
+    # Bestimme ob höhere oder niedrigere Werte besser sind basierend auf der Metrik
+    if metric_col == "auc_score":
+        # Für AUC: höhere Werte sind besser -> max()
+        agg_func = pl.col(metric_col).max()
+    else:
+        # Für log_loss und mape: niedrigere Werte sind besser -> min()
+        agg_func = pl.col(metric_col).min()
+
+    # Gruppiere nach experiment-definierenden Eigenschaften und nimm besten Wert
+    balanced_data = (
+        valid_data
+        .group_by([
+            "dataset_name",
+            "embedding_model",
+            "metric",
+            "task"
+        ])
+        .agg([
+            agg_func.alias(metric_col),
+            pl.col("time_to_compute_train_embedding").mean().alias("time_to_compute_train_embeddings"),
+            pl.col("embed_dim").first().alias("embedding_dimension"),
+            pl.col("dataset_size").first().alias("dataset_size"),
+            pl.col("num_neighbors").first().alias("num_neighbors"),  # Info über die beste K
+        ])
+    )
+
+    return balanced_data
+
+
 def separate_by_task_type(df: pl.DataFrame) -> dict:
     """Trennt die Daten nach Task-Typ und identifiziert die entsprechenden Metriken."""
     results = {}
-
-    # Identifiziere verfügbare Spalten für verschiedene Metriken
     columns = df.columns
 
     # Binary Classification (AUC)
@@ -47,8 +89,9 @@ def separate_by_task_type(df: pl.DataFrame) -> dict:
             (pl.col("auc_score") > 0)
         )
         if len(binary_class_data) > 0:
-            results["binary_classification"] = binary_class_data
-            print(f"Binary Classification Experimente (AUC): {len(binary_class_data)}")
+            balanced_binary = create_balanced_tabarena_data(binary_class_data, "auc_score")
+            results["binary_classification"] = balanced_binary
+            print(f"Binary Classification Experimente (AUC, balanced): {len(balanced_binary)}")
 
     # Multi-Class Classification (Log-Loss)
     if "log_loss_score" in columns:
@@ -58,8 +101,9 @@ def separate_by_task_type(df: pl.DataFrame) -> dict:
             (pl.col("log_loss_score") > 0)
         )
         if len(multi_class_data) > 0:
-            results["multi_class_classification"] = multi_class_data
-            print(f"Multi-Class Classification Experimente (Log-Loss): {len(multi_class_data)}")
+            balanced_multi = create_balanced_tabarena_data(multi_class_data, "log_loss_score")
+            results["multi_class_classification"] = balanced_multi
+            print(f"Multi-Class Classification Experimente (Log-Loss, balanced): {len(balanced_multi)}")
 
     # Regression (MAPE)
     if "mape_score" in columns:
@@ -69,31 +113,42 @@ def separate_by_task_type(df: pl.DataFrame) -> dict:
             (pl.col("mape_score") >= 0)
         )
         if len(regression_data) > 0:
-            results["regression"] = regression_data
-            print(f"Regression Experimente (MAPE): {len(regression_data)}")
+            balanced_regression = create_balanced_tabarena_data(regression_data, "mape_score")
+            results["regression"] = balanced_regression
+            print(f"Regression Experimente (MAPE, balanced): {len(balanced_regression)}")
 
     return results
 
 
-def create_detailed_boxplots(task_data: dict) -> dict:
-    """Erstellt detaillierte Boxplots für jeden Task-Typ."""
+def create_balanced_boxplots(task_data: dict, selected_models: list[str] = None
+) -> dict:
+    """Erstellt Boxplots basierend auf den besten K-Werten pro Experiment."""
     plots = {}
 
     for task_type, data in task_data.items():
+        # Filtere nach ausgewählten Modellen, falls angegeben
+        if selected_models is not None:
+            data = data.filter(pl.col("embedding_model").is_in(selected_models))
+
+            # Überprüfe, ob nach Filterung noch Daten vorhanden sind
+            if len(data) == 0:
+                print(f"Keine Daten für {task_type} mit den ausgewählten Modellen: {selected_models}")
+                continue
+
         # Bestimme Metrik
         if task_type == "binary_classification":
             metric_col = "auc_score"
-            title = "Binary Classification Performance (AUC Score)"
+            title = "Binary Classification Performance (beste AUC über K-Werte)"
         elif task_type == "multi_class_classification":
             metric_col = "log_loss_score"
-            title = "Multi-Class Classification Performance (Log-Loss)"
+            title = "Multi-Class Classification Performance (beste Log-Loss über K-Werte)"
         elif "regression" in task_type:
             if "mape_score" in data.columns:
                 metric_col = "mape_score"
-                title = "Regression Performance (MAPE Score)"
+                title = "Regression Performance (beste MAPE über K-Werte)"
             else:
                 metric_col = "mse_score"
-                title = "Regression Performance (MSE Score)"
+                title = "Regression Performance (beste MSE über K-Werte)"
 
         fig = px.box(
             data.to_pandas(),
@@ -102,7 +157,7 @@ def create_detailed_boxplots(task_data: dict) -> dict:
             color="embedding_model",
             title=title,
             points="outliers",
-            hover_data=["dataset_name"] if "dataset_name" in data.columns else None
+            hover_data=["dataset_name", "num_neighbors"] if "dataset_name" in data.columns else ["num_neighbors"]
         )
 
         fig.update_xaxes(tickangle=45)
@@ -115,6 +170,7 @@ def create_detailed_boxplots(task_data: dict) -> dict:
         plots[task_type] = fig
 
     return plots
+
 
 
 def create_dataset_performance_heatmaps(task_data: dict) -> dict:
@@ -232,15 +288,70 @@ def create_neighbors_effect_analysis(task_data: dict) -> dict:
     return neighbor_plots
 
 
-def generate_comprehensive_statistics(task_data: dict):
-    """Generiert umfassende Statistiken für alle Task-Typen."""
+# def generate_comprehensive_statistics(task_data: dict):
+#     """Generiert umfassende Statistiken für alle Task-Typen."""
+#     print("\n" + "=" * 80)
+#     print("EXPERIMENT ERGEBNISSE - COMPREHENSIVE OVERVIEW")
+#     print("=" * 80)
+#
+#     for task_type, data in task_data.items():
+#         print(f"\n--- {task_type.replace('_', ' ').upper()} ---")
+#         print(f"Anzahl Experimente: {len(data)}")
+#
+#         if "dataset_name" in data.columns:
+#             print(f"Anzahl Datensätze: {data['dataset_name'].n_unique()}")
+#
+#         print(f"Anzahl Embedding-Modelle: {data['embedding_model'].n_unique()}")
+#         print(f"Embedding-Modelle: {', '.join(data['embedding_model'].unique().to_list())}")
+#
+#         # Bestimme Metrik für Statistiken
+#         if task_type == "binary_classification":
+#             metric_col = "auc_score"
+#         elif task_type == "multi_class_classification":
+#             metric_col = "log_loss_score"
+#         elif "regression" in task_type:
+#             if "mape_score" in data.columns:
+#                 metric_col = "mape_score"
+#             else:
+#                 metric_col = "mse_score"
+#
+#         # Grundlegende Statistiken
+#         print(f"\n{metric_col.upper().replace('_', ' ')} Statistiken:")
+#         print(f"  Mittelwert: {data[metric_col].mean():.4f}")
+#         print(f"  Median: {data[metric_col].median():.4f}")
+#         print(f"  Min: {data[metric_col].min():.4f}")
+#         print(f"  Max: {data[metric_col].max():.4f}")
+#         print(f"  Std: {data[metric_col].std():.4f}")
+#
+#         # Performance pro Modell
+#         print(f"\nPerformance nach Embedding-Modell:")
+#         model_performance = (data
+#         .group_by("embedding_model")
+#         .agg([
+#             pl.col(metric_col).mean().alias("avg_score"),
+#             pl.col(metric_col).std().alias("std_score"),
+#             pl.col(metric_col).count().alias("num_experiments")
+#         ]))
+#
+#         # Sortiere basierend auf Metrik (AUC: absteigend, andere: aufsteigend)
+#         ascending = task_type != "binary_classification"
+#         model_performance = model_performance.sort("avg_score", descending=not ascending)
+#
+#         for row in model_performance.iter_rows(named=True):
+#             print(f"  {row['embedding_model']:<25}: "
+#                   f"{metric_col.upper()}={row['avg_score']:.4f}±{row['std_score']:.4f} "
+#                   f"({row['num_experiments']} experiments)")
+
+
+def generate_balanced_statistics(task_data: dict):
+    """Generiert Statistiken basierend auf den besten K-Werten pro Experiment."""
     print("\n" + "=" * 80)
-    print("EXPERIMENT ERGEBNISSE - COMPREHENSIVE OVERVIEW")
+    print("EXPERIMENT ERGEBNISSE - BALANCED OVERVIEW (BESTE K-WERTE)")
     print("=" * 80)
 
     for task_type, data in task_data.items():
-        print(f"\n--- {task_type.replace('_', ' ').upper()} ---")
-        print(f"Anzahl Experimente: {len(data)}")
+        print(f"\n--- {task_type.replace('_', ' ').upper()} (BALANCED) ---")
+        print(f"Anzahl Experimente (nach Balancing): {len(data)}")
 
         if "dataset_name" in data.columns:
             print(f"Anzahl Datensätze: {data['dataset_name'].n_unique()}")
@@ -260,7 +371,7 @@ def generate_comprehensive_statistics(task_data: dict):
                 metric_col = "mse_score"
 
         # Grundlegende Statistiken
-        print(f"\n{metric_col.upper().replace('_', ' ')} Statistiken:")
+        print(f"\n{metric_col.upper().replace('_', ' ')} Statistiken (balanced):")
         print(f"  Mittelwert: {data[metric_col].mean():.4f}")
         print(f"  Median: {data[metric_col].median():.4f}")
         print(f"  Min: {data[metric_col].min():.4f}")
@@ -268,13 +379,14 @@ def generate_comprehensive_statistics(task_data: dict):
         print(f"  Std: {data[metric_col].std():.4f}")
 
         # Performance pro Modell
-        print(f"\nPerformance nach Embedding-Modell:")
+        print(f"\nPerformance nach Embedding-Modell (balanced):")
         model_performance = (data
         .group_by("embedding_model")
         .agg([
             pl.col(metric_col).mean().alias("avg_score"),
             pl.col(metric_col).std().alias("std_score"),
-            pl.col(metric_col).count().alias("num_experiments")
+            pl.col(metric_col).count().alias("num_experiments"),
+            pl.col("num_neighbors").mean().alias("avg_best_k")
         ]))
 
         # Sortiere basierend auf Metrik (AUC: absteigend, andere: aufsteigend)
@@ -284,7 +396,7 @@ def generate_comprehensive_statistics(task_data: dict):
         for row in model_performance.iter_rows(named=True):
             print(f"  {row['embedding_model']:<25}: "
                   f"{metric_col.upper()}={row['avg_score']:.4f}±{row['std_score']:.4f} "
-                  f"({row['num_experiments']} experiments)")
+                  f"{row['num_experiments']} experiments)")
 
 
 def main():
@@ -297,14 +409,23 @@ def main():
     if data is None:
         return
 
-    # Separiere nach Task-Typ
-    task_data = separate_by_task_type(data)
-    if not task_data:
+    # Separiere nach Task-Typ (ursprünglich)
+    task_data_raw = separate_by_task_type(data)
+    # Separiere nach Task-Typ (balanced - beste K-Werte)
+    task_data_balanced = separate_by_task_type(data)
+
+    if not task_data_balanced:
         print("Keine gültigen Task-Daten gefunden!")
         return
 
-    # Generiere Statistiken
-    generate_comprehensive_statistics(task_data)
+    # Generiere Statistiken für balanced Daten
+    generate_balanced_statistics(task_data_balanced)
+
+    # # Optional: Auch Raw-Statistiken anzeigen
+    # print("\n" + "=" * 50)
+    # print("VERGLEICH: RAW vs BALANCED")
+    # print("=" * 50)
+    # generate_comprehensive_statistics(task_data_raw)
 
     print("\n" + "=" * 50)
     print("ERSTELLE VISUALISIERUNGEN...")
@@ -312,27 +433,27 @@ def main():
 
     plots_to_save = []
 
-
-    # 2. Detaillierte Boxplots
-    print("2. Erstelle detaillierte Boxplots...")
-    boxplot_figs = create_detailed_boxplots(task_data)
-    for task_type, fig in boxplot_figs.items():
+    selected_models = ["tabicl-classifier-v1.1-0506_preprocessed", "TabVectorizerEmbedding"]
+    # 1. Balanced Boxplots (beste K-Werte)
+    print("1. Erstelle balanced Boxplots (beste K-Werte)...")
+    balanced_boxplot_figs = create_balanced_boxplots(task_data_balanced, selected_models)
+    for task_type, fig in balanced_boxplot_figs.items():
         fig.show()
-        plots_to_save.append((fig, f"{task_type}_detailed_boxplot.html"))
+        plots_to_save.append((fig, f"{task_type}_balanced_boxplot.html"))
 
-    # 3. Dataset-Performance Heatmaps
-    print("3. Erstelle Dataset-Performance Heatmaps...")
-    heatmap_figs = create_dataset_performance_heatmaps(task_data)
-    for task_type, fig in heatmap_figs.items():
+    # 2. Balanced Dataset-Performance Heatmaps
+    print("2. Erstelle balanced Dataset-Performance Heatmaps...")
+    balanced_heatmap_figs = create_dataset_performance_heatmaps(task_data_balanced)
+    for task_type, fig in balanced_heatmap_figs.items():
         fig.show()
-        plots_to_save.append((fig, f"{task_type}_dataset_heatmap.html"))
+        plots_to_save.append((fig, f"{task_type}_balanced_heatmap.html"))
 
-    # 4. Nachbarn-Effekt Analyse
-    print("4. Erstelle K-Neighbors Effekt Analyse...")
-    neighbor_figs = create_neighbors_effect_analysis(task_data)
-    for task_type, fig in neighbor_figs.items():
-        fig.show()
-        plots_to_save.append((fig, f"{task_type}_neighbors_effect.html"))
+    # # 4. Nachbarn-Effekt Analyse (bleibt wie es ist)
+    # print("4. Erstelle K-Neighbors Effekt Analyse...")
+    # neighbor_figs = create_neighbors_effect_analysis(task_data_raw)
+    # for task_type, fig in neighbor_figs.items():
+    #     fig.show()
+    #     plots_to_save.append((fig, f"{task_type}_neighbors_effect.html"))
 
     # Speichere alle Plots
     output_dir = Path("experiment_visualizations")
@@ -351,9 +472,10 @@ def main():
 
     # Zusammenfassung
     print(f"\n📊 ZUSAMMENFASSUNG:")
-    print(f"   • {len(task_data)} Task-Typen analysiert")
-    total_experiments = sum(len(data) for data in task_data.values())
-    print(f"   • {total_experiments} Experimente insgesamt")
+    print(f"   • {len(task_data_balanced)} Task-Typen analysiert (balanced)")
+    total_balanced = sum(len(data) for data in task_data_balanced.values())
+    total_raw = sum(len(data) for data in task_data_raw.values())
+    print(f"   • {total_raw} Experimente roh → {total_balanced} Experimente balanced")
     print(f"   • {len(plots_to_save)} Visualisierungen erstellt")
 
 
