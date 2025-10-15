@@ -4,11 +4,62 @@ from pathlib import Path
 import numpy as np
 import plotly.io as pio  # Für PNG Export hinzufügen
 from datetime import datetime
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 # Pfad zur Parquet-Datei
 path_to_data_file = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\results_ADBench_Tabular_20251007_115000.parquet"
 save_path_to_balanced_file = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705"
+
+
+def setup_publication_style():
+    """Set up matplotlib/seaborn for publication-quality figures."""
+    sns.set_context("paper")
+    sns.set_style("whitegrid")
+
+    plt.rcParams["font.size"] = 10
+    plt.rcParams["axes.labelsize"] = 10
+    plt.rcParams["axes.titlesize"] = 11
+    plt.rcParams["xtick.labelsize"] = 9
+    plt.rcParams["ytick.labelsize"] = 9
+    plt.rcParams["legend.fontsize"] = 9
+
+
+def save_fig(ax, data_path: str, file_name: str):
+    """Save a matplotlib figure to a PDF file."""
+    setup_publication_style()
+    fig = ax.get_figure()
+
+    data_path = Path(data_path)
+    if not data_path.exists():
+        data_path.mkdir(parents=True)
+
+    file_name = Path(data_path / f"{file_name}.pdf")
+    fig.savefig(
+        file_name,
+        dpi=300,
+        bbox_inches="tight",
+        pad_inches=0.02,
+    )
+
+
+def get_models_to_keep():
+    """Gibt die Liste der umbenannten Modelle in der richtigen Reihenfolge zurück"""
+    return ["TabICL", "TabVectorizer", "TabPFN"]
+
+
+def create_color_mapping(models_to_keep: list[str]) -> dict[str, str]:
+    """Erstellt die gleiche Farbzuordnung wie in eda_utils.py"""
+    colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
+
+    color_mapping = {
+        model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+        for model, (r, g, b) in zip(models_to_keep, colors)
+    }
+
+    return color_mapping
+
 
 def load_benchmark_data(file_path: str) -> pl.DataFrame:
     """Lädt die Benchmark-Daten aus der Parquet-Datei."""
@@ -194,98 +245,115 @@ def create_balanced_algorithm_comparison_data(df: pl.DataFrame, score_col: str =
     return balanced_data
 
 
-def create_score_distribution_boxplot(df: pl.DataFrame, score_col: str = "auc_score"):
-    """Erstellt ein ausgewogenes Boxplot für die Verteilung der Scores nach Embedding-Modell."""
+def create_score_distribution_boxplot(
+    df: pl.DataFrame,
+    score_col: str = "auc_score",
+    embedding_model_palette: dict[str, str] | None = None,
+    embedding_model_order: list | None = None
+):
+    """Erstellt ein Boxplot mit Matplotlib/Seaborn Stil."""
+    setup_publication_style()
 
-    title = f"Distribution of {score_col} with respect to embedding model"
+    title = f"Distribution of AUC Score with respect to embedding model"
 
-    fig = px.box(
-        df.to_pandas(),
+    boxplot = sns.boxplot(
+        data=df,
         x="embedding_model",
         y=score_col,
-        color="embedding_model",
-        title=title,
-        points="outliers",
-        hover_data=["dataset_name", "algorithm", "algorithm_metric"]
+        hue="embedding_model",
+        palette=embedding_model_palette,
+        order=embedding_model_order
     )
 
-    fig.update_xaxes(tickangle=45)
-    fig.update_layout(showlegend=False, height=500)
-    return fig
+    boxplot.set_xlabel("Embedding Model")
+    boxplot.set_ylabel("AUC Score")
+    boxplot.set_title(title)
+    plt.setp(boxplot.get_xticklabels(), rotation=45, ha='right')
+
+    return boxplot
 
 
-def create_algorithm_comparison(df: pl.DataFrame, score_col: str = "auc_score"):
-    """Erstellt einen ausgewogenen Vergleich der verschiedenen Algorithmen."""
 
-    # Gruppierte Boxplots mit ausgewogenen Daten
-    fig = px.box(
-        df.to_pandas(),
+def create_algorithm_comparison(
+    df: pl.DataFrame,
+    score_col: str = "auc_score",
+    embedding_model_palette: dict[str, str] | None = None,
+    embedding_model_order: list | None = None
+):
+    """Erstellt einen Algorithmus-Vergleich mit Seaborn."""
+    setup_publication_style()
+
+    boxplot = sns.boxplot(
+        data=df,
         x="algorithm",
         y=score_col,
-        color="embedding_model",
-        title=f"Algorithmus-Vergleich: {score_col}",
-        hover_data=["dataset_name", "algorithm_metric"]
+        hue="embedding_model",
+        palette=embedding_model_palette,
+        hue_order=embedding_model_order
     )
 
-    fig.update_xaxes(tickangle=45)
-    fig.update_layout(height=600)
-    return fig
+    boxplot.set_xlabel("Algorithm")
+    boxplot.set_ylabel("AUC Score")
+    boxplot.set_title(f"Algorithm Comparison: AUC Score")
+    plt.setp(boxplot.get_xticklabels(), rotation=45, ha='right')
+
+    return boxplot
+
 
 
 def create_neighbors_effect_analysis(df: pl.DataFrame, score_col: str = "auc_score"):
-    """Analysiert den Effekt der Anzahl von Nachbarn auf die Performance."""
+    """Analysiert den Nachbarn-Effekt mit Seaborn."""
+    setup_publication_style()
+
     valid_data = df.filter(
         (pl.col(score_col) > -np.inf) &
         (pl.col(score_col) < np.inf) &
         pl.col(score_col).is_not_null() &
-        (pl.col("algorithm_n_neighbors") > 0)  # Filtere IsolationForest (algorithm_n_neighbors=0) heraus
+        (pl.col("algorithm_n_neighbors") > 0)
     )
 
-    # Berechne Durchschnittswerte pro Nachbaranzahl und Embedding-Modell
-    avg_scores = (valid_data
-                  .group_by(["algorithm_n_neighbors", "embedding_model"])
-                  .agg(pl.col(score_col).mean().alias(f"avg_{score_col}"))
-                  .sort(["embedding_model", "algorithm_n_neighbors"]))
-
-    fig = px.line(
-        avg_scores.to_pandas(),
+    lineplot = sns.lineplot(
+        data=valid_data,
         x="algorithm_n_neighbors",
-        y=f"avg_{score_col}",
-        color="embedding_model",
+        y=score_col,
+        hue="embedding_model",
         markers=True,
-        title=f"Durchschnittliche {score_col} nach Anzahl Nachbarn (LocalOutlierFactor)",
-        hover_data=["embedding_model"]
+        errorbar=None
     )
 
-    fig.update_layout(height=500)
-    return fig
+    lineplot.set_xlabel("Number of Neighbors (K)")
+    lineplot.set_ylabel(score_col)
+    lineplot.set_title(f"Averaged AUC Score with respect to Number of Neighbors (K)")
+    lineplot.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
+
+    return lineplot
 
 
-def create_dataset_difficulty_analysis(df: pl.DataFrame, score_col: str = "auc_score"):
-    """Analysiert die Schwierigkeit verschiedener Datensätze mit ausgewogenen Daten."""
-
-    # Berechne durchschnittliche Performance pro Datensatz
-    dataset_difficulty = (df
-                          .group_by("dataset_name")
-                          .agg([
-        pl.col(score_col).mean().alias(f"avg_{score_col}"),
-        pl.col("dataset_size").first().alias("size"),
-        pl.col("embed_dim").first().alias("features")
-    ])
-                          .sort(f"avg_{score_col}"))
-
-    fig = px.bar(
-        dataset_difficulty.to_pandas(),
-        x="dataset_name",
-        y=f"avg_{score_col}",
-        hover_data=["size", "features"],
-        title=f"Datensatz-Schwierigkeit (durchschnittliche {score_col}, ausgewogen)",
-        labels={"dataset_name": "Datensatz"}
-    )
-
-    fig.update_xaxes(tickangle=45)
-    fig.update_layout(height=600, xaxis_tickangle=45)
-    return fig
+# def create_dataset_difficulty_analysis(df: pl.DataFrame, score_col: str = "auc_score"):
+#     """Analysiert die Schwierigkeit verschiedener Datensätze mit ausgewogenen Daten."""
+#
+#     # Berechne durchschnittliche Performance pro Datensatz
+#     dataset_difficulty = (df
+#                           .group_by("dataset_name")
+#                           .agg([
+#         pl.col(score_col).mean().alias(f"avg_{score_col}"),
+#         pl.col("dataset_size").first().alias("size"),
+#         pl.col("embed_dim").first().alias("features")
+#     ])
+#                           .sort(f"avg_{score_col}"))
+#
+#     fig = px.bar(
+#         dataset_difficulty.to_pandas(),
+#         x="dataset_name",
+#         y=f"avg_{score_col}",
+#         hover_data=["size", "features"],
+#         title=f"Datensatz-Schwierigkeit (durchschnittliche {score_col}, ausgewogen)",
+#         labels={"dataset_name": "Datensatz"}
+#     )
+#
+#     fig.update_xaxes(tickangle=45)
+#     fig.update_layout(height=600, xaxis_tickangle=45)
+#     return fig
 
 
 def generate_summary_statistics(df: pl.DataFrame):
@@ -492,47 +560,41 @@ def main():
     # Zeige grundlegende Statistiken
     generate_summary_statistics(balanced_data)
 
+    # Definiere Modellreihenfolge und Farben
+    models_to_keep = ["TabICL", "TabVectorizer", "TabPFN"]  # Gleiche Reihenfolge wie in eda_utils.py
+    color_mapping = create_color_mapping(models_to_keep)
+
+    # Setze Publication Style
+    setup_publication_style()
+
     # Erstelle Visualisierungen
     print("\nErstelle Visualisierungen...")
 
-
     # 1. Score-Verteilungs-Boxplot
-    fig1 = create_score_distribution_boxplot(balanced_data, "auc_score")
-    fig1.show()
+    ax1 = create_score_distribution_boxplot(
+        balanced_data, "auc_score", embedding_model_palette=color_mapping,
+        embedding_model_order=models_to_keep
+    )
+    save_fig(ax1, "benchmark_visualizations", "score_distribution_boxplot")
+    plt.close()
 
-    # 4. Algorithmus-Vergleich
-    fig5 = create_algorithm_comparison(balanced_data, "auc_score")
-    fig5.show()
+    # 2. Algorithmus-Vergleich
+    ax2 = create_algorithm_comparison(
+        balanced_data, "auc_score",
+        embedding_model_palette=color_mapping,
+        embedding_model_order=models_to_keep
+    )
+    save_fig(ax2, "benchmark_visualizations", "algorithm_comparison")
+    plt.close()
 
-    # 6. Nachbarn-Effekt-Analyse
-    fig7 = create_neighbors_effect_analysis(data, "auc_score")
-    fig7.show()
+    ax3 = create_neighbors_effect_analysis(data, "auc_score")
+    save_fig(ax3, "benchmark_visualizations", "neighbors_effect_analysis")
+    plt.close()
+    #
+    # # 9. Datensatz-Schwierigkeit-Analyse
+    # fig10 = create_dataset_difficulty_analysis(balanced_data, "auc_score")
+    # fig10.show()
 
-    # 9. Datensatz-Schwierigkeit-Analyse
-    fig10 = create_dataset_difficulty_analysis(balanced_data, "auc_score")
-    fig10.show()
-
-    # Speichere die Plots als png (optional)
-    output_dir = Path("benchmark_visualizations")
-    output_dir.mkdir(exist_ok=True)
-
-    plots = [
-        (fig1, "score_distribution_boxplot.png"),
-        (fig5, "algorithm_comparison.png"),
-        (fig7, "neighbors_effect_analysis.png"),
-        (fig10, "dataset_difficulty_analysis.png")
-    ]
-
-    print(f"\nSpeichere Plots als PNG in {output_dir}...")
-    for fig, filename in plots:
-        try:
-            # Für Plotly-Figures verwenden wir pio.write_image()
-            pio.write_image(fig, output_dir / filename,
-                          width=1200, height=800, scale=2,  # scale=2 für hohe Qualität
-                          format='png')
-            print(f"  ✓ {filename}")
-        except Exception as e:
-            print(f"  ✗ Fehler beim Speichern von {filename}: {e}")
 
 print("Visualisierungen erfolgreich erstellt!")
 
