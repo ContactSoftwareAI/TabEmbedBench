@@ -254,9 +254,8 @@ class AbstractBenchmark(ABC):
                 embedding_model,
                 prepared_data_item,
             )
-            embeddings = embedding_results[0]
-            embed_dim = embeddings.shape[-1]
-            return embedding_results, embed_dim
+
+            return embedding_results
         except Exception as e:
             self.logger.exception(f"Error generating embeddings: {e}. Skipping.")
             # Add error row if dataset info is available
@@ -294,6 +293,8 @@ class AbstractBenchmark(ABC):
         self.logger.debug(f"Starting evaluation with {evaluator._name}...")
 
         try:
+            embeddings = embedding_results[0]
+            time_to_compute_embedding = embedding_results[1]
             # Prepare dataset info for evaluation
             dataset_info = {
                 "dataset_name": [prepared_data_item["dataset_name"]],
@@ -301,13 +302,13 @@ class AbstractBenchmark(ABC):
                 "num_features": [prepared_data_item["num_features"]],
                 "embedding_model": [embedding_model.name],
                 "embed_dim": [embed_dim],
-                "time_to_compute_train_embedding": [embedding_results[1]],
+                "time_to_compute_embedding": [time_to_compute_embedding],
                 "algorithm": [evaluator._name],
             }
 
             # Evaluate embeddings
             eval_results = self._evaluate_embeddings(
-                embedding_results,
+                embeddings,
                 evaluator,
                 dataset_info,
                 **prepared_data_item.get("eval_kwargs", {}),
@@ -351,7 +352,9 @@ class AbstractBenchmark(ABC):
         if result is None:
             return
 
-        embedding_results, embed_dim = result
+        embedding_results = result
+
+        embed_dim = embedding_results[0].shape[-1]
 
         # Evaluate with each evaluator
         for evaluator in evaluators:

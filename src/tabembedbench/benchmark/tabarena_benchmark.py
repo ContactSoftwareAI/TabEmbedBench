@@ -185,6 +185,8 @@ class TabArenaBenchmark(AbstractBenchmark):
                     target=task.target_name, dataset_format="dataframe"
                 )
 
+                X = X.values
+
                 categorical_indices = np.nonzero(categorical_indicator)[0]
                 categorical_indices = categorical_indices.tolist()
 
@@ -193,6 +195,10 @@ class TabArenaBenchmark(AbstractBenchmark):
                     fold=fold,
                     repeat=repeat,
                 )
+
+                y_train = y[train_indices]
+                y_test = y[test_indices]
+
 
                 # Encode labels for classification
                 if task.task_type == "Supervised Classification":

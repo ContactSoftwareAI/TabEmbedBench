@@ -152,7 +152,7 @@ class OutlierBenchmark(AbstractBenchmark):
 
     def _evaluate_embeddings(
         self,
-        embedding_results,
+        embeddings,
         evaluator: AbstractEvaluator,
         dataset_info: dict,
         **kwargs,
@@ -160,7 +160,8 @@ class OutlierBenchmark(AbstractBenchmark):
         """Evaluate embeddings for outlier detection.
 
         Args:
-            embedding_results: Tuple of (embeddings, compute_time, test_embeddings, test_compute_time).
+            embeddings: Tuple of (embeddings, compute_time, test_embeddings,
+            test_compute_time).
             evaluator: The evaluator to use.
             dataset_info: Dictionary with dataset metadata.
             **kwargs: Additional parameters including 'y' (labels) and 'outlier_ratio'.
@@ -168,7 +169,6 @@ class OutlierBenchmark(AbstractBenchmark):
         Returns:
             Dictionary containing evaluation results.
         """
-        embeddings = embedding_results[0]
         y = kwargs.get("y")
         outlier_ratio = kwargs.get("outlier_ratio")
 
