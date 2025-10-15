@@ -105,7 +105,7 @@ class DeepSVDDEvaluator(AbstractEvaluator):
         hidden_activation: str = "relu",
         output_activation: str = "sigmoid",
         optimizer: str = "adam",
-        epochs: int = 200,
+        epochs: int = 250,
         batch_size: int = 32,
         dropout_rate: float = 0.2,
         l2_regularizer: float = 0.1,

@@ -159,8 +159,12 @@ def run_main(debug, max_samples, max_features, run_outlier,
         run_task_specific=run_task_specific,
         logging_level=logging.DEBUG,
     )
-
-    models_to_keep = outlier_result_df.get_column("embedding_model").unique().to_list()
+    if run_outlier:
+        models_to_keep = outlier_result_df.get_column("embedding_model").unique().to_list()
+    elif run_task_specific:
+        models_to_keep = tabarena_result_df.get_column("embedding_model").unique().to_list()
+    else:
+        raise ValueError("No Benchmark was run.")
 
     colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
 
@@ -168,27 +172,31 @@ def run_main(debug, max_samples, max_features, run_outlier,
         model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
         for model, (r, g, b) in zip(models_to_keep, colors)
     }
-
-    result_sphere_dir = Path(result_dir / "sphere_included")
-    result_sphere_dir.mkdir(exist_ok=True)
-
-    create_tabarena_plots(tabarena_result_df, data_path=result_sphere_dir,
-                          color_mapping=color_mapping)
-    create_outlier_plots(outlier_result_df, data_path=result_sphere_dir, color_mapping=color_mapping)
+    #
+    # result_sphere_dir = Path(result_dir / "sphere_included")
+    # result_sphere_dir.mkdir(exist_ok=True)
+    #
+    # if run_outlier:
+    #     create_outlier_plots(outlier_result_df, data_path=result_sphere_dir, color_mapping=color_mapping)
+    # if run_task_specific:
+    #     create_tabarena_plots(
+    #         tabarena_result_df, data_path=result_sphere_dir, color_mapping=color_mapping
+    #     )
 
     models_to_keep = ["TabICL", "TabPFN", "TableVectorizer"]
     color_mapping_small = {
         key: item for key, item in color_mapping.items() if key in models_to_keep
     }
-
-    create_tabarena_plots(tabarena_result_df,
-                          data_path=result_dir,
-                          color_mapping=color_mapping_small,
-                          models_to_keep=models_to_keep)
-    create_outlier_plots(outlier_result_df,
-                         data_path=result_dir,
-                         color_mapping=color_mapping_small,
-                         models_to_keep=models_to_keep)
+    if run_task_specific:
+        create_tabarena_plots(tabarena_result_df,
+                              data_path=result_dir,
+                              color_mapping=color_mapping_small,
+                              models_to_keep=models_to_keep)
+    if run_outlier:
+        create_outlier_plots(outlier_result_df,
+                             data_path=result_dir,
+                             color_mapping=color_mapping_small,
+                             models_to_keep=models_to_keep)
 
 
 

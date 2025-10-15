@@ -96,6 +96,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         self.benchmark_suite = None
         self.task_ids = None
         self.run_tabpfn_subset = run_tabpfn_subset
+        self.len_tabpfn_subset = len(TABARENA_TABPFN_SUBSET)
 
     def _load_datasets(self, **kwargs):
         """Load TabArena tasks from OpenML.
@@ -148,10 +149,12 @@ class TabArenaBenchmark(AbstractBenchmark):
             if self.run_tabpfn_subset and task_id not in TABARENA_TABPFN_SUBSET:
                 should_skip, reason = True, f"{reason} Not a TabArena task"
             else:
+                self.len_tabpfn_subset -= 1
                 task = dataset_info["task"]
                 self.logger.info(
                     f"Starting experiments for dataset {dataset.name} "
-                    f"and task {task.task_type}"
+                    f"and task {task.task_type}. "
+                    f"There are {self.len_tabpfn_subset} datasets left. "
                 )
 
         return should_skip, reason
