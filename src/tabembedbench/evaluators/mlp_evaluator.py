@@ -375,9 +375,9 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
         """Return the scoring metric for classification.
 
         Returns:
-            str: The scoring metric name ('roc_auc').
+            str: The scoring metric name ('accuracy').
         """
-        return "neg_log_loss"
+        return "accuracy"
 
     def _get_model_predictions(self, model, embeddings: np.ndarray):
         """Get probability predictions from the model.
