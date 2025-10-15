@@ -1,6 +1,4 @@
 import logging
-from pathlib import Path
-import seaborn as sns
 import click
 
 from tabembedbench.benchmark.run_benchmark import run_benchmark
@@ -8,7 +6,7 @@ from tabembedbench.embedding_models import (
     TabICLEmbedding,
     TabVectorizerEmbedding,
     TabPFNEmbedding,
-    SphereBasedEmbedding
+    TabICLClusteringEmbedding
 )
 from tabembedbench.evaluators.classifier import KNNClassifierEvaluator
 from tabembedbench.evaluators.outlier import (
@@ -21,44 +19,44 @@ from tabembedbench.evaluators.mlp_evaluator import (
     MLPRegressorEvaluator
 )
 from tabembedbench.evaluators.regression import KNNRegressorEvaluator
-from tabembedbench.examples.eda_utils import create_tabarena_plots, create_outlier_plots
 
 logger = logging.getLogger("EuRIPS_Run_Benchmark")
 
 
-def get_embedding_models(debug=False):
-    embedding_models = []
-
-    # for n in range(5, 10):
-    #     sphere_model = SphereBasedEmbedding(embed_dim=2**n)
-    #     sphere_model.name = f"sphere-model-d{2**n}"
-    #     embedding_models.append(sphere_model)
-
-    tabicl_with_preproccessing = TabICLEmbedding(preprocess_tabicl_data=True)
+def get_embedding_models():
+    tabicl_with_preproccessing = TabICLEmbedding(
+        preprocess_tabicl_data=True,
+        split_train_data=False
+    )
 
     tabicl_with_preproccessing.name = "TabICL"
+
+    tabicl_split_train_data = TabICLEmbedding(
+        preprocess_tabicl_data=True,
+        split_train_data=True
+    )
+
+    tabicl_split_train_data.name = "TabICL2"
+
+    tabicl_clustering = TabICLClusteringEmbedding(
+        preprocess_tabicl_data=True,
+        num_samples_per_center=50,
+        random_state=42
+    )
 
     tablevector = TabVectorizerEmbedding()
     tablevector.name = "TableVectorizer"
 
     tabpfn_embedder = TabPFNEmbedding()
 
-    embedding_models.extend([
-        tablevector,
-        tabicl_with_preproccessing,
-        tabpfn_embedder
-    ])
+    embedding_models = [
+            tabicl_split_train_data,
+            tabicl_with_preproccessing,
+            tabpfn_embedder,
+            tablevector,
+    ]
 
-    if debug:
-        embedding_models = [tablevector, tabicl_with_preproccessing]
-        sphere_model = SphereBasedEmbedding(embed_dim=8)
-        sphere_model.name = "sphere-model-d8-debug"
-
-        embedding_models.append(sphere_model)
-
-        return embedding_models
-
-    return embedding_models
+    return embedding_models, [tabicl_clustering]
 
 def get_evaluators(debug=False):
     evaluator_algorithms = []
@@ -69,12 +67,6 @@ def get_evaluators(debug=False):
     if debug:
         evaluator_algorithms.extend(
             [
-                KNNRegressorEvaluator(
-                    num_neighbors=5, weights="uniform", metric="euclidean"
-                ),
-                KNNClassifierEvaluator(
-                    num_neighbors=5, weights="uniform", metric="euclidean"
-                ),
                 MLPClassifierEvaluator(n_trials=5, cv_folds=2, verbose=False),
                 MLPRegressorEvaluator(n_trials=5, cv_folds=2, verbose=False),
                 DeepSVDDEvaluator(),
@@ -137,66 +129,29 @@ def run_main(debug, max_samples, max_features, run_outlier,
              run_task_specific, adbench_dataset_path):
     if debug:
         logger.info("Running in DEBUG mode")
-        max_samples = 800
+        max_samples = 910
         max_features = 50
 
 
-    embedding_models = get_embedding_models(debug)
+    embedding_models, task_embedding_models = get_embedding_models()
 
     evaluators = get_evaluators(debug)
 
     logger.info(f"Using {len(embedding_models)} embedding model(s)")
     logger.info(f"Using {len(evaluators)} evaluator(s)")
 
-    outlier_result_df, tabarena_result_df, result_dir = run_benchmark(
+    run_benchmark(
         embedding_models=embedding_models,
         evaluator_algorithms=evaluators,
+        tabarena_specific_embedding_models=task_embedding_models,
         adbench_dataset_path=adbench_dataset_path,
-        exclude_adbench_datasets=["3_backdoor.npz"],
+        exclude_adbench_datasets=[],
         upper_bound_dataset_size= max_samples,
         upper_bound_num_features= max_features,
         run_outlier=run_outlier,
         run_task_specific=run_task_specific,
         logging_level=logging.DEBUG,
     )
-    if run_outlier:
-        models_to_keep = outlier_result_df.get_column("embedding_model").unique().to_list()
-    elif run_task_specific:
-        models_to_keep = tabarena_result_df.get_column("embedding_model").unique().to_list()
-    else:
-        raise ValueError("No Benchmark was run.")
-
-    colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
-
-    color_mapping = {
-        model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
-        for model, (r, g, b) in zip(models_to_keep, colors)
-    }
-    #
-    # result_sphere_dir = Path(result_dir / "sphere_included")
-    # result_sphere_dir.mkdir(exist_ok=True)
-    #
-    # if run_outlier:
-    #     create_outlier_plots(outlier_result_df, data_path=result_sphere_dir, color_mapping=color_mapping)
-    # if run_task_specific:
-    #     create_tabarena_plots(
-    #         tabarena_result_df, data_path=result_sphere_dir, color_mapping=color_mapping
-    #     )
-
-    models_to_keep = ["TabICL", "TabPFN", "TableVectorizer"]
-    color_mapping_small = {
-        key: item for key, item in color_mapping.items() if key in models_to_keep
-    }
-    if run_task_specific:
-        create_tabarena_plots(tabarena_result_df,
-                              data_path=result_dir,
-                              color_mapping=color_mapping_small,
-                              models_to_keep=models_to_keep)
-    if run_outlier:
-        create_outlier_plots(outlier_result_df,
-                             data_path=result_dir,
-                             color_mapping=color_mapping_small,
-                             models_to_keep=models_to_keep)
 
 
 
