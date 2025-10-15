@@ -1,6 +1,7 @@
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 import polars as pl
 from skrub import TableVectorizer
 from tabicl.sklearn.preprocessing import TransformToNumerical
@@ -34,7 +35,7 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
 
         self.tablevectorizer = TableVectorizer(**kwargs)
 
-    def _preprocess_data(self, X, train=True, **kwargs):
+    def _preprocess_data(self, X, train=True, outlier: bool = False, **kwargs):
         """Preprocess input data by converting to Polars DataFrame.
 
         Args:
@@ -45,15 +46,39 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
         Returns:
             pl.DataFrame: Input data converted to Polars DataFrame format.
         """
-        X = TransformToNumerical().fit_transform(X)
-        X = pl.from_numpy(X)
-        return X
+        numerical_transformer = TransformToNumerical()
+
+        if outlier:
+            X_preprocessed = numerical_transformer.fit_transform(X)
+        else:
+            train_indices = kwargs.get("train_indices")
+            test_indices = kwargs.get("test_indices")
+            if isinstance(X, pd.DataFrame):
+                X_train = X.iloc[train_indices]
+                X_test = X.iloc[test_indices]
+
+                X_train = numerical_transformer.fit_transform(X_train)
+                X_test = numerical_transformer.transform(X_test)
+            else:
+                X_train = X[train_indices]
+                X_test = X[test_indices]
+
+                X_train = numerical_transformer.fit_transform(X_train)
+                X_test = numerical_transformer.transform(X_test)
+
+            X_preprocessed = np.empty(X.values.shape, dtype=np.float64)
+
+            X_preprocessed[train_indices] = X_train
+            X_preprocessed[test_indices] = X_test
+
+        return X_preprocessed
 
     def _fit_model(
         self,
         X_preprocessed: np.ndarray,
         y_preprocessed: Optional[np.ndarray] = None,
         train: bool = True,
+        outlier: bool = False,
         **kwargs,
     ):
         """Fit the TableVectorizer to the preprocessed data.
@@ -65,11 +90,25 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
             train (bool, optional): Whether to fit the model. Defaults to True.
             **kwargs: Additional keyword arguments (unused).
         """
-        if train:
+        train_indices = kwargs.get("train_indices")
+
+        if outlier:
+            X_preprocessed = pl.from_numpy(X_preprocessed)
             self.tablevectorizer.fit(X_preprocessed)
             self._is_fitted = True
+            return
+        if train:
+            X_train = X_preprocessed[train_indices]
+            X_train = pl.from_numpy(X_train)
+            self.tablevectorizer.fit(X_train)
+            self._is_fitted = True
 
-    def _compute_embeddings(self, X: np.ndarray, **kwargs) -> np.ndarray:
+    def _compute_embeddings(
+            self,
+            X_preprocessed: np.ndarray,
+            outlier: bool = False,
+            **kwargs
+    ):
         """Compute embeddings using the fitted TableVectorizer.
 
         Args:
@@ -82,10 +121,22 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
         Raises:
             ValueError: If the model has not been fitted.
         """
-        if self._is_fitted:
-            embeddings = self.tablevectorizer.transform(X)
+        if outlier:
+            X_preprocessed = pl.from_numpy(X_preprocessed)
 
-            return embeddings.to_numpy()
+            embeddings = self.tablevectorizer.transform(X_preprocessed)
+            return embeddings.to_numpy(), None
+        if self._is_fitted:
+            train_indices = kwargs.get("train_indices")
+            test_indices = kwargs.get("test_indices")
+
+            X_train = pl.from_numpy(X_preprocessed[train_indices])
+            X_test = pl.from_numpy(X_preprocessed[test_indices])
+
+            embeddings_train = self.tablevectorizer.transform(X_train)
+            embeddings_test = self.tablevectorizer.transform(X_test)
+
+            return embeddings_train.to_numpy(), embeddings_test.to_numpy()
         else:
             raise ValueError("Model is not fitted.")
 

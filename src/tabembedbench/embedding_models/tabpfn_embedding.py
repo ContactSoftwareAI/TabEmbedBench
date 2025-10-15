@@ -1,6 +1,8 @@
 import logging
+import warnings
 
 import numpy as np
+import pandas as pd
 import torch
 from tabpfn import TabPFNClassifier, TabPFNRegressor
 from tabpfn_extensions.utils import infer_categorical_features
@@ -95,7 +97,59 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         Returns:
             torch.Tensor: Preprocessed data as a float tensor on the specified device.
         """
-        X = TransformToNumerical().fit_transform(X)
+        numerical_transformer = TransformToNumerical()
+        if outlier:
+            X_preprocessed = numerical_transformer.fit_transform(X)
+        else:
+            train_indices = kwargs.get("train_indices")
+            test_indices = kwargs.get("test_indices")
+
+            if isinstance(X, pd.DataFrame):
+                X_train = X.iloc[train_indices]
+                X_test = X.iloc[test_indices]
+
+                X_train = numerical_transformer.fit_transform(X_train)
+                X_test = numerical_transformer.transform(X_test)
+            else:
+                X_train = X[train_indices]
+                X_test = X[test_indices]
+
+                X_train = numerical_transformer.fit_transform(X_train)
+                X_test = numerical_transformer.transform(X_test)
+
+            X_preprocessed = np.empty(X.values.shape, dtype=np.float64)
+
+            X_preprocessed[train_indices] = X_train
+            X_preprocessed[test_indices] = X_test
+
+        X_preprocessed = self._handle_constant_features(X_preprocessed)
+
+        return X_preprocessed.astype(np.float64)
+
+    def _handle_constant_features(self, X: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+        """Handle constant features by adding small noise to avoid numerical issues.
+
+        Args:
+            X (np.ndarray): Input data matrix.
+            eps (float): Small epsilon value to add to constant features.
+
+        Returns:
+            np.ndarray: Data with constant features handled.
+        """
+        X = X.copy()
+
+        # Check for constant columns (zero variance)
+        feature_std = np.std(X, axis=0)
+        constant_mask = feature_std < eps
+
+        if np.any(constant_mask):
+            self._logger.warning(
+                f"Found {np.sum(constant_mask)} constant feature(s). "
+                f"Adding small noise to avoid numerical issues."
+            )
+            # Add very small random noise to constant columns
+            for col_idx in np.where(constant_mask)[0]:
+                X[:, col_idx] += np.random.normal(0, eps, size=X.shape[0])
 
         return X
 
@@ -136,8 +190,9 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
     def _compute_embeddings(
         self,
         X_preprocessed: np.ndarray,
+        outlier: bool = False,
         **kwargs,
-    ) -> np.ndarray:
+    ):
         """Compute embeddings using TabPFN models.
 
         For each feature column, this method:
@@ -166,79 +221,83 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
             This method creates fresh TabPFN models for each feature to avoid
             interference between different prediction tasks.
         """
-        num_samples = X_preprocessed.shape[0]
+        if outlier:
+            X_embeddings = self._compute_internal_embeddings(
+                X_preprocessed)
+
+            return X_embeddings, None
+        else:
+            train_indices = kwargs.get("train_indices")
+            test_indices = kwargs.get("test_indices")
+            X_train = X_preprocessed[train_indices]
+
+            X_train_embeddings = self._compute_internal_embeddings(X_train)
+
+            X_embeddings = self._compute_internal_embeddings(X_preprocessed)
+
+            X_test_embeddings = X_embeddings[test_indices]
+
+            return X_train_embeddings, X_test_embeddings
+
+    def _compute_internal_embeddings(self, X):
+        num_samples = X.shape[0]
         tmp_embeddings = []
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            for column_idx in range(X.shape[1]):
+                # Create mask for the current column
+                mask = np.zeros_like(X, dtype=bool)
+                mask[:, column_idx] = True
 
-        for column_idx in range(X_preprocessed.shape[1]):
-            # Create mask for the current column
-            mask = np.zeros_like(X_preprocessed, dtype=bool)
-            mask[:, column_idx] = True
+                # Extract features (all columns except current) and target (current column)
+                features = X[~mask].reshape(num_samples, -1)
+                target = X[mask]
 
-            # Extract features (all columns except current) and target (current column)
-            features = X_preprocessed[~mask].reshape(num_samples, -1)
-            target = X_preprocessed[mask]
+                model = (
+                    self.tabpfn_clf
+                    if column_idx in self.categorical_indices
+                    else self.tabpfn_reg
+                )
 
-            model = (
-                self.tabpfn_clf
-                if column_idx in self.categorical_indices
-                else self.tabpfn_reg
-            )
-
-            try:
-                model.fit(features, target)
-            except ValueError as e:
-                # If a column is marked as categorical but has continuous values,
-                # fall back to using the regression model
-                if "Unknown label type: continuous" in str(e):
-                    self._logger.warning(
-                        f"Using regression model for column {column_idx} due "
-                        f"to the error: "
-                        f"{str(e)}."
-                    )
-                    model = self.tabpfn_reg
+                try:
                     model.fit(features, target)
-                elif "Number of classes" in str(e) and ("exceeds the maximal "
-                                                            "number" in str(e)):
-                    self._logger.warning(
-                        f"Using many class classifier for column {column_idx} "
-                        f"due to the error: "
-                        f"{str(e)}."
-                    )
+                except ValueError as e:
+                    # If a column is marked as categorical but has continuous values,
+                    # fall back to using the regression model
+                    if "Unknown label type: continuous" in str(e):
+                        self._logger.warning(
+                            f"Using regression model for column {column_idx} due "
+                            f"to the error: "
+                            f"{str(e)}."
+                        )
+                        model = self.tabpfn_reg
+                        model.fit(features, target)
+                    elif "Number of classes" in str(e) and ("exceeds the maximal "
+                                                                "number" in str(e)):
+                        self._logger.warning(
+                            f"Using regression model for column {column_idx} "
+                            f"due to the error: "
+                            f"{str(e)}."
+                        )
+                        model = self.tabpfn_reg
 
-                    n_classes = len(np.unique(target))
+                        model.fit(features, target)
+                    else:
+                        raise ValueError("Can't fit TabPFN model.")
 
-                    calculated_estimators = max(10, int(np.ceil(n_classes / 5)))
-                    many_class_estimators = max(self.num_estimators,
-                                                calculated_estimators)
-                    self._logger.warning(
-                        f"Using many class classifier for column {column_idx} "
-                        f"with {n_classes} classes and {many_class_estimators} estimators "
-                        f"due to the error: {str(e)}."
-                    )
+                estimator_embeddings = model.get_embeddings(features)
 
-                    model = ManyClassClassifier(
-                        estimator=TabPFNClassifier(**self._init_tabpfn_configs),
-                        alphabet_size=10,
-                        n_estimators=many_class_estimators,
-                        n_estimators_redundancy=3,  # Add redundancy for better coverage
-                    )
-                    model.fit(features, target)
+                if self.num_estimators > 1:
+                    if self.estimator_agg == "mean":
+                        estimator_embeddings = np.mean(estimator_embeddings, axis=0)
+                    elif self.estimator_agg == "first_element":
+                        estimator_embeddings = np.squeeze(estimator_embeddings[0, :])
+                    else:
+                        raise NotImplementedError
                 else:
-                    raise ValueError("Can't fit TabPFN model.")
+                    estimator_embeddings = np.squeeze(estimator_embeddings)
 
-            estimator_embeddings = model.get_embeddings(features)
-
-            if self.num_estimators > 1:
-                if self.estimator_agg == "mean":
-                    estimator_embeddings = np.mean(estimator_embeddings, axis=0)
-                elif self.estimator_agg == "first_element":
-                    estimator_embeddings = np.squeeze(estimator_embeddings[0, :])
-                else:
-                    raise NotImplementedError
-            else:
-                estimator_embeddings = np.squeeze(estimator_embeddings)
-
-            tmp_embeddings += [estimator_embeddings]
+                tmp_embeddings += [estimator_embeddings]
 
         concat_embeddings = np.concatenate(tmp_embeddings, axis=1).reshape(
             tmp_embeddings[0].shape[0], -1

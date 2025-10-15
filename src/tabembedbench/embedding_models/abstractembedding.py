@@ -207,10 +207,9 @@ class AbstractEmbeddingGenerator(ABC):
     def generate_embeddings(
         self,
         X_train: np.ndarray,
-        X_test: np.ndarray = None,
         outlier: bool = False,
         **kwargs,
-    ) -> tuple:
+    ):
         """Generates embeddings for the given training and optional testing
         data.
 
@@ -244,34 +243,23 @@ class AbstractEmbeddingGenerator(ABC):
             X_train, train=True, outlier=outlier, **kwargs
         )
 
-        self._fit_model(X_train_preprocessed, **kwargs)
+        self._fit_model(X_train_preprocessed, outlier=outlier, **kwargs)
 
         start_time = time.time()
-        train_embeddings = self._compute_embeddings(X_train_preprocessed, **kwargs)
+        train_embeddings, test_embeddings = self._compute_embeddings(
+            X_train_preprocessed, outlier=outlier, **kwargs)
         compute_embeddings_time = time.time() - start_time
 
         if not self._validate_embeddings(train_embeddings):
-            raise ValueError("Embeddings contain NaN values.")
-
-        if X_test is not None:
-            X_test = self._preprocess_data(X_test, train=False)
-
-            start_test_time = time.time()
-            test_embeddings = self._compute_embeddings(X_test, **kwargs)
-            compute_test_embeddings_time = time.time() - start_test_time
-
+            raise ValueError("Train Embeddings contain NaN values.")
+        if test_embeddings is not None:
             if not self._validate_embeddings(test_embeddings):
-                raise ValueError("Embeddings contain NaN values.")
-
-        else:
-            test_embeddings = None
-            compute_test_embeddings_time = None
+                raise ValueError("Test Embeddings contain NaN values.")
 
         self._reset_embedding_model()
 
         return (
             train_embeddings,
-            compute_embeddings_time,
             test_embeddings,
-            compute_test_embeddings_time,
+            compute_embeddings_time,
         )
