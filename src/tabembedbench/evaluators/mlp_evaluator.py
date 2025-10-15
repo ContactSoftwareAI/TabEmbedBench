@@ -46,6 +46,7 @@ class PyTorchMLPWrapper(BaseEstimator):
         task_type: str = "classification",
         device: Optional[str] = None,
         early_stopping_patience: int = 10,
+        log_interval: int = 1,
     ):
         """Initialize the PyTorchMLPWrapper.
 
@@ -74,10 +75,12 @@ class PyTorchMLPWrapper(BaseEstimator):
         self.task_type = task_type
         self.device = device if device is not None else get_device()
         self.early_stopping_patience = early_stopping_patience
+        self.log_interval = log_interval
 
         self.model = None
         self.scaler = StandardScaler()
         self.is_fitted_ = False
+        self.loss_history_ = []
 
     def _build_model(self):
         """Build the PyTorch MLP model.
@@ -163,6 +166,12 @@ class PyTorchMLPWrapper(BaseEstimator):
                 epoch_loss += loss.item()
 
             avg_loss = epoch_loss / len(dataloader)
+
+            if epoch % self.log_interval == 0 or epoch == self.epochs - 1:
+                self.loss_history_.append({
+                    "epoch": epoch,
+                    "loss": avg_loss
+                })
 
             # Early stopping
             if avg_loss < best_loss:
