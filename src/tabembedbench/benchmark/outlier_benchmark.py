@@ -147,12 +147,13 @@ class OutlierBenchmark(AbstractBenchmark):
             "num_features": num_features,
             "outlier_ratio": outlier_ratio,
             "embedding_kwargs": {"outlier": True},
-            "eval_kwargs": {"y": y, "outlier_ratio": outlier_ratio},
+            "eval_kwargs": {"y": y, "outlier_ratio": outlier_ratio,
+                            "outlier": True},
         }
 
     def _evaluate_embeddings(
         self,
-        embeddings,
+        embedding_results,
         evaluator: AbstractEvaluator,
         dataset_info: dict,
         **kwargs,
@@ -160,8 +161,7 @@ class OutlierBenchmark(AbstractBenchmark):
         """Evaluate embeddings for outlier detection.
 
         Args:
-            embeddings: Tuple of (embeddings, compute_time, test_embeddings,
-            test_compute_time).
+            embeddings: Tuple of (embeddings, test_embeddings, compute_time).
             evaluator: The evaluator to use.
             dataset_info: Dictionary with dataset metadata.
             **kwargs: Additional parameters including 'y' (labels) and 'outlier_ratio'.
@@ -171,6 +171,8 @@ class OutlierBenchmark(AbstractBenchmark):
         """
         y = kwargs.get("y")
         outlier_ratio = kwargs.get("outlier_ratio")
+
+        embeddings = embedding_results[0]
 
         # Get prediction from evaluator
         prediction, _ = evaluator.get_prediction(embeddings)
@@ -207,6 +209,9 @@ class OutlierBenchmark(AbstractBenchmark):
             True if evaluator supports outlier detection.
         """
         return evaluator.task_type == "Outlier Detection"
+
+    def check_if_outlier(self) -> bool:
+        return True
 
 
 def run_outlier_benchmark(

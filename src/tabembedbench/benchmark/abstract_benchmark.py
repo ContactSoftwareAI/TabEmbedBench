@@ -162,8 +162,10 @@ class AbstractBenchmark(ABC):
         return False, None
 
     def _generate_embeddings(
-        self, embedding_model: AbstractEmbeddingGenerator, prepared_data,
-            **kwargs
+        self,
+        embedding_model: AbstractEmbeddingGenerator,
+        prepared_data,
+        **kwargs
     ):
         """Generate embeddings using the provided model.
 
@@ -181,7 +183,10 @@ class AbstractBenchmark(ABC):
         data = prepared_data["data"]
         embedding_kwargs = prepared_data["embedding_kwargs"]
         try:
-            return embedding_model.generate_embeddings(data, **embedding_kwargs)
+            return embedding_model.generate_embeddings(
+                data,
+                **embedding_kwargs
+            )
         except Exception as e:
             self.logger.exception(
                 f"Error computing embeddings with {embedding_model.name}: {e}"
@@ -200,8 +205,17 @@ class AbstractBenchmark(ABC):
     def _save_results(self):
         """Save the current results to disk if enabled."""
         if self.save_result_dataframe and not self.result_df.is_empty():
+            non_algo_cols = [
+                col for col in self.result_df.columns if not col.startswith("algorithm")
+            ]
+            algo_cols = [
+                col for col in self.result_df.columns if col.startswith("algorithm")
+            ]
+
+            sorted_df = self.result_df.select(non_algo_cols + algo_cols)
+
             save_result_df(
-                result_df=self.result_df,
+                result_df=sorted_df,
                 output_path=self.result_dir,
                 benchmark_name=self._get_benchmark_name(),
                 timestamp=self.timestamp,
@@ -238,7 +252,7 @@ class AbstractBenchmark(ABC):
     def _process_embedding_generation(
         self,
         embedding_model: AbstractEmbeddingGenerator,
-        prepared_data_item: dict
+        prepared_data_item: dict,
     ) -> tuple | None:
         """Generate embeddings for a prepared data item.
 
@@ -253,6 +267,7 @@ class AbstractBenchmark(ABC):
             embedding_results = self._generate_embeddings(
                 embedding_model,
                 prepared_data_item,
+                **prepared_data_item.get("embedding_kwargs", {}),
             )
 
             return embedding_results
@@ -293,8 +308,7 @@ class AbstractBenchmark(ABC):
         self.logger.debug(f"Starting evaluation with {evaluator._name}...")
 
         try:
-            embeddings = embedding_results[0]
-            time_to_compute_embedding = embedding_results[1]
+            time_to_compute_embedding = embedding_results[-1]
             # Prepare dataset info for evaluation
             dataset_info = {
                 "dataset_name": [prepared_data_item["dataset_name"]],
@@ -308,7 +322,7 @@ class AbstractBenchmark(ABC):
 
             # Evaluate embeddings
             eval_results = self._evaluate_embeddings(
-                embeddings,
+                embedding_results,
                 evaluator,
                 dataset_info,
                 **prepared_data_item.get("eval_kwargs", {}),
@@ -348,11 +362,12 @@ class AbstractBenchmark(ABC):
         self.logger.info(f"Starting experiment for {embedding_model.name}...")
 
         # Generate embeddings
-        result = self._process_embedding_generation(embedding_model, prepared_data_item)
-        if result is None:
+        embedding_results = self._process_embedding_generation(
+            embedding_model,
+            prepared_data_item,
+        )
+        if embedding_results is None:
             return
-
-        embedding_results = result
 
         embed_dim = embedding_results[0].shape[-1]
 
@@ -436,11 +451,22 @@ class AbstractBenchmark(ABC):
         """
         datasets = self._load_datasets(**kwargs)
 
+        outlier = self.check_if_outlier()
+
         for dataset in datasets:
-            self._process_dataset(dataset, embedding_models, evaluators, **kwargs)
+            self._process_dataset(
+                dataset,
+                embedding_models,
+                evaluators,
+                outlier=outlier,
+                **kwargs)
 
         self.logger.info(f"{self._get_benchmark_name()} benchmark completed.")
         return self.result_df
+
+    @abstractmethod
+    def check_if_outlier(self) -> bool:
+        pass
 
     def _is_evaluator_compatible(self, evaluator: AbstractEvaluator, **kwargs) -> bool:
         """Check if evaluator is compatible with the current benchmark.

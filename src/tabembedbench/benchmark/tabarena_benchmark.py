@@ -185,8 +185,6 @@ class TabArenaBenchmark(AbstractBenchmark):
                     target=task.target_name, dataset_format="dataframe"
                 )
 
-                X = X.values
-
                 categorical_indices = np.nonzero(categorical_indicator)[0]
                 categorical_indices = categorical_indices.tolist()
 
@@ -228,7 +226,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
     def _evaluate_embeddings(
         self,
-        embeddings,
+        embedding_results,
         evaluator: AbstractEvaluator,
         dataset_info: dict,
         **kwargs,
@@ -236,8 +234,8 @@ class TabArenaBenchmark(AbstractBenchmark):
         """Evaluate embeddings for classification or regression.
 
         Args:
-            embeddings: Tuple of (train_embeddings, compute_time,
-            test_embeddings, test_compute_time).
+            embeddings: Tuple of (train_embeddings, test_embeddings,
+            compute_time).
             evaluator: The evaluator to use.
             dataset_info: Dictionary with dataset metadata.
             **kwargs: Additional parameters including 'y_train', 'y_test', and 'task_type'.
@@ -245,11 +243,9 @@ class TabArenaBenchmark(AbstractBenchmark):
         Returns:
             Dictionary containing evaluation results.
         """
-        train_indices = kwargs.get("train_indices")
-        test_indices = kwargs.get("test_indices")
 
-        X_train_embeddings = embeddings[train_indices]
-        X_test_embeddings = embeddings[test_indices]
+        X_train_embeddings = embedding_results[0]
+        X_test_embeddings = embedding_results[1]
 
         y_train = kwargs.get("y_train")
         y_test = kwargs.get("y_test")
@@ -343,6 +339,9 @@ class TabArenaBenchmark(AbstractBenchmark):
             tabarena_repeats = 3
 
         return folds, tabarena_repeats
+
+    def check_if_outlier(self) -> bool:
+        return False
 
 
 def run_tabarena_benchmark(

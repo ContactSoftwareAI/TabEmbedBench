@@ -140,8 +140,10 @@ def run_benchmark(
 
     if tabarena_specific_embedding_models is not None:
         tabarena_models_to_process = validate_embedding_models(
-            validate_embedding_models
+            tabarena_specific_embedding_models
         )
+    else:
+        tabarena_models_to_process = []
 
     evaluators_to_use = validate_evaluator_models(evaluator_algorithms)
 
@@ -173,9 +175,7 @@ def run_benchmark(
         result_outlier_df = pl.DataFrame()
     if run_task_specific:
         main_logger.info("Running task-specific benchmark (TabArena Lite)...")
-        embedding_models_to_process = models_to_process.extend(
-            tabarena_models_to_process
-        )
+        embedding_models_to_process = tabarena_models_to_process + models_to_process
         try:
             with benchmark_context(models_to_process, main_logger, "TabArena Lite"):
                 result_tabarena_df = run_tabarena_benchmark(
