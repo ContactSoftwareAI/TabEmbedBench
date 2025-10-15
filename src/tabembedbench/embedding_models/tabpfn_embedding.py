@@ -72,11 +72,6 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
 
         self.tabpfn_clf = TabPFNClassifier(**self._init_tabpfn_configs)
         self.tabpfn_reg = TabPFNRegressor(**self._init_tabpfn_configs)
-        self.many_classifier = ManyClassClassifier(
-            estimator=self.tabpfn_clf,
-            alphabet_size=10,
-            n_estimators=self.num_estimators,  # Number of subproblems to create
-        )
 
         self._is_fitted = False
 
@@ -206,7 +201,24 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
                         f"due to the error: "
                         f"{str(e)}."
                     )
-                    model = self.many_classifier
+
+                    n_classes = len(np.unique(target))
+
+                    calculated_estimators = max(10, int(np.ceil(n_classes / 5)))
+                    many_class_estimators = max(self.num_estimators,
+                                                calculated_estimators)
+                    self._logger.warning(
+                        f"Using many class classifier for column {column_idx} "
+                        f"with {n_classes} classes and {many_class_estimators} estimators "
+                        f"due to the error: {str(e)}."
+                    )
+
+                    model = ManyClassClassifier(
+                        estimator=TabPFNClassifier(**self._init_tabpfn_configs),
+                        alphabet_size=10,
+                        n_estimators=many_class_estimators,
+                        n_estimators_redundancy=3,  # Add redundancy for better coverage
+                    )
                     model.fit(features, target)
                 else:
                     raise ValueError("Can't fit TabPFN model.")
