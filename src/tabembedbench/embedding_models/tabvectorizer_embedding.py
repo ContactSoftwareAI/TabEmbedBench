@@ -3,6 +3,7 @@ from typing import Optional
 import numpy as np
 import polars as pl
 from skrub import TableVectorizer
+from tabicl.sklearn.preprocessing import TransformToNumerical
 
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 
@@ -44,8 +45,8 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
         Returns:
             pl.DataFrame: Input data converted to Polars DataFrame format.
         """
+        X = TransformToNumerical().fit_transform(X)
         X = pl.from_numpy(X)
-
         return X
 
     def _fit_model(

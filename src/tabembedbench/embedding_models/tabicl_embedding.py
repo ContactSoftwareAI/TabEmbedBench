@@ -23,6 +23,7 @@ from tabicl.sklearn.preprocessing import (
     CustomStandardScaler,
     PreprocessingPipeline,
     RTDLQuantileTransformer,
+    TransformToNumerical
 )
 from torch import nn
 
@@ -140,7 +141,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         model_path: str | None = None,
         normalize_embeddings: bool = False,
         preprocess_tabicl_data: bool = False,
-        tabvectorizer_preprocess: bool = False,
+        split_train_data: bool = False
     ):
         """Initialize the TabICL embedding generator.
 
@@ -162,12 +163,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
 
         self.normalize_embeddings = normalize_embeddings
         self._preprocess_tabicl_data = preprocess_tabicl_data
-        self._tabvectorizer_preprocess = tabvectorizer_preprocess
-        self._tabvectorizer = (
-            TableVectorizer() if self._tabvectorizer_preprocess else None
-        )
-        self.preprocess_pipeline = PreprocessingPipeline()
-        self.outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
+        self.split_train_data = split_train_data
 
     def get_tabicl_model(self):
         """Load or download the TabICL model.
@@ -226,31 +222,45 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         Returns:
             np.ndarray: Preprocessed data ready for embedding computation.
         """
-        X_preprocess = X
+        numerical_transformer = TransformToNumerical()
+        preprocess_pipeline = PreprocessingPipeline()
+        outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
+        if self.split_train_data:
+            train_indices = kwargs.get("train_indices")
+            test_indices = kwargs.get("test_indices")
+            X_train = X[train_indices]
+            X_test = X[test_indices]
 
-        if train and self._preprocess_tabicl_data:
-            if self._tabvectorizer_preprocess:
-                X_preprocess = pl.from_numpy(X_preprocess)
-                X_preprocess = self._tabvectorizer.fit_transform(X_preprocess)
-            if outlier:
-                X_preprocess = self.outlier_preprocessing_pipeline.fit_transform(
-                    X_preprocess
-                )
-            else:
-                X_preprocess = self.preprocess_pipeline.fit_transform(X_preprocess)
-        else:
+            X_train = numerical_transformer.fit_transform(X_train)
+            X_test = numerical_transformer.transform(X_test)
+
             if self._preprocess_tabicl_data:
-                if self._tabvectorizer_preprocess:
-                    X_preprocess = pl.from_numpy(X_preprocess)
-                    X_preprocess = self._tabvectorizer.transform(X_preprocess)
                 if outlier:
-                    X_preprocess = self.outlier_preprocessing_pipeline.transform(
-                        X_preprocess
-                    )
+                    self.outlier_run = True
+                    X_train = outlier_preprocessing_pipeline.fit_transform(X_train)
+                    X_test = outlier_preprocessing_pipeline.transform(X_test)
                 else:
-                    X_preprocess = self.preprocess_pipeline.transform(X_preprocess)
+                    X_train = preprocess_pipeline.fit_transform(X_train)
+                    X_test = preprocess_pipeline.transform(X_test)
 
-        return X_preprocess
+            X_preprocessed = np.empty_like(X)
+            X_preprocessed[train_indices] = X_train
+            X_preprocessed[test_indices] = X_test
+        else:
+            X_preprocessed = numerical_transformer.fit_transform(X)
+
+            if self._preprocess_tabicl_data:
+                if outlier:
+                    self.outlier_run = True
+                    X_preprocessed = (
+                        self.outlier_preprocessing_pipeline.fit_transform(
+                        X_preprocessed
+                    ))
+                else:
+                    X_preprocessed = self.preprocess_pipeline.fit_transform(
+                        X_preprocessed)
+
+        return X_preprocessed
 
     def _fit_model(self, X_preprocessed: np.ndarray, train: bool = True, **kwargs):
         """Fit the model (no-op for TabICL as it uses pre-trained weights).
@@ -290,22 +300,40 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         if len(X.shape) not in [2, 3]:
             raise ValueError("Input must be 2D or 3D array")
 
-        X = torch.from_numpy(X).float().to(device)
-        if len(X.shape) == 2:
-            X = X.unsqueeze(0)
+        if self.split_train_data or (not self.outlier_run):
+            train_indices = kwargs.get("train_indices")
+            test_indices = kwargs.get("test_indices")
+            X_train = X[train_indices]
+            X_test = X[test_indices]
+            embeddings = np.empty_like(X)
 
-        return self.tabicl_row_embedder.forward(X).cpu().squeeze().numpy()
+            X_train = torch.from_numpy(X_train).float().to(device)
+            X_test = torch.from_numpy(X_test).float().to(device)
+
+            if len(X_train.shape) == 2:
+                X_train = X_train.unsqueeze(0)
+
+            if len(X_test.shape) == 2:
+                X_test = X_test.unsqueeze(0)
+
+            embeddings_train = self.tabicl_row_embedder.forward(X_train).cpu().squeeze().numpy()
+            embeddings_test = self.tabicl_row_embedder.forward(X_test).cpu().squeeze().numpy()
+
+            embeddings[train_indices] = embeddings_train
+            embeddings[test_indices] = embeddings_test
+        else:
+            X = torch.from_numpy(X).float().to(device)
+            if len(X.shape) == 2:
+                X = X.unsqueeze(0)
+            embeddings = self.tabicl_row_embedder.forward(X).cpu().squeeze().numpy()
+        return embeddings
 
     def _reset_embedding_model(self):
         """Reset the embedding model to its initial state.
 
         Reinitializes all preprocessing pipelines to clear fitted state.
         """
-        self._tabvectorizer = (
-            TableVectorizer() if self._tabvectorizer_preprocess else None
-        )
-        self.preprocess_pipeline = PreprocessingPipeline()
-        self.outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
+        self.outlier_run = False
 
 
 def filter_params_for_class(cls, params_dict):

@@ -5,6 +5,7 @@ import torch
 from tabpfn import TabPFNClassifier, TabPFNRegressor
 from tabpfn_extensions.utils import infer_categorical_features
 from tabpfn_extensions.many_class import ManyClassClassifier
+from tabicl.sklearn.preprocessing import TransformToNumerical
 
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.utils.torch_utils import get_device
@@ -94,6 +95,8 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         Returns:
             torch.Tensor: Preprocessed data as a float tensor on the specified device.
         """
+        X = TransformToNumerical().fit_transform(X)
+
         return X
 
     def _fit_model(
