@@ -5,3 +5,4 @@ from tabembedbench.embedding_models.tabvectorizer_embedding import (
 )
 from tabembedbench.embedding_models.tabpfn_embedding import TabPFNEmbedding
 from tabembedbench.embedding_models.spherebased_embedding import SphereBasedEmbedding
+from tabembedbench.embedding_models.tabicl_clustering_embedding import TabICLClusteringEmbedding
