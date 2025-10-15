@@ -1,123 +1,202 @@
 from typing import Optional
-
+import warnings
 import numpy as np
 import optuna
-from optuna import trial
-import torch
-import torch.nn as nn
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
+from sklearn.utils._tags import Tags, TargetTags
 from sklearn.preprocessing import StandardScaler
+from sklearn.neural_network import MLPClassifier, MLPRegressor
 
 from tabembedbench.evaluators.abstractevaluator import AbstractHPOEvaluator
 from tabembedbench.utils.torch_utils import get_device
 
+class SklearnMLPClassifierWrapper(BaseEstimator, ClassifierMixin):
+    """Wrapper for sklearn MLPClassifier with consistent interface.
 
-class PyTorchMLPWrapper(BaseEstimator):
-    """Scikit-learn compatible wrapper for PyTorch MLP.
-
-    This wrapper allows PyTorch MLP models to work with scikit-learn's
-    cross_val_score and other sklearn utilities.
-
-    Attributes:
-        input_dim (int): Number of input features.
-        hidden_dims (list[int]): List of hidden layer dimensions.
-        output_dim (int): Number of output units.
-        dropout (float): Dropout rate for regularization.
-        learning_rate (float): Learning rate for optimizer.
-        batch_size (int): Batch size for training.
-        epochs (int): Maximum number of training epochs.
-        task_type (str): Type of task ('classification' or 'regression').
-        device (str): Device to run the model on ('cpu' or 'cuda').
-        early_stopping_patience (int): Number of epochs to wait before early stopping.
-        model (nn.Sequential | None): The PyTorch model.
-        scaler (StandardScaler): Feature scaler.
-        is_fitted_ (bool): Whether the model has been fitted.
+    This wrapper ensures compatibility with the evaluation framework while
+    using sklearn's native MLPClassifier implementation.
     """
 
     def __init__(
         self,
-        input_dim: int,
-        hidden_dims: list[int],
-        output_dim: int,
-        dropout: float = 0.0,
-        learning_rate: float = 0.001,
-        batch_size: int = 32,
-        epochs: int = 100,
-        task_type: str = "classification",
-        device: Optional[str] = None,
-        early_stopping_patience: int = 10,
-        log_interval: int = 1,
+        hidden_layer_sizes=(100,),
+        activation="relu",
+        solver="adam",
+        alpha=0.0001,
+        batch_size="auto",
+        learning_rate_init=0.001,
+        max_iter=200,
+        early_stopping=True,
+        validation_fraction=0.1,
+        n_iter_no_change=10,
+        random_state=None,
     ):
-        """Initialize the PyTorchMLPWrapper.
-
-        Args:
-            input_dim (int): Number of input features.
-            hidden_dims (list[int]): List of hidden layer dimensions.
-            output_dim (int): Number of output units.
-            dropout (float, optional): Dropout rate for regularization. Defaults to 0.0.
-            learning_rate (float, optional): Learning rate for optimizer. Defaults to 0.001.
-            batch_size (int, optional): Batch size for training. Defaults to 32.
-            epochs (int, optional): Maximum number of training epochs. Defaults to 100.
-            task_type (str, optional): Type of task ('classification' or 'regression').
-                Defaults to "classification".
-            device (str, optional): Device to run the model on ('cpu' or 'cuda').
-                Defaults to "cpu".
-            early_stopping_patience (int, optional): Number of epochs to wait before
-                early stopping. Defaults to 10.
-        """
-        self.input_dim = input_dim
-        self.hidden_dims = hidden_dims
-        self.output_dim = output_dim
-        self.dropout = dropout
-        self.learning_rate = learning_rate
+        self.hidden_layer_sizes = hidden_layer_sizes
+        self.activation = activation
+        self.solver = solver
+        self.alpha = alpha
         self.batch_size = batch_size
-        self.epochs = epochs
-        self.task_type = task_type
-        self.device = device if device is not None else get_device()
-        self.early_stopping_patience = early_stopping_patience
-        self.log_interval = log_interval
+        self.learning_rate_init = learning_rate_init
+        self.max_iter = max_iter
+        self.early_stopping = early_stopping
+        self.validation_fraction = validation_fraction
+        self.n_iter_no_change = n_iter_no_change
+        self.random_state = random_state
 
         self.model = None
-        self.scaler = StandardScaler()
-        self.is_fitted_ = False
-        self.loss_history_ = []
 
-    def _build_model(self):
-        """Build the PyTorch MLP model.
+    def __sklearn_tags__(self):
+        """Implement sklearn tags for compatibility with newer sklearn versions."""
+        try:
 
-        Returns:
-            nn.Sequential: The constructed MLP model.
-        """
-        layers = []
-        prev_dim = self.input_dim
+            tags = Tags(
+                estimator_type="classifier", target_tags=TargetTags(required=True)
+            )
+            return tags
+        except (ImportError, TypeError):
+            # Fallback for older sklearn versions or if Tags API changes
+            return None
 
-        # Hidden layers
-        for hidden_dim in self.hidden_dims:
-            layers.append(nn.Linear(prev_dim, hidden_dim))
-            layers.append(nn.ReLU())
-            if self.dropout > 0:
-                layers.append(nn.Dropout(self.dropout))
-            prev_dim = hidden_dim
+    def _more_tags(self):
+        """Provide additional tags for sklearn compatibility."""
+        return {"requires_y": True, "_estimator_type": "classifier"}
 
-        # Output layer
-        layers.append(nn.Linear(prev_dim, self.output_dim))
-
-        # Add activation for classification
-        if self.task_type == "classification" and self.output_dim > 1:
-            layers.append(nn.Softmax(dim=1))
-
-        return nn.Sequential(*layers)
+    @property
+    def _estimator_type(self):
+        """Return the estimator type."""
+        return "classifier"
 
     def fit(self, X, y):
-        """Fit the MLP model.
+        """Fit the MLP classifier."""
+        # Handle pandas DataFrames
+        if hasattr(X, "values"):
+            X = X.values
+        if hasattr(y, "values"):
+            y = y.values
 
-        Args:
-            X (np.ndarray): Training features of shape (n_samples, n_features).
-            y (np.ndarray): Training targets of shape (n_samples,).
+        X = np.asarray(X, dtype=np.float64)
+        y = np.asarray(y)
 
-        Returns:
-            PyTorchMLPWrapper: The fitted model instance.
-        """
+        if np.any(np.isnan(X)) or np.any(np.isinf(X)):
+            raise ValueError("Input X contains NaN or Inf values")
+        if np.any(np.isnan(y)):
+            raise ValueError("Input y contains NaN values")
+
+        # Store classes BEFORE fitting
+        self.classes_ = np.unique(y)
+        self.n_classes_ = len(self.classes_)
+
+        self.scaler_ = StandardScaler()
+        # Scale features
+        X_scaled = self.scaler_.fit_transform(X)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+        # Create and fit the model
+            self.model = MLPClassifier(
+                hidden_layer_sizes=self.hidden_layer_sizes,
+                activation=self.activation,
+                solver=self.solver,
+                alpha=self.alpha,
+                batch_size=self.batch_size,
+                learning_rate_init=self.learning_rate_init,
+                max_iter=self.max_iter,
+                early_stopping=self.early_stopping,
+                validation_fraction=self.validation_fraction,
+                n_iter_no_change=self.n_iter_no_change,
+                random_state=self.random_state,
+            )
+
+            self.model.fit(X_scaled, y)
+
+        self.is_fitted_ = True
+        return self
+
+    def predict(self, X):
+        """Make predictions."""
+        if not self.is_fitted_:
+            raise ValueError("Model must be fitted before making predictions")
+
+        if hasattr(X, "values"):
+            X = X.values
+
+        X_scaled = self.scaler_.transform(X)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            pred = self.model.predict(X_scaled)
+
+        return pred
+
+    def predict_proba(self, X):
+        """Predict class probabilities."""
+        if not self.is_fitted_:
+            raise ValueError("Model must be fitted before making predictions")
+
+        if hasattr(X, "values"):
+            X = X.values
+
+        X_scaled = self.scaler_.transform(X)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            proba = self.model.predict_proba(X_scaled)
+
+        return proba
+
+
+class SklearnMLPRegressorWrapper(BaseEstimator, RegressorMixin):
+    """Wrapper for sklearn MLPRegressor with consistent interface."""
+
+    def __init__(
+        self,
+        hidden_layer_sizes=(100,),
+        activation="relu",
+        solver="adam",
+        alpha=0.0001,
+        batch_size="auto",
+        learning_rate_init=0.001,
+        max_iter=200,
+        early_stopping=True,
+        validation_fraction=0.1,
+        n_iter_no_change=10,
+        random_state=None,
+    ):
+        self.hidden_layer_sizes = hidden_layer_sizes
+        self.activation = activation
+        self.solver = solver
+        self.alpha = alpha
+        self.batch_size = batch_size
+        self.learning_rate_init = learning_rate_init
+        self.max_iter = max_iter
+        self.early_stopping = early_stopping
+        self.validation_fraction = validation_fraction
+        self.n_iter_no_change = n_iter_no_change
+        self.random_state = random_state
+
+        self.scaler = StandardScaler()
+        self.model = None
+        self.is_fitted_ = False
+
+    def __sklearn_tags__(self):
+        """Implement sklearn tags for compatibility with newer sklearn versions."""
+        try:
+            tags = Tags(
+                estimator_type="regressor", target_tags=TargetTags(required=True)
+            )
+            return tags
+        except (ImportError, TypeError):
+            # Fallback for older sklearn versions or if Tags API changes
+            return None
+
+    @property
+    def _estimator_type(self):
+        """Return the estimator type."""
+        return "regressor"
+
+    def fit(self, X, y):
+        """Fit the MLP regressor."""
+        # Handle pandas DataFrames
         if hasattr(X, "values"):
             X = X.values
         if hasattr(y, "values"):
@@ -125,128 +204,43 @@ class PyTorchMLPWrapper(BaseEstimator):
 
         # Scale features
         X_scaled = self.scaler.fit_transform(X)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+        # Create and fit the model
+            self.model = MLPRegressor(
+                hidden_layer_sizes=self.hidden_layer_sizes,
+                activation=self.activation,
+                solver=self.solver,
+                alpha=self.alpha,
+                batch_size=self.batch_size,
+                learning_rate_init=self.learning_rate_init,
+                max_iter=self.max_iter,
+                early_stopping=self.early_stopping,
+                validation_fraction=self.validation_fraction,
+                n_iter_no_change=self.n_iter_no_change,
+                random_state=self.random_state,
+            )
 
-        # Convert to tensors
-        X_tensor = torch.FloatTensor(X_scaled).to(self.device)
-
-        if self.task_type == "classification":
-            y_tensor = torch.LongTensor(y).to(self.device)
-            criterion = nn.CrossEntropyLoss()
-        else:
-            y_tensor = torch.FloatTensor(y).to(self.device)
-            criterion = nn.MSELoss()
-
-        # Build model
-        self.model = self._build_model().to(self.device)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
-
-        # Training loop
-        dataset = torch.utils.data.TensorDataset(X_tensor, y_tensor)
-        dataloader = torch.utils.data.DataLoader(
-            dataset, batch_size=self.batch_size, shuffle=True
-        )
-
-        best_loss = float("inf")
-        patience_counter = 0
-
-        self.model.train()
-        for epoch in range(self.epochs):
-            epoch_loss = 0.0
-            for batch_X, batch_y in dataloader:
-                optimizer.zero_grad()
-                outputs = self.model(batch_X)
-
-                if self.task_type == "classification":
-                    loss = criterion(outputs, batch_y)
-                else:
-                    loss = criterion(outputs.squeeze(1), batch_y)
-
-                loss.backward()
-                optimizer.step()
-                epoch_loss += loss.item()
-
-            avg_loss = epoch_loss / len(dataloader)
-
-            if epoch % self.log_interval == 0 or epoch == self.epochs - 1:
-                self.loss_history_.append({
-                    "epoch": epoch,
-                    "loss": avg_loss
-                })
-
-            # Early stopping
-            if avg_loss < best_loss:
-                best_loss = avg_loss
-                patience_counter = 0
-            else:
-                patience_counter += 1
-                if patience_counter >= self.early_stopping_patience:
-                    break
-
-        if self.device.type == 'cuda':
-            torch.cuda.empty_cache()
+            self.model.fit(X_scaled, y)
 
         self.is_fitted_ = True
         return self
 
     def predict(self, X):
-        """Make predictions.
-
-        Args:
-            X (np.ndarray): Input features of shape (n_samples, n_features).
-
-        Returns:
-            np.ndarray: Predictions. For classification, returns class labels.
-                For regression, returns predicted values.
-
-        Raises:
-            ValueError: If model has not been fitted.
-        """
+        """Make predictions."""
         if not self.is_fitted_:
             raise ValueError("Model must be fitted before making predictions")
 
-        X_scaled = self.scaler.transform(X)
-        X_tensor = torch.FloatTensor(X_scaled).to(self.device)
-
-        self.model.eval()
-        with torch.no_grad():
-            outputs = self.model(X_tensor)
-
-            if self.task_type == "classification":
-                predictions = torch.argmax(outputs, dim=1).cpu().numpy()
-            else:
-                predictions = outputs.squeeze(1).cpu().numpy()
-
-        return predictions
-
-    def predict_proba(self, X):
-        """Predict class probabilities (for classification only).
-
-        Args:
-            X (np.ndarray): Input features of shape (n_samples, n_features).
-
-        Returns:
-            np.ndarray: Class probabilities of shape (n_samples, n_classes).
-
-        Raises:
-            ValueError: If task_type is not 'classification' or model is not fitted.
-        """
-        if self.task_type != "classification":
-            raise ValueError("predict_proba is only available for classification tasks")
-
-        if not self.is_fitted_:
-            raise ValueError("Model must be fitted before making predictions")
+        if hasattr(X, "values"):
+            X = X.values
 
         X_scaled = self.scaler.transform(X)
-        X_tensor = torch.FloatTensor(X_scaled).to(self.device)
 
-        self.model.eval()
-        with torch.no_grad():
-            probabilities = self.model(X_tensor).cpu().numpy()
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            pred = self.model.predict(X_scaled)
 
-        if self.device.type == 'cuda':
-            torch.cuda.empty_cache()
-
-        return probabilities
+        return pred
 
 
 class MLPClassifierEvaluator(AbstractHPOEvaluator):
@@ -287,43 +281,23 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
             random_state=random_state,
             verbose=verbose,
         )
-        self.device = device if device is not None else get_device()
         self.input_dim = None
         self.output_dim = None
 
     def _get_search_space(self) -> dict:
-        """Define the hyperparameter search space for MLP classifier.
-
-        Returns:
-            dict: Dictionary describing the search space configuration with keys:
-                - n_layers: Number of hidden layers (1-3)
-                - hidden_dim_base: Base range for hidden layer sizes (32-512, log scale)
-                - dropout: Dropout rate (0.0-0.5)
-                - learning_rate: Learning rate (1e-4 to 1e-2, log scale)
-                - batch_size: Batch size options [16, 32, 64, 128]
-                - epochs: Number of training epochs (50-200)
-        """
+        """Define the hyperparameter search space for sklearn MLP classifier."""
         return {
             "n_layers": {"type": "int", "low": 1, "high": 5},
             "hidden_dim_base": {"type": "int", "low": 32, "high": 512, "log": True},
-            "dropout": {"type": "float", "low": 0.0, "high": 0.5},
-            "learning_rate": {"type": "float", "low": 1e-4, "high": 1e-2, "log": True},
+            "alpha": {"type": "float", "low": 1e-5, "high": 1e-1, "log": True},
+            "learning_rate_init": {"type": "float", "low": 1e-4, "high": 1e-2, "log": True},
             "batch_size": {"type": "categorical", "choices": [16, 32, 64, 128]},
-            "epochs": {"type": "int", "low": 50, "high": 200},
+            "max_iter": {"type": "int", "low": 50, "high": 200},
+            "activation": {"type": "categorical", "choices": ['relu', 'tanh', 'logistic']},
         }
 
     def create_model(self, trial: optuna.Trial):
-        """Create MLP model with hyperparameters suggested by Optuna.
-
-        Uses the search space defined in _get_search_space() to suggest hyperparameters
-        for the model.
-
-        Args:
-            trial (optuna.Trial): Optuna trial object for suggesting hyperparameters.
-
-        Returns:
-            PyTorchMLPWrapper: MLP model with trial-suggested hyperparameters.
-        """
+        """Create sklearn MLP model with hyperparameters suggested by Optuna."""
         search_space = self._get_search_space()
 
         # Number of hidden layers
@@ -333,28 +307,31 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
             search_space["n_layers"]["high"],
         )
 
-        # Hidden layer dimensions
-        hidden_dims = []
-        for i in range(n_layers):
-            hidden_dim = trial.suggest_int(
+        # Hidden layer dimensions (tuple for sklearn)
+        hidden_layer_sizes = tuple(
+            trial.suggest_int(
                 f"hidden_dim_{i}",
                 search_space["hidden_dim_base"]["low"],
                 search_space["hidden_dim_base"]["high"],
                 log=search_space["hidden_dim_base"]["log"],
             )
-            hidden_dims.append(hidden_dim)
+            for i in range(n_layers)
+        )
 
-        # Dropout rate
-        dropout = trial.suggest_float(
-            "dropout", search_space["dropout"]["low"], search_space["dropout"]["high"]
+        # Alpha (L2 regularization)
+        alpha = trial.suggest_float(
+            "alpha",
+            search_space["alpha"]["low"],
+            search_space["alpha"]["high"],
+            log=search_space["alpha"]["log"],
         )
 
         # Learning rate
-        learning_rate = trial.suggest_float(
-            "learning_rate",
-            search_space["learning_rate"]["low"],
-            search_space["learning_rate"]["high"],
-            log=search_space["learning_rate"]["log"],
+        learning_rate_init = trial.suggest_float(
+            "learning_rate_init",
+            search_space["learning_rate_init"]["low"],
+            search_space["learning_rate_init"]["high"],
+            log=search_space["learning_rate_init"]["log"],
         )
 
         # Batch size
@@ -362,42 +339,37 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
             "batch_size", search_space["batch_size"]["choices"]
         )
 
-        # Epochs
-        epochs = trial.suggest_int(
-            "epochs", search_space["epochs"]["low"], search_space["epochs"]["high"]
+        # Max iterations
+        max_iter = trial.suggest_int(
+            "max_iter",
+            search_space["max_iter"]["low"],
+            search_space["max_iter"]["high"],
         )
 
-        return PyTorchMLPWrapper(
-            input_dim=self.input_dim,
-            hidden_dims=hidden_dims,
-            output_dim=self.output_dim,
-            dropout=dropout,
-            learning_rate=learning_rate,
+        # Activation function
+        activation = trial.suggest_categorical(
+            "activation", search_space["activation"]["choices"]
+        )
+
+        return SklearnMLPClassifierWrapper(
+            hidden_layer_sizes=hidden_layer_sizes,
+            activation=activation,
+            alpha=alpha,
             batch_size=batch_size,
-            epochs=epochs,
-            task_type="classification",
-            device=self.device,
-            early_stopping_patience=10,
+            learning_rate_init=learning_rate_init,
+            max_iter=max_iter,
+            early_stopping=True,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            random_state=self.random_state,
         )
 
     def get_scoring_metric(self) -> str:
-        """Return the scoring metric for classification.
-
-        Returns:
-            str: The scoring metric name ('accuracy').
-        """
-        return "accuracy"
+        """Return the scoring metric for classification."""
+        return "neg_log_loss"
 
     def _get_model_predictions(self, model, embeddings: np.ndarray):
-        """Get probability predictions from the model.
-
-        Args:
-            model (PyTorchMLPWrapper): Trained MLP model.
-            embeddings (np.ndarray): Input embeddings for prediction.
-
-        Returns:
-            np.ndarray: Class probabilities of shape (n_samples, n_classes).
-        """
+        """Get probability predictions from the model."""
         return model.predict_proba(embeddings)
 
     def get_prediction(
@@ -406,26 +378,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
         y: np.ndarray | None = None,
         train: bool = True,
     ) -> tuple:
-        """Get predictions from the MLP classifier.
-
-        Sets input/output dimensions based on the data before calling the parent's
-        get_prediction method.
-
-        Args:
-            embeddings (np.ndarray): Input embeddings for prediction.
-            y (np.ndarray | None, optional): Target labels for training. Required if train=True.
-                Defaults to None.
-            train (bool, optional): Whether to train the model. Defaults to True.
-
-        Returns:
-            tuple: A tuple containing:
-                - predictions (np.ndarray): Class probabilities.
-                - additional_info (dict | None): Dictionary with optimization info if train=True,
-                    None otherwise.
-
-        Raises:
-            ValueError: If train=True and y is None.
-        """
+        """Get predictions from the MLP classifier."""
         if train:
             if y is None:
                 raise ValueError("y must be provided for training")
@@ -438,34 +391,15 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
 
 
 class MLPRegressorEvaluator(AbstractHPOEvaluator):
-    """MLP Regressor evaluator with Optuna hyperparameter optimization using PyTorch.
-
-    This evaluator uses a PyTorch-based Multi-Layer Perceptron for regression
-    tasks with automatic hyperparameter optimization via Optuna.
-
-    Attributes:
-        device (str): Device to run the model on ('cpu' or 'cuda').
-        input_dim (int | None): Number of input features (set during training).
-    """
+    """MLP Regressor evaluator with Optuna hyperparameter optimization using sklearn."""
 
     def __init__(
         self,
         n_trials: int = 10,
         cv_folds: int = 5,
         random_state: int = 42,
-        device: Optional[str] = None,
         verbose: bool = False,
     ):
-        """Initialize the MLPRegressorEvaluator.
-
-        Args:
-            n_trials (int, optional): Number of optimization trials. Defaults to 50.
-            cv_folds (int, optional): Number of cross-validation folds. Defaults to 5.
-            random_state (int, optional): Random seed for reproducibility. Defaults to 42.
-            device (str, optional): Device to run the model on ('cpu' or 'cuda').
-                Defaults to "cpu".
-            verbose (bool, optional): Whether to print optimization progress. Defaults to False.
-        """
         super().__init__(
             name="MLPRegressor",
             task_type="Supervised Regression",
@@ -474,42 +408,23 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
             random_state=random_state,
             verbose=verbose,
         )
-        self.device = device if device is not None else get_device()
         self.input_dim = None
 
     def _get_search_space(self) -> dict:
-        """Define the hyperparameter search space for MLP regressor.
-
-        Returns:
-            dict: Dictionary describing the search space configuration with keys:
-                - n_layers: Number of hidden layers (1-3)
-                - hidden_dim_base: Base range for hidden layer sizes (32-512, log scale)
-                - dropout: Dropout rate (0.0-0.5)
-                - learning_rate: Learning rate (1e-4 to 1e-2, log scale)
-                - batch_size: Batch size options [16, 32, 64, 128]
-                - epochs: Number of training epochs (50-200)
-        """
+        """Define the hyperparameter search space for sklearn MLP regressor."""
         return {
             "n_layers": {"type": "int", "low": 1, "high": 3},
             "hidden_dim_base": {"type": "int", "low": 32, "high": 512, "log": True},
-            "dropout": {"type": "float", "low": 0.0, "high": 0.5},
-            "learning_rate": {"type": "float", "low": 1e-4, "high": 1e-2, "log": True},
-            "batch_size": {"type": "categorical", "choices": [16, 32, 64, 128]},
-            "epochs": {"type": "int", "low": 50, "high": 200},
+            "alpha": {"type": "float", "low": 1e-5, "high": 1e-1, "log": True},
+            "learning_rate_init": {"type": "float", "low": 1e-4, "high": 1e-2, "log": True},
+            "batch_size": {"type": "categorical", "choices": [16, 32, 64,
+                                                              128, 256]},
+            "max_iter": {"type": "int", "low": 50, "high": 200},
+            "activation": {"type": "categorical", "choices": ['relu', 'tanh', 'identity']},
         }
 
     def create_model(self, trial: optuna.Trial):
-        """Create MLP model with hyperparameters suggested by Optuna.
-
-        Uses the search space defined in _get_search_space() to suggest hyperparameters
-        for the model.
-
-        Args:
-            trial (optuna.Trial): Optuna trial object for suggesting hyperparameters.
-
-        Returns:
-            PyTorchMLPWrapper: MLP model with trial-suggested hyperparameters.
-        """
+        """Create sklearn MLP model with hyperparameters suggested by Optuna."""
         search_space = self._get_search_space()
 
         # Number of hidden layers
@@ -519,28 +434,31 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
             search_space["n_layers"]["high"],
         )
 
-        # Hidden layer dimensions
-        hidden_dims = []
-        for i in range(n_layers):
-            hidden_dim = trial.suggest_int(
+        # Hidden layer dimensions (tuple for sklearn)
+        hidden_layer_sizes = tuple(
+            trial.suggest_int(
                 f"hidden_dim_{i}",
                 search_space["hidden_dim_base"]["low"],
                 search_space["hidden_dim_base"]["high"],
                 log=search_space["hidden_dim_base"]["log"],
             )
-            hidden_dims.append(hidden_dim)
+            for i in range(n_layers)
+        )
 
-        # Dropout rate
-        dropout = trial.suggest_float(
-            "dropout", search_space["dropout"]["low"], search_space["dropout"]["high"]
+        # Alpha (L2 regularization)
+        alpha = trial.suggest_float(
+            "alpha",
+            search_space["alpha"]["low"],
+            search_space["alpha"]["high"],
+            log=search_space["alpha"]["log"],
         )
 
         # Learning rate
-        learning_rate = trial.suggest_float(
-            "learning_rate",
-            search_space["learning_rate"]["low"],
-            search_space["learning_rate"]["high"],
-            log=search_space["learning_rate"]["log"],
+        learning_rate_init = trial.suggest_float(
+            "learning_rate_init",
+            search_space["learning_rate_init"]["low"],
+            search_space["learning_rate_init"]["high"],
+            log=search_space["learning_rate_init"]["log"],
         )
 
         # Batch size
@@ -548,42 +466,37 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
             "batch_size", search_space["batch_size"]["choices"]
         )
 
-        # Epochs
-        epochs = trial.suggest_int(
-            "epochs", search_space["epochs"]["low"], search_space["epochs"]["high"]
+        # Max iterations
+        max_iter = trial.suggest_int(
+            "max_iter",
+            search_space["max_iter"]["low"],
+            search_space["max_iter"]["high"],
         )
 
-        return PyTorchMLPWrapper(
-            input_dim=self.input_dim,
-            hidden_dims=hidden_dims,
-            output_dim=1,  # Single output for regression
-            dropout=dropout,
-            learning_rate=learning_rate,
+        # Activation function
+        activation = trial.suggest_categorical(
+            "activation", search_space["activation"]["choices"]
+        )
+
+        return SklearnMLPRegressorWrapper(
+            hidden_layer_sizes=hidden_layer_sizes,
+            activation=activation,
+            alpha=alpha,
             batch_size=batch_size,
-            epochs=epochs,
-            task_type="regression",
-            device=self.device,
-            early_stopping_patience=10,
+            learning_rate_init=learning_rate_init,
+            max_iter=max_iter,
+            early_stopping=True,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            random_state=self.random_state,
         )
 
     def get_scoring_metric(self) -> str:
-        """Return the scoring metric for regression.
-
-        Returns:
-            str: The scoring metric name ('mean_squared_error').
-        """
+        """Return the scoring metric for regression."""
         return "neg_mean_squared_error"
 
     def _get_model_predictions(self, model, embeddings: np.ndarray):
-        """Get predictions from the model.
-
-        Args:
-            model (PyTorchMLPWrapper): Trained MLP model.
-            embeddings (np.ndarray): Input embeddings for prediction.
-
-        Returns:
-            np.ndarray: Predicted values.
-        """
+        """Get predictions from the model."""
         return model.predict(embeddings)
 
     def get_prediction(
@@ -592,26 +505,7 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
         y: np.ndarray | None = None,
         train: bool = True,
     ) -> tuple:
-        """Get predictions from the MLP regressor.
-
-        Sets input dimension based on the data before calling the parent's
-        get_prediction method.
-
-        Args:
-            embeddings (np.ndarray): Input embeddings for prediction.
-            y (np.ndarray | None, optional): Target values for training. Required if train=True.
-                Defaults to None.
-            train (bool, optional): Whether to train the model. Defaults to True.
-
-        Returns:
-            tuple: A tuple containing:
-                - predictions (np.ndarray): Predicted values.
-                - additional_info (dict | None): Dictionary with optimization info if train=True,
-                    None otherwise.
-
-        Raises:
-            ValueError: If train=True and y is None.
-        """
+        """Get predictions from the MLP regressor."""
         if train:
             if y is None:
                 raise ValueError("y must be provided for training")
