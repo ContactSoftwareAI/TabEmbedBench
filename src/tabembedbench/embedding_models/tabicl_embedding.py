@@ -325,19 +325,19 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         elif self.split_train_data:
             train_indices = kwargs.get("train_indices")
             test_indices = kwargs.get("test_indices")
-            X_train = X_preprocessed[train_indices]
+            X_train_torch = X_preprocessed[train_indices]
             X_test = X_preprocessed[test_indices]
 
-            X_train = torch.from_numpy(X_train).float().to(self.device)
+            X_train_torch = torch.from_numpy(X_train_torch).float().to(self.device)
             X_test = torch.from_numpy(X_test).float().to(self.device)
 
-            if len(X_train.shape) == 2:
-                X_train = X_train.unsqueeze(0)
+            if len(X_train_torch.shape) == 2:
+                X_train_torch = X_train_torch.unsqueeze(0)
 
             if len(X_test.shape) == 2:
                 X_test = X_test.unsqueeze(0)
 
-            embeddings_train = self.tabicl_row_embedder.forward(X_train).cpu().squeeze().numpy()
+            embeddings_train = self.tabicl_row_embedder.forward(X_train_torch).cpu().squeeze().numpy()
             embeddings_test = self.tabicl_row_embedder.forward(X_test).cpu().squeeze().numpy()
 
             if embeddings_train.ndim == 1:
@@ -350,22 +350,24 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
             train_indices = kwargs.get("train_indices")
             test_indices = kwargs.get("test_indices")
             X_train = X_preprocessed[train_indices]
+            X_test = X_preprocessed[test_indices]
 
-            X_train = torch.from_numpy(X_train).float().to(self.device)
+            X_train_torch = torch.from_numpy(X_train).float().to(self.device)
 
-            if len(X_train.shape) == 2:
-                X_train = X_train.unsqueeze(0)
+            if len(X_train_torch.shape) == 2:
+                X_train_torch = X_train_torch.unsqueeze(0)
 
-            embeddings_train = self.tabicl_row_embedder.forward(X_train).cpu().squeeze().numpy()
+            embeddings_train = self.tabicl_row_embedder.forward(X_train_torch).cpu().squeeze().numpy()
 
-            X_whole = torch.from_numpy(X_preprocessed).float().to(self.device)
+            X_whole = np.concat((X_train, X_test), axis=0)
+            X_whole_torch = torch.from_numpy(X_whole).float().to(self.device)
 
-            if len(X_whole.shape) == 2:
-                X_whole = X_whole.unsqueeze(0)
+            if len(X_whole_torch.shape) == 2:
+                X_whole_torch = X_whole_torch.unsqueeze(0)
 
-            embeddings = self.tabicl_row_embedder.forward(X_whole).cpu().squeeze().numpy()
+            embeddings = self.tabicl_row_embedder.forward(X_whole_torch).cpu().squeeze().numpy()
 
-            embeddings_test = embeddings[test_indices]
+            embeddings_test = embeddings[len(train_indices):]
 
             return embeddings_train, embeddings_test
 
