@@ -222,36 +222,40 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
             interference between different prediction tasks.
         """
         if outlier:
-            X_embeddings = self._compute_internal_embeddings(
-                X_preprocessed)
+            X_embeddings, _ = self._compute_internal_embeddings(
+                X_preprocessed
+            )
 
             return X_embeddings, None
         else:
             train_indices = kwargs.get("train_indices")
             test_indices = kwargs.get("test_indices")
             X_train = X_preprocessed[train_indices]
+            X_test = X_preprocessed[test_indices]
 
-            X_train_embeddings = self._compute_internal_embeddings(X_train)
-
-            X_embeddings = self._compute_internal_embeddings(X_preprocessed)
-
-            X_test_embeddings = X_embeddings[test_indices]
+            X_train_embeddings, X_test_embeddings = self._compute_internal_embeddings(
+                X_train, X_test
+            )
 
             return X_train_embeddings, X_test_embeddings
 
-    def _compute_internal_embeddings(self, X):
-        num_samples = X.shape[0]
-        tmp_embeddings = []
+    def _compute_internal_embeddings(
+            self,
+            X_train,
+            X_test = None
+    ):
+        num_samples = X_train.shape[0]
+        tmp_train_embeddings = []
+        tmp_test_embeddings = []
+
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', category=RuntimeWarning)
-            for column_idx in range(X.shape[1]):
-                # Create mask for the current column
-                mask = np.zeros_like(X, dtype=bool)
+            for column_idx in range(X_train.shape[1]):
+                mask = np.zeros_like(X_train, dtype=bool)
                 mask[:, column_idx] = True
 
-                # Extract features (all columns except current) and target (current column)
-                features = X[~mask].reshape(num_samples, -1)
-                target = X[mask]
+                features = X_train[~mask].reshape(num_samples, -1)
+                target = X_train[mask]
 
                 model = (
                     self.tabpfn_clf
@@ -285,35 +289,77 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
                     else:
                         raise ValueError("Can't fit TabPFN model.")
 
-                estimator_embeddings = model.get_embeddings(features)
+                estimator_train_embeddings = model.get_embeddings(
+                    features,
+                    data_source="train"
+                )
+                if X_test is not None:
+                    test_samples = X_test.shape[0]
+                    mask_test = np.zeros_like(X_test, dtype=bool)
+
+                    mask_test[:, column_idx] = True
+
+                    features_test = X_test[~mask_test].reshape(test_samples, -1)
+
+                    estimator_test_embeddings = model.get_embeddings(
+                        features_test,
+                        data_source="test"
+                    )
+                else:
+                    estimator_test_embeddings = None
 
                 if self.num_estimators > 1:
-                    if self.estimator_agg == "mean":
-                        estimator_embeddings = np.mean(estimator_embeddings, axis=0)
-                    elif self.estimator_agg == "first_element":
-                        estimator_embeddings = np.squeeze(estimator_embeddings[0, :])
-                    else:
-                        raise NotImplementedError
+                    estimator_train_embeddings = self._aggregate_embeddings(
+                        estimator_train_embeddings, self.estimator_agg
+                    )
+
+                    if estimator_test_embeddings is not None:
+                        estimator_test_embeddings = self._aggregate_embeddings(
+                            estimator_test_embeddings, self.estimator_agg
+                        )
                 else:
-                    estimator_embeddings = np.squeeze(estimator_embeddings)
+                    estimator_train_embeddings = np.squeeze(estimator_train_embeddings)
 
-                tmp_embeddings += [estimator_embeddings]
+                    if estimator_test_embeddings is not None:
+                        estimator_test_embeddings = np.squeeze(estimator_test_embeddings)
 
-        concat_embeddings = np.concatenate(tmp_embeddings, axis=1).reshape(
-            tmp_embeddings[0].shape[0], -1
+                tmp_train_embeddings += [estimator_train_embeddings]
+                if estimator_test_embeddings is not None:
+                    tmp_test_embeddings += [estimator_test_embeddings]
+
+        train_embeddings = self._aggregate_embeddings(
+            tmp_train_embeddings, method=self.emb_agg
         )
-
-        if self.emb_agg == "concat":
-            return concat_embeddings
-        elif self.emb_agg == "mean":
-            reshaped_embeddings = concat_embeddings.reshape(
-                *concat_embeddings.shape[:-1], self.num_features, self.tabpfn_dim
+        if len(tmp_test_embeddings) > 0:
+            test_embeddings = self._aggregate_embeddings(
+                tmp_test_embeddings, method=self.emb_agg
             )
-            embeddings = np.mean(reshaped_embeddings, axis=-2)
-
-            return embeddings
         else:
-            raise NotImplementedError
+            test_embeddings = None
+
+        return train_embeddings, test_embeddings
+
+    def _aggregate_embeddings(
+        self, embeddings: list[np.ndarray], method: str = "mean"
+    ) -> np.ndarray:
+        """
+        Aggregate embeddings using specified method.
+
+        Args:
+            embeddings: List of embedding arrays
+            method: Aggregation method ('mean', 'concat', 'max')
+
+        Returns:
+            Aggregated embeddings
+        """
+        if method == "mean":
+            return np.stack(embeddings).mean(axis=0)
+        elif method == "concat":
+            return np.concatenate(embeddings, axis=-1)
+        elif method == "max":
+            return np.stack(embeddings).max(axis=0)
+        else:
+            raise ValueError(f"Unknown aggregation method: {method}")
 
     def _reset_embedding_model(self):
         """Reset the embedding model to its initial state.
