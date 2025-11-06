@@ -1,3 +1,9 @@
+"""Main benchmark orchestration module for TabEmbedBench.
+
+This module provides the main entry point for running comprehensive benchmarks
+on embedding models, coordinating outlier detection and task-specific evaluations.
+"""
+
 import gc
 import logging
 from contextlib import contextmanager

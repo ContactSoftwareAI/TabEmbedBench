@@ -47,7 +47,9 @@ def get_embedding_models():
     tablevector = TabVectorizerEmbedding()
     tablevector.name = "TableVectorizer"
 
-    tabpfn_embedder = TabPFNEmbedding()
+    tabpfn_embedder = TabPFNEmbedding(
+        num_estimators=5,
+    )
 
     embedding_models = [
             tabicl_split_train_data,

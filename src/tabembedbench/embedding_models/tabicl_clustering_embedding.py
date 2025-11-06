@@ -203,7 +203,7 @@ class TabICLClusteringEmbedding(AbstractEmbeddingGenerator):
         else:
             context_rows = X_train[context_indices]
 
-        X_test_context = np.concat([X_test, context_rows], axis=0)
+        X_test_context = np.concat([context_rows, X_test], axis=0)
 
         X_test_context_torch = torch.from_numpy(X_test_context).float().to(device)
 
@@ -211,9 +211,10 @@ class TabICLClusteringEmbedding(AbstractEmbeddingGenerator):
             X_test_context_torch = X_test_context_torch.unsqueeze(0)
 
         embeddings_test_w_context = self.tabicl_row_embedder.forward(
-            X_test_context_torch).cpu().squeeze().numpy()
+            X_test_context_torch
+        ).cpu().squeeze().numpy()
 
-        embeddings_test = embeddings_test_w_context[:len(test_indices)]
+        embeddings_test = embeddings_test_w_context[len(context_indices):]
 
         return embeddings_train, embeddings_test
 
