@@ -110,7 +110,7 @@ def run_benchmark(
 
     # Setup directories
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    data_dir = Path(data_dir)
+    data_dir = Path(benchmark_config.data_dir)
     result_dir = data_dir / f"tabembedbench_{timestamp}"
     result_dir.mkdir(parents=True, exist_ok=True)
 
