@@ -32,6 +32,7 @@ dependencies = [
 torch = [
   { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
+tabpfn-extensions = { git = "https://github.com/PriorLabs/tabpfn-extensions.git" }
 
 [[tool.uv.index]]
 name = "pytorch-cu128"
@@ -84,8 +85,7 @@ convention = "google"
 [tool.ruff.lint.isort]
 known-third-party = []
 
-[tool.uv.sources]
-tabpfn-extensions = { git = "https://github.com/PriorLabs/tabpfn-extensions.git" }
+
 
 [dependency-groups]
 dev = [
