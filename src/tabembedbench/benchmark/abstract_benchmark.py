@@ -256,16 +256,19 @@ class AbstractBenchmark(ABC):
         # Extract data based on task type
         if data_split.get("X") is not None:
             # Outlier detection: single dataset
-            X = data_split["X"]
+            X_train = data_split["X"]
+            X_test = None
         else:
             # Supervised learning: train/test split
-            X = data_split["X_train"]
+            X_train = data_split["X_train"]
+            X_test = data_split["X_test"]
 
         # Pass metadata for model-specific handling
         metadata = data_split.get("metadata", {})
 
         return embedding_model.generate_embeddings(
-            X,
+            X_train=X_train,
+            X_test=X_test,
             outlier=(self.task_type == "Outlier Detection"),
             **metadata,
         )
