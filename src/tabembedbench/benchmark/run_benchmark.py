@@ -1,4 +1,4 @@
-"""Main benchmark orchestration module for TabEmbedBench.
+"""Simplified main benchmark orchestration module for TabEmbedBench.
 
 This module provides the main entry point for running comprehensive benchmarks
 on embedding models, coordinating outlier detection and task-specific evaluations.
@@ -6,7 +6,7 @@ on embedding models, coordinating outlier detection and task-specific evaluation
 
 import gc
 import logging
-from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple
@@ -21,228 +21,220 @@ from tabembedbench.evaluators import AbstractEvaluator
 from tabembedbench.utils.logging_utils import setup_unified_logging
 
 
-@contextmanager
-def benchmark_context(models_to_process, main_logger, context_name="benchmark"):
-    """Provides a context manager to benchmark and manage the lifecycle of a collection
-    of models. The context logs the start and end of the process, ensures embedded
-    models are reset, clears memory, and optionally flushes GPU memory. Useful for
-    efficient and clean benchmarking of models.
+@dataclass
+class DatasetConfig:
+    """Configuration for specifying dataset settings.
 
-    Args:
-        models_to_process (List[Any]): Collection of models to process within
-            the context.
-        main_logger (logging.Logger): Logger instance for logging context lifecycle
-            events and warnings.
-        context_name (str, optional): Name for the context to appear in the logs.
-            Defaults to "benchmak".
+    This class defines the configuration and constraints for datasets used in the application.
+    It allows specifying the dataset path, exclusion of specific datasets, and constraints on the
+    dataset size and number of features. It also supports selecting specific versions and modes
+    (e.g., 'lite') of the dataset.
 
-    Yields:
-        List[Any]: The same list of models provided in 'models_to_process'.
+    Attributes:
+        adbench_dataset_path (str | Path | None): Path to the ADBench dataset. If None,
+            the dataset path is not specified.
+        exclude_adbench_datasets (list[str] | None): List of dataset names to exclude.
+            If None, no datasets are excluded.
+        tabarena_version (str): Version of the TabArena dataset to use.
+        tabarena_lite (bool): Indicates if the 'lite' version of TabArena should be used.
+        upper_bound_dataset_size (int): Maximum number of samples allowed in a dataset.
+        upper_bound_num_features (int): Maximum number of features allowed in a dataset.
     """
-    try:
-        main_logger.info(f"Starting {context_name} at {datetime.now()}")
-        yield models_to_process
-    finally:
-        main_logger.info(f"Cleaning up {context_name} at {datetime.now()}")
-        for model in models_to_process:
-            try:
-                model._reset_embedding_model()
-            except Exception as e:
-                main_logger.warning(
-                    f"Error occurred during resetting {model.name}: {e}"
-                )
 
-        gc.collect()
+    adbench_dataset_path: str | Path | None = None
+    exclude_adbench_datasets: list[str] | None = None
+    tabarena_version: str = "tabarena-v0.1"
+    tabarena_lite: bool = True
+    upper_bound_dataset_size: int = 10000
+    upper_bound_num_features: int = 500
 
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
-        main_logger.info(f"Finished {context_name} at {datetime.now()}")
+@dataclass
+class BenchmarkConfig:
+    """Configuration object for benchmarking tasks.
+
+    This class is used to define the configuration settings for running benchmark
+    tests, including flags for specific tasks, directory paths for data storage,
+    logging levels, and whether to save logs. It centralizes benchmark-related
+    configurations to ensure consistent and customizable behavior across different
+    benchmarking runs.
+
+    Attributes:
+        run_outlier (bool): Whether to include outlier detection benchmarks in the
+            run.
+        run_task_specific (bool): Whether to run task-specific benchmarks.
+        run_tabpfn_subset (bool): Whether to include TabPFN subset benchmarks in
+            the run.
+        data_dir (str | Path): Path to the directory where necessary data is
+            stored or will be stored.
+        save_logs (bool): Whether to save logs generated during the benchmarking
+            process.
+        logging_level (int): The logging level for the benchmark runs, aligning
+            with Python's logging module level constants (e.g., logging.INFO).
+    """
+
+    run_outlier: bool = True
+    run_task_specific: bool = True
+    run_tabpfn_subset: bool = False
+    data_dir: str | Path = "data"
+    save_logs: bool = True
+    logging_level: int = logging.INFO
 
 
 def run_benchmark(
     embedding_models: list[AbstractEmbeddingGenerator],
     evaluator_algorithms: list[AbstractEvaluator],
     tabarena_specific_embedding_models: list[AbstractEmbeddingGenerator] | None = None,
-    adbench_dataset_path: str | Path | None = None,
-    exclude_adbench_datasets: list[str] | None = None,
-    tabarena_version: str = "tabarena-v0.1",
-    tabarena_lite: bool = True,
-    upper_bound_dataset_size: int = 10000,
-    upper_bound_num_features: int = 500,
-    run_outlier: bool = True,
-    run_task_specific: bool = True,
-    data_dir: str | Path = "data",
-    save_logs: bool = True,
-    run_tabpfn_subset: bool = False,
-    logging_level=logging.INFO,
+    dataset_config: DatasetConfig | None = None,
+    benchmark_config: BenchmarkConfig | None = None,
 ) -> Tuple[pl.DataFrame, pl.DataFrame, Path]:
     """Run comprehensive benchmark evaluation for embedding models.
 
     This function orchestrates the complete benchmarking process, running both
     outlier detection and task-specific (classification/regression) benchmarks
-    on the provided embedding models. It handles result collection, logging,
-    and resource management.
+    on the provided embedding models.
 
     Args:
-        embedding_models (list[AbstractEmbeddingGenerator]): List of embedding model
-            instances to evaluate.
-        evaluator_algorithms (list[AbstractEvaluator]): List of evaluator instances
-            to use for assessment.
-        adbench_dataset_path (str | Path | None, optional): Path to ADBench datasets.
-            If None, uses default path. Defaults to None.
-        exclude_adbench_datasets (list[str] | None, optional): List of ADBench dataset
-            filenames to exclude. Defaults to None.
-        tabarena_version (str, optional): OpenML TabArena suite version identifier.
-            Defaults to "tabarena-v0.1".
-        tabarena_lite (bool, optional): Whether to use lite mode for faster execution
-            with fewer cross-validation folds. Defaults to True.
-        upper_bound_dataset_size (int, optional): Maximum number of samples to process.
-            Datasets exceeding this will be skipped. Defaults to 10000.
-        upper_bound_num_features (int, optional): Maximum number of features to process.
-            Datasets exceeding this will be skipped. Defaults to 500.
-        run_outlier (bool, optional): Whether to run outlier detection benchmark.
-            Defaults to True.
-        run_task_specific (bool, optional): Whether to run TabArena task-specific
-            benchmark. Defaults to True.
-        data_dir (str | Path, optional): Directory for saving results and logs.
-            Defaults to "data".
-        save_logs (bool, optional): Whether to save logs to file. Defaults to True.
-        logging_level (int, optional): Logging verbosity level. Defaults to logging.INFO.
+        embedding_models: List of embedding model instances to evaluate.
+        evaluator_algorithms: List of evaluator instances to use for assessment.
+        tabarena_specific_embedding_models: Optional list of models to use only
+            for TabArena benchmarks. Defaults to None.
+        dataset_config: Configuration for dataset parameters. If None, uses defaults.
+        benchmark_config: Configuration for benchmark execution. If None, uses defaults.
 
     Returns:
-        pl.DataFrame: Polars DataFrame containing combined results from all benchmarks,
-            including performance metrics, timing information, and model parameters.
+        Tuple of (outlier_results_df, tabarena_results_df, result_directory).
     """
+    dataset_config = dataset_config or DatasetConfig()
+    benchmark_config = benchmark_config or BenchmarkConfig()
+
+    # Setup directories
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    data_dir = Path(data_dir)
+    result_dir = data_dir / f"tabembedbench_{timestamp}"
+    result_dir.mkdir(parents=True, exist_ok=True)
 
-    if data_dir is not None:
-        data_dir = Path(data_dir)
-        data_dir.mkdir(exist_ok=True)
-        result_dir = Path(data_dir / f"tabembedbench_{timestamp}")
-        result_dir.mkdir(exist_ok=True)
-        log_dir = Path(result_dir / "logs")
+    # Setup logging
+    if benchmark_config.save_logs:
+        log_dir = result_dir / "logs"
         log_dir.mkdir(exist_ok=True)
-    else:
-        data_dir = Path("data")
-        data_dir.mkdir(exist_ok=True)
-        result_dir = Path(data_dir / f"tabembedbench_{timestamp}")
-        result_dir.mkdir(exist_ok=True)
-        log_dir = Path(result_dir / "logs")
-        log_dir.mkdir(exist_ok=True)
-
-    if save_logs:
         setup_unified_logging(
             log_dir=log_dir,
             timestamp=timestamp,
-            logging_level=logging_level,
-            save_logs=save_logs,
+            logging_level=benchmark_config.logging_level,
+            save_logs=benchmark_config.save_logs,
         )
 
-    main_logger = logging.getLogger("TabEmbedBench_Main")
-    main_logger.info(f"Benchmark started at {datetime.now()}")
+    logger = logging.getLogger("TabEmbedBench_Main")
+    logger.info(f"Benchmark started at {datetime.now()}")
 
-    models_to_process = validate_embedding_models(embedding_models)
+    # Validate inputs
+    models = _validate_models(embedding_models)
+    tabarena_models = _validate_models(tabarena_specific_embedding_models or [])
+    evaluators = _validate_evaluators(evaluator_algorithms)
 
-    if tabarena_specific_embedding_models is not None:
-        tabarena_models_to_process = validate_embedding_models(
-            tabarena_specific_embedding_models
-        )
-    else:
-        tabarena_models_to_process = []
+    logger.info(f"Using {len(models)} embedding model(s)")
+    logger.info(f"Using {len(evaluators)} evaluator(s)")
 
-    evaluators_to_use = validate_evaluator_models(evaluator_algorithms)
-
-    main_logger.info(f"Using {len(models_to_process)} embedding model(s)")
-    main_logger.info(f"Using {len(evaluators_to_use)} evaluator(s)")
-
-    if run_outlier:
-        main_logger.info("Running outlier detection benchmark...")
+    # Run outlier detection benchmark
+    if benchmark_config.run_outlier:
+        logger.info("Running outlier detection benchmark...")
         try:
-            with benchmark_context(
-                models_to_process, main_logger, "ADBench Outlier Detection"
-            ):
-                result_outlier_df = run_outlier_benchmark(
-                    embedding_models=models_to_process,
-                    evaluators=evaluators_to_use,
-                    dataset_paths=adbench_dataset_path,
-                    exclude_datasets=exclude_adbench_datasets,
-                    upper_bound_num_samples=upper_bound_dataset_size,
-                    upper_bound_num_features=upper_bound_num_features,
-                    result_dir=result_dir,
-                    timestamp=timestamp,
-                )
-        except Exception as e:
-            main_logger.exception(
-                f"Error occurred during outlier detection benchmark: {e}"
+            result_outlier_df = run_outlier_benchmark(
+                embedding_models=models,
+                evaluators=evaluators,
+                dataset_paths=dataset_config.adbench_dataset_path,
+                exclude_datasets=dataset_config.exclude_adbench_datasets,
+                upper_bound_num_samples=dataset_config.upper_bound_dataset_size,
+                upper_bound_num_features=dataset_config.upper_bound_num_features,
+                result_dir=result_dir,
+                timestamp=timestamp,
             )
+            _cleanup_models(models, logger)
+        except Exception as e:
+            logger.exception(f"Error during outlier detection benchmark: {e}")
             result_outlier_df = pl.DataFrame()
     else:
         result_outlier_df = pl.DataFrame()
-    if run_task_specific:
-        main_logger.info("Running task-specific benchmark (TabArena Lite)...")
-        embedding_models_to_process = tabarena_models_to_process + models_to_process
+
+    # Run TabArena benchmark
+    if benchmark_config.run_task_specific:
+        logger.info("Running task-specific benchmark (TabArena)...")
+        all_models = tabarena_models + models
         try:
-            with benchmark_context(models_to_process, main_logger, "TabArena Lite"):
-                result_tabarena_df = run_tabarena_benchmark(
-                    embedding_models=embedding_models_to_process,
-                    evaluators=evaluators_to_use,
-                    tabarena_version=tabarena_version,
-                    tabarena_lite=tabarena_lite,
-                    upper_bound_num_samples=upper_bound_dataset_size,
-                    upper_bound_num_features=upper_bound_num_features,
-                    timestamp=timestamp,
-                    result_dir=result_dir,
-                    run_tabpfn_subset=run_tabpfn_subset,
-                )
+            result_tabarena_df = run_tabarena_benchmark(
+                embedding_models=all_models,
+                evaluators=evaluators,
+                tabarena_version=dataset_config.tabarena_version,
+                tabarena_lite=dataset_config.tabarena_lite,
+                upper_bound_num_samples=dataset_config.upper_bound_dataset_size,
+                upper_bound_num_features=dataset_config.upper_bound_num_features,
+                timestamp=timestamp,
+                result_dir=result_dir,
+                run_tabpfn_subset=benchmark_config.run_tabpfn_subset,
+            )
+            _cleanup_models(all_models, logger)
         except Exception as e:
-            main_logger.exception(f"Error occurred during task-specific benchmark: {e}")
+            logger.exception(f"Error during task-specific benchmark: {e}")
             result_tabarena_df = pl.DataFrame()
-
     else:
+        logger.info("Skipping task-specific benchmark.")
         result_tabarena_df = pl.DataFrame()
-        main_logger.info("Skipping task-specific benchmark.")
 
+    logger.info(f"Benchmark completed at {datetime.now()}")
     return result_outlier_df, result_tabarena_df, result_dir
 
 
-def validate_embedding_models(embedding_models):
-    """Validate and filter embedding model instances.
+def _validate_models(
+    models: list[AbstractEmbeddingGenerator] | AbstractEmbeddingGenerator,
+) -> list[AbstractEmbeddingGenerator]:
+    """Validate and normalize embedding model inputs.
 
     Args:
-        embedding_models: Single model instance or list of model instances.
+        models: Single model or list of models.
 
     Returns:
-        list: List of validated AbstractEmbeddingGenerator instances.
+        List of validated AbstractEmbeddingGenerator instances.
     """
-    if not isinstance(embedding_models, list):
-        models_to_check = [embedding_models]
-    else:
-        models_to_check = embedding_models
+    if not isinstance(models, list):
+        models = [models]
 
-    return [
-        model
-        for model in models_to_check
-        if isinstance(model, AbstractEmbeddingGenerator)
-    ]
+    return [m for m in models if isinstance(m, AbstractEmbeddingGenerator)]
 
 
-def validate_evaluator_models(evaluator_algorithms):
-    """Validate and filter evaluator algorithm instances.
+def _validate_evaluators(
+    evaluators: list[AbstractEvaluator] | AbstractEvaluator,
+) -> list[AbstractEvaluator]:
+    """Validate and normalize evaluator inputs.
 
     Args:
-        evaluator_algorithms: Single evaluator instance or list of evaluator instances.
+        evaluators: Single evaluator or list of evaluators.
 
     Returns:
-        list: List of validated AbstractEvaluator instances.
+        List of validated AbstractEvaluator instances.
     """
-    if not isinstance(evaluator_algorithms, list):
-        algorithms_to_check = [evaluator_algorithms]
-    else:
-        algorithms_to_check = evaluator_algorithms
+    if not isinstance(evaluators, list):
+        evaluators = [evaluators]
 
-    return [
-        algorithm
-        for algorithm in algorithms_to_check
-        if isinstance(algorithm, AbstractEvaluator)
-    ]
+    return [e for e in evaluators if isinstance(e, AbstractEvaluator)]
+
+
+def _cleanup_models(models: list[AbstractEmbeddingGenerator], logger: logging.Logger):
+    """Clean up models and free memory.
+
+    Args:
+        models: List of models to clean up.
+        logger: Logger for reporting cleanup issues.
+    """
+    for model in models:
+        try:
+            model._reset_embedding_model()
+        except Exception as e:
+            logger.warning(f"Error resetting {model.name}: {e}")
+
+    # Force garbage collection
+    gc.collect()
+
+    # Clear GPU cache if available
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
