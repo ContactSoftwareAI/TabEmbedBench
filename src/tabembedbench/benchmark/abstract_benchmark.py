@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
+from typing import Iterator
 
 import polars as pl
 
@@ -14,10 +15,19 @@ from tabembedbench.utils.tracking_utils import save_result_df
 class AbstractBenchmark(ABC):
     """Abstract base class for benchmark implementations.
 
-    This class provides a common structure for different benchmark types
+    This class provides a simplified structure for different benchmark types
     (e.g., outlier detection, classification, regression). It handles common
-    functionality such as result management, logging, GPU cache management,
-    and the overall benchmark execution flow.
+    functionality such as result management, logging, and GPU cache management.
+
+    The workflow is clear and linear:
+    1. Load datasets
+    2. For each dataset:
+       a. Check if should skip
+       b. Prepare data (yields one or more data splits)
+       c. For each data split:
+          - Generate embeddings with each model
+          - Evaluate embeddings with each evaluator
+          - Save results
 
     Attributes:
         logger: Logger instance for the benchmark.
@@ -27,11 +37,13 @@ class AbstractBenchmark(ABC):
         save_result_dataframe: Flag to determine if results should be saved.
         upper_bound_num_samples: Maximum number of samples to process.
         upper_bound_num_features: Maximum number of features to process.
+        task_type: Type of task (e.g., 'Outlier Detection', 'Supervised Classification').
     """
 
     def __init__(
         self,
         logger_name: str,
+        task_type: str,
         result_dir: str | Path = "results",
         timestamp: str | None = None,
         save_result_dataframe: bool = True,
@@ -42,6 +54,7 @@ class AbstractBenchmark(ABC):
 
         Args:
             logger_name: Name for the logger instance.
+            task_type: Type of task for this benchmark.
             result_dir: Directory path for saving results.
             timestamp: Optional timestamp string. If None, current time is used.
             save_result_dataframe: Whether to save results to disk.
@@ -49,6 +62,7 @@ class AbstractBenchmark(ABC):
             upper_bound_num_features: Maximum number of features to process.
         """
         self.logger = get_benchmark_logger(logger_name)
+        self.task_type = task_type
         self.result_df = pl.DataFrame()
 
         if isinstance(result_dir, str):
@@ -61,18 +75,14 @@ class AbstractBenchmark(ABC):
         self.upper_bound_num_samples = upper_bound_num_samples
         self.upper_bound_num_features = upper_bound_num_features
 
+    # ========== Abstract Methods (Subclasses must implement) ==========
+
     @abstractmethod
-    def _load_datasets(self, **kwargs):
+    def _load_datasets(self, **kwargs) -> list:
         """Load datasets for the benchmark.
 
-        This method should be implemented by subclasses to handle
-        dataset-specific loading logic (e.g., loading from files,
-        downloading from OpenML, etc.).
-
         Returns:
-            A list of datasets to process. Each dataset can be any format
-            (file path, dict, object) as long as it's compatible with
-            _should_skip_dataset() and _prepare_data().
+            List of datasets to process. Format is implementation-specific.
         """
         raise NotImplementedError
 
@@ -85,41 +95,55 @@ class AbstractBenchmark(ABC):
             **kwargs: Additional parameters for dataset validation.
 
         Returns:
-            A tuple of (should_skip: bool, reason: str | None).
-            If should_skip is True, reason contains the skip message.
+            Tuple of (should_skip: bool, reason: str | None).
         """
         raise NotImplementedError
 
     @abstractmethod
-    def _prepare_data(self, dataset, **kwargs):
+    def _prepare_dataset(self, dataset, **kwargs) -> Iterator[dict]:
         """Prepare data from a dataset for embedding generation.
 
-        This method should extract and preprocess the data from the dataset
-        into a format suitable for the embedding models.
+        This method should yield one or more data splits in a standardized format.
+        For outlier detection: yields a single dict with the full dataset.
+        For classification/regression: yields multiple dicts for each CV fold.
+
+        Each yielded dict must contain:
+            - 'X': Full data (for outlier detection) or None
+            - 'X_train': Training data or None
+            - 'X_test': Test data or None
+            - 'y': Full labels (for outlier detection) or None
+            - 'y_train': Training labels or None
+            - 'y_test': Test labels or None
+            - 'dataset_name': Name of the dataset
+            - 'dataset_size': Number of samples
+            - 'num_features': Number of features
+            - 'metadata': Dict with any additional info (categorical_indices, etc.)
 
         Args:
             dataset: The dataset to prepare.
             **kwargs: Additional parameters for data preparation.
 
-        Returns:
-            Prepared data in the format expected by embedding models.
+        Yields:
+            Dictionary containing prepared data and metadata in standardized format.
         """
         raise NotImplementedError
 
     @abstractmethod
-    def _evaluate_embeddings(
-        self, embeddings, evaluator: AbstractEvaluator, dataset_info: dict, **kwargs
+    def _evaluate(
+        self,
+        embeddings: tuple,
+        evaluator: AbstractEvaluator,
+        data_split: dict,
     ) -> dict:
         """Evaluate embeddings using the provided evaluator.
 
         Args:
-            embeddings: The embeddings to evaluate.
+            embeddings: Tuple from embedding generation (train_emb, test_emb, time).
             evaluator: The evaluator instance to use.
-            dataset_info: Dictionary containing dataset metadata.
-            **kwargs: Additional parameters for evaluation.
+            data_split: Dictionary containing the data split and metadata.
 
         Returns:
-            Dictionary containing evaluation results.
+            Dictionary containing evaluation results (must include all metadata).
         """
         raise NotImplementedError
 
@@ -132,6 +156,133 @@ class AbstractBenchmark(ABC):
         """
         raise NotImplementedError
 
+    # ========== Concrete Methods (Implemented in base class) ==========
+
+    def run_benchmark(
+        self,
+        embedding_models: list[AbstractEmbeddingGenerator],
+        evaluators: list[AbstractEvaluator],
+        **kwargs,
+    ) -> pl.DataFrame:
+        """Run the benchmark with the provided models and evaluators.
+
+        This is the main entry point with a clear, linear workflow.
+
+        Args:
+            embedding_models: List of embedding models to evaluate.
+            evaluators: List of evaluators to use.
+            **kwargs: Additional benchmark-specific parameters.
+
+        Returns:
+            Polars DataFrame containing all benchmark results.
+        """
+        self.logger.info(f"Starting {self._get_benchmark_name()} benchmark...")
+
+        datasets = self._load_datasets(**kwargs)
+
+        for dataset in datasets:
+            # Check if dataset should be skipped
+            should_skip, skip_reason = self._should_skip_dataset(dataset, **kwargs)
+            if should_skip:
+                self.logger.warning(skip_reason)
+                continue
+
+            # Prepare dataset (may yield multiple splits for cross-validation)
+            try:
+                data_splits = self._prepare_dataset(dataset, **kwargs)
+            except Exception as e:
+                self.logger.exception(f"Error preparing dataset: {e}")
+                continue
+
+            # Process each data split
+            for data_split in data_splits:
+                # Process each embedding model
+                for embedding_model in embedding_models:
+                    self.logger.info(
+                        f"Processing {embedding_model.name} on {data_split['dataset_name']}..."
+                    )
+
+                    # Generate embeddings
+                    try:
+                        embeddings = self._generate_embeddings(
+                            embedding_model, data_split
+                        )
+                    except Exception as e:
+                        self.logger.exception(
+                            f"Error generating embeddings with {embedding_model.name}: {e}"
+                        )
+                        continue
+
+                    # Evaluate with each compatible evaluator
+                    for evaluator in evaluators:
+                        if not self._is_compatible(evaluator, data_split):
+                            continue
+
+                        try:
+                            results = self._evaluate(embeddings, evaluator, data_split)
+                            # Add embedding model name to results
+                            results["embedding_model"] = [embedding_model.name]
+                            self._add_result(results)
+                        except Exception as e:
+                            self.logger.exception(
+                                f"Error evaluating with {evaluator._name}: {e}"
+                            )
+
+                        # Reset evaluator for next use
+                        evaluator.reset_evaluator()
+                        self._cleanup_gpu_cache()
+
+                    # Save intermediate results after each model
+                    self._save_results()
+                    self._cleanup_gpu_cache()
+
+        self.logger.info(f"{self._get_benchmark_name()} benchmark completed.")
+        return self.result_df
+
+    def _generate_embeddings(
+        self,
+        embedding_model: AbstractEmbeddingGenerator,
+        data_split: dict,
+    ) -> tuple:
+        """Generate embeddings using the provided model.
+
+        Args:
+            embedding_model: The embedding model to use.
+            data_split: Dictionary containing data and metadata.
+
+        Returns:
+            Tuple of (train_embeddings, test_embeddings, compute_time).
+        """
+        # Extract data based on task type
+        if data_split.get("X") is not None:
+            # Outlier detection: single dataset
+            X = data_split["X"]
+        else:
+            # Supervised learning: train/test split
+            X = data_split["X_train"]
+
+        # Pass metadata for model-specific handling
+        metadata = data_split.get("metadata", {})
+
+        return embedding_model.generate_embeddings(
+            X,
+            outlier=(self.task_type == "Outlier Detection"),
+            **metadata,
+        )
+
+    def _is_compatible(self, evaluator: AbstractEvaluator, data_split: dict) -> bool:
+        """Check if evaluator is compatible with the current task.
+
+        Args:
+            evaluator: The evaluator to check.
+            data_split: Dictionary containing data split information.
+
+        Returns:
+            True if evaluator is compatible, False otherwise.
+        """
+        # Check task type compatibility
+        return evaluator.task_type == self.task_type
+
     def _check_dataset_size_constraints(
         self, num_samples: int, num_features: int, dataset_name: str
     ) -> tuple[bool, str | None]:
@@ -143,7 +294,7 @@ class AbstractBenchmark(ABC):
             dataset_name: Name of the dataset for logging.
 
         Returns:
-            A tuple of (should_skip: bool, reason: str | None).
+            Tuple of (should_skip: bool, reason: str | None).
         """
         if num_samples > self.upper_bound_num_samples:
             reason = (
@@ -161,39 +312,7 @@ class AbstractBenchmark(ABC):
 
         return False, None
 
-    def _generate_embeddings(
-        self,
-        embedding_model: AbstractEmbeddingGenerator,
-        prepared_data,
-        **kwargs
-    ):
-        """Generate embeddings using the provided model.
-
-        Args:
-            embedding_model: The embedding model to use.
-            data: The data to generate embeddings for.
-            **kwargs: Additional parameters for embedding generation.
-
-        Returns:
-            Tuple of (embeddings, compute_time, test_embeddings, test_compute_time).
-
-        Raises:
-            Exception: If embedding generation fails.
-        """
-        data = prepared_data["data"]
-        embedding_kwargs = prepared_data["embedding_kwargs"]
-        try:
-            return embedding_model.generate_embeddings(
-                data,
-                **embedding_kwargs
-            )
-        except Exception as e:
-            self.logger.exception(
-                f"Error computing embeddings with {embedding_model.name}: {e}"
-            )
-            raise
-
-    def _add_result_row(self, result_dict: dict):
+    def _add_result(self, result_dict: dict):
         """Add a result row to the result DataFrame.
 
         Args:
@@ -205,6 +324,7 @@ class AbstractBenchmark(ABC):
     def _save_results(self):
         """Save the current results to disk if enabled."""
         if self.save_result_dataframe and not self.result_df.is_empty():
+            # Sort columns: non-algorithm columns first, then algorithm columns
             non_algo_cols = [
                 col for col in self.result_df.columns if not col.startswith("algorithm")
             ]
@@ -225,260 +345,3 @@ class AbstractBenchmark(ABC):
         """Clear GPU cache if available."""
         if get_device() in ["cuda", "mps"]:
             empty_gpu_cache()
-
-    def _normalize_prepared_data(self, prepared_data):
-        """Normalize prepared data to an iterable format.
-
-        Args:
-            prepared_data: Data from _prepare_data, can be a dict, generator, or list.
-
-        Returns:
-            An iterable of prepared data items.
-        """
-        # Handle both single dict and generator cases
-        # If it's a generator, iterate through it; otherwise, wrap in a list
-        try:
-            # Try to iterate (works for generators and lists)
-            if hasattr(prepared_data, "__iter__") and not isinstance(
-                prepared_data, dict
-            ):
-                return iter(prepared_data)
-            else:
-                return [prepared_data]
-        except TypeError:
-            # If not iterable, wrap in a list
-            return [prepared_data]
-
-    def _process_embedding_generation(
-        self,
-        embedding_model: AbstractEmbeddingGenerator,
-        prepared_data_item: dict,
-    ) -> tuple | None:
-        """Generate embeddings for a prepared data item.
-
-        Args:
-            embedding_model: The embedding model to use.
-            prepared_data_item: Dictionary containing prepared data and metadata.
-
-        Returns:
-            Tuple of (embedding_results, embed_dim) if successful, None otherwise.
-        """
-        try:
-            embedding_results = self._generate_embeddings(
-                embedding_model,
-                prepared_data_item,
-                **prepared_data_item.get("embedding_kwargs", {}),
-            )
-
-            return embedding_results
-        except Exception as e:
-            self.logger.exception(f"Error generating embeddings: {e}. Skipping.")
-            # Add error row if dataset info is available
-            if "dataset_name" in prepared_data_item:
-                error_row = {
-                    "dataset_name": [prepared_data_item["dataset_name"]],
-                    "dataset_size": [prepared_data_item.get("dataset_size", 0)],
-                    "embedding_model": [embedding_model.name],
-                }
-                self._add_result_row(error_row)
-            return None
-
-    def _process_single_evaluation(
-        self,
-        evaluator: AbstractEvaluator,
-        embedding_results,
-        prepared_data_item: dict,
-        embedding_model: AbstractEmbeddingGenerator,
-        embed_dim: int,
-    ):
-        """Process a single evaluation with an evaluator.
-
-        Args:
-            evaluator: The evaluator to use.
-            embedding_results: Results from embedding generation.
-            prepared_data_item: Dictionary containing prepared data and metadata.
-            embedding_model: The embedding model used.
-            embed_dim: Dimension of the embeddings.
-        """
-        if not self._is_evaluator_compatible(
-            evaluator, **prepared_data_item.get("eval_kwargs", {})
-        ):
-            return
-
-        self.logger.debug(f"Starting evaluation with {evaluator._name}...")
-
-        try:
-            time_to_compute_embedding = embedding_results[-1]
-            # Prepare dataset info for evaluation
-            dataset_info = {
-                "dataset_name": [prepared_data_item["dataset_name"]],
-                "dataset_size": [prepared_data_item["dataset_size"]],
-                "num_features": [prepared_data_item["num_features"]],
-                "embedding_model": [embedding_model.name],
-                "embed_dim": [embed_dim],
-                "time_to_compute_embedding": [time_to_compute_embedding],
-                "algorithm": [evaluator._name],
-            }
-
-            # Evaluate embeddings
-            eval_results = self._evaluate_embeddings(
-                embedding_results,
-                evaluator,
-                dataset_info,
-                **prepared_data_item.get("eval_kwargs", {}),
-            )
-
-            # Add evaluator parameters to results
-            evaluator_params = evaluator.get_parameters()
-            for key, value in evaluator_params.items():
-                eval_results[f"algorithm_{key}"] = [value]
-
-            # Add result row
-            self._add_result_row(eval_results)
-
-            # Reset evaluator
-            evaluator.reset_evaluator()
-
-            self.logger.debug(f"Finished evaluation with {evaluator._name}")
-
-        except Exception as e:
-            self.logger.exception(
-                f"Error during evaluation with {evaluator._name}: {e}"
-            )
-
-    def _process_embedding_model(
-        self,
-        embedding_model: AbstractEmbeddingGenerator,
-        prepared_data_item: dict,
-        evaluators: list[AbstractEvaluator],
-    ):
-        """Process a single embedding model for a prepared data item.
-
-        Args:
-            embedding_model: The embedding model to use.
-            prepared_data_item: Dictionary containing prepared data and metadata.
-            evaluators: List of evaluators to use.
-        """
-        self.logger.info(f"Starting experiment for {embedding_model.name}...")
-
-        # Generate embeddings
-        embedding_results = self._process_embedding_generation(
-            embedding_model,
-            prepared_data_item,
-        )
-        if embedding_results is None:
-            return
-
-        embed_dim = embedding_results[0].shape[-1]
-
-        # Evaluate with each evaluator
-        for evaluator in evaluators:
-            self._process_single_evaluation(
-                evaluator,
-                embedding_results,
-                prepared_data_item,
-                embedding_model,
-                embed_dim,
-            )
-            self._cleanup_gpu_cache()
-
-        # Save intermediate results
-        self._save_results()
-
-        # Cleanup
-        self._cleanup_gpu_cache()
-
-        self.logger.debug(f"Finished experiment for {embedding_model.name}")
-
-    def _process_dataset(
-        self,
-        dataset,
-        embedding_models: list[AbstractEmbeddingGenerator],
-        evaluators: list[AbstractEvaluator],
-        **kwargs,
-    ):
-        """Process a single dataset with all embedding models and evaluators.
-
-        Args:
-            dataset: The dataset to process.
-            embedding_models: List of embedding models to evaluate.
-            evaluators: List of evaluators to use.
-            **kwargs: Additional benchmark-specific parameters.
-        """
-        # Check if dataset should be skipped
-        should_skip, skip_reason = self._should_skip_dataset(dataset, **kwargs)
-        if should_skip:
-            self.logger.warning(skip_reason)
-            return
-
-        # Prepare data from dataset
-        try:
-            prepared_data = self._prepare_data(dataset, **kwargs)
-        except Exception as e:
-            self.logger.exception(f"Error preparing data: {e}")
-            return
-
-        # Normalize prepared data to iterable format
-        data_items = self._normalize_prepared_data(prepared_data)
-
-        # Process each data item (could be one or many)
-        for prepared_data_item in data_items:
-            # Process each embedding model
-            for embedding_model in embedding_models:
-                self._process_embedding_model(
-                    embedding_model, prepared_data_item, evaluators
-                )
-
-    def run_benchmark(
-        self,
-        embedding_models: list[AbstractEmbeddingGenerator],
-        evaluators: list[AbstractEvaluator],
-        **kwargs,
-    ) -> pl.DataFrame:
-        """Run the benchmark with the provided models and evaluators.
-
-        This is the main entry point for executing the benchmark. It iterates
-        through datasets, generates embeddings, evaluates them, and collects
-        results.
-
-        Args:
-            embedding_models: List of embedding models to evaluate.
-            evaluators: List of evaluators to use.
-            **kwargs: Additional benchmark-specific parameters.
-
-        Returns:
-            Polars DataFrame containing all benchmark results.
-        """
-        datasets = self._load_datasets(**kwargs)
-
-        outlier = self.check_if_outlier()
-
-        for dataset in datasets:
-            self._process_dataset(
-                dataset,
-                embedding_models,
-                evaluators,
-                outlier=outlier,
-                **kwargs)
-
-        self.logger.info(f"{self._get_benchmark_name()} benchmark completed.")
-        return self.result_df
-
-    @abstractmethod
-    def check_if_outlier(self) -> bool:
-        pass
-
-    def _is_evaluator_compatible(self, evaluator: AbstractEvaluator, **kwargs) -> bool:
-        """Check if evaluator is compatible with the current benchmark.
-
-        This method can be overridden by subclasses to implement
-        benchmark-specific compatibility checks.
-
-        Args:
-            evaluator: The evaluator to check.
-            **kwargs: Additional parameters for compatibility checking.
-
-        Returns:
-            True if evaluator is compatible, False otherwise.
-        """
-        return True

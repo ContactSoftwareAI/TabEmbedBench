@@ -1,13 +1,16 @@
+"""Simplified outlier detection benchmark using ADBench datasets."""
+
 from datetime import datetime
 from pathlib import Path
+from typing import Iterator
 
 import numpy as np
 import polars as pl
 from sklearn.metrics import roc_auc_score
 
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
-from tabembedbench.evaluators import AbstractEvaluator
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
+from tabembedbench.evaluators import AbstractEvaluator
 from tabembedbench.utils.dataset_utils import download_adbench_tabular_datasets
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -25,7 +28,7 @@ IMAGE_CATEGORY = [
 
 
 class OutlierBenchmark(AbstractBenchmark):
-    """Benchmark for outlier detection using ADBench tabular datasets.
+    """Simplified benchmark for outlier detection using ADBench tabular datasets.
 
     This benchmark evaluates embedding models on outlier detection tasks
     using datasets from the ADBench benchmark suite.
@@ -56,6 +59,7 @@ class OutlierBenchmark(AbstractBenchmark):
         """
         super().__init__(
             logger_name="TabEmbedBench_Outlier",
+            task_type="Outlier Detection",
             result_dir=result_dir,
             timestamp=timestamp,
             save_result_dataframe=save_result_dataframe,
@@ -79,7 +83,7 @@ class OutlierBenchmark(AbstractBenchmark):
         if exclude_image_datasets:
             self.exclude_datasets.extend(IMAGE_CATEGORY)
 
-    def _load_datasets(self, **kwargs):
+    def _load_datasets(self, **kwargs) -> list:
         """Load ADBench datasets from the specified directory.
 
         Returns:
@@ -87,7 +91,9 @@ class OutlierBenchmark(AbstractBenchmark):
         """
         return list(self.dataset_paths.glob("*.npz"))
 
-    def _should_skip_dataset(self, dataset_file, **kwargs) -> tuple[bool, str | None]:
+    def _should_skip_dataset(
+        self, dataset_file: Path, **kwargs
+    ) -> tuple[bool, str | None]:
         """Check if a dataset should be skipped.
 
         Args:
@@ -120,15 +126,17 @@ class OutlierBenchmark(AbstractBenchmark):
 
         return should_skip, reason
 
-    def _prepare_data(self, dataset_file, **kwargs):
+    def _prepare_dataset(self, dataset_file: Path, **kwargs) -> Iterator[dict]:
         """Prepare data from an ADBench dataset file.
+
+        For outlier detection, we yield a single dict with the full dataset.
 
         Args:
             dataset_file: Path to the dataset file.
             **kwargs: Additional parameters (unused).
 
-        Returns:
-            Dictionary containing prepared data and metadata.
+        Yields:
+            Dictionary containing prepared data in standardized format.
         """
         dataset = np.load(dataset_file)
         X = dataset["X"]
@@ -139,54 +147,65 @@ class OutlierBenchmark(AbstractBenchmark):
         num_features = X.shape[1]
         outlier_ratio = y.sum() / y.shape[0]
 
-        return {
-            "data": X,
-            "labels": y,
+        # Yield single split for outlier detection
+        yield {
+            "X": X,
+            "X_train": None,
+            "X_test": None,
+            "y": y,
+            "y_train": None,
+            "y_test": None,
             "dataset_name": dataset_name,
             "dataset_size": num_samples,
             "num_features": num_features,
-            "outlier_ratio": outlier_ratio,
-            "embedding_kwargs": {"outlier": True},
-            "eval_kwargs": {"y": y, "outlier_ratio": outlier_ratio,
-                            "outlier": True},
+            "metadata": {
+                "outlier_ratio": outlier_ratio,
+            },
         }
 
-    def _evaluate_embeddings(
+    def _evaluate(
         self,
-        embedding_results,
+        embeddings: tuple,
         evaluator: AbstractEvaluator,
-        dataset_info: dict,
-        **kwargs,
+        data_split: dict,
     ) -> dict:
         """Evaluate embeddings for outlier detection.
 
         Args:
             embeddings: Tuple of (embeddings, test_embeddings, compute_time).
             evaluator: The evaluator to use.
-            dataset_info: Dictionary with dataset metadata.
-            **kwargs: Additional parameters including 'y' (labels) and 'outlier_ratio'.
+            data_split: Dictionary with data and metadata.
 
         Returns:
             Dictionary containing evaluation results.
         """
-        y = kwargs.get("y")
-        outlier_ratio = kwargs.get("outlier_ratio")
-
-        embeddings = embedding_results[0]
+        train_embeddings, test_embeddings, compute_time = embeddings
+        y = data_split["y"]
+        outlier_ratio = data_split["metadata"]["outlier_ratio"]
 
         # Get prediction from evaluator
-        prediction, _ = evaluator.get_prediction(embeddings)
+        prediction, _ = evaluator.get_prediction(train_embeddings)
 
         # Compute AUC score
         score_auc = roc_auc_score(y, prediction)
 
-        # Build result dictionary
+        # Build result dictionary with all metadata
         result_dict = {
-            **dataset_info,
+            "dataset_name": [data_split["dataset_name"]],
+            "dataset_size": [data_split["dataset_size"]],
+            "num_features": [data_split["num_features"]],
+            "embed_dim": [train_embeddings.shape[-1]],
+            "time_to_compute_embedding": [compute_time],
+            "algorithm": [evaluator._name],
             "auc_score": [score_auc],
             "outlier_ratio": [outlier_ratio],
             "task": ["Outlier Detection"],
         }
+
+        # Add evaluator parameters
+        evaluator_params = evaluator.get_parameters()
+        for key, value in evaluator_params.items():
+            result_dict[f"algorithm_{key}"] = [value]
 
         return result_dict
 
@@ -197,21 +216,6 @@ class OutlierBenchmark(AbstractBenchmark):
             String identifier for the benchmark.
         """
         return "ADBench_Tabular"
-
-    def _is_evaluator_compatible(self, evaluator: AbstractEvaluator, **kwargs) -> bool:
-        """Check if evaluator is compatible with outlier detection.
-
-        Args:
-            evaluator: The evaluator to check.
-            **kwargs: Additional parameters (unused).
-
-        Returns:
-            True if evaluator supports outlier detection.
-        """
-        return evaluator.task_type == "Outlier Detection"
-
-    def check_if_outlier(self) -> bool:
-        return True
 
 
 def run_outlier_benchmark(
@@ -226,45 +230,26 @@ def run_outlier_benchmark(
     result_dir: str | Path = "result_outlier",
     timestamp: str = TIMESTAMP,
 ) -> pl.DataFrame:
-    """Runs an outlier detection benchmark using the provided embedding models
-    and datasets. It uses the tabular datasets from the ADBench benchmark [1]
-    for evaluation.
+    """Run outlier detection benchmark using the provided embedding models.
 
     This function benchmarks the effectiveness of various embedding models in
-    detecting outliers. It supports the exclusion of specific datasets,
-    exclusion of image datasets, limiting the dataset size, and optionally
-    saving computed embeddings for analysis.
+    detecting outliers using the tabular datasets from the ADBench benchmark [1].
 
     Args:
-        embedding_models: A list of embedding models to be evaluated. Each
-            embedding model must implement methods for preprocessing data,
-            computing embeddings, and resetting the model.
-        evaluators: A list of algorithm.
+        embedding_models: List of embedding models to be evaluated.
+        evaluators: List of evaluator algorithms.
         dataset_paths: Optional path to the dataset directory. If not specified,
-            a default directory for tabular datasets will be used,
-            and datasets will be downloaded if missing.
-        exclude_datasets: Optional list of dataset filenames to exclude from the
-            benchmark. Each filename should match a file in the dataset directory.
-        exclude_image_datasets: Boolean flag that indicates whether to exclude
-            image datasets from the benchmark. Defaults to False.
-        upper_bound_num_samples: Integer specifying the maximum size of rows
-            (in number of samples) to include in the benchmark. Datasets exceeding
-            this size will be skipped. Defaults to 10000.
-        upper_bound_num_features: Integer specifying the maximum number of features
-            to include in the benchmark. Datasets with more features than this
-            value will be skipped. Defaults to 500.
-        save_result_dataframe: Boolean flag to determine whether to save the result
-            dataframe to disk. Defaults to True.
-        result_dir: Optional path to the directory where the result dataframe should
-            be saved. Defaults to "result_outlier".
-        timestamp: Optional timestamp string to use for saving the result dataframe.
-            Defaults to the current timestamp.
+            uses default directory and downloads datasets if missing.
+        exclude_datasets: Optional list of dataset filenames to exclude.
+        exclude_image_datasets: Whether to exclude image datasets. Defaults to True.
+        upper_bound_num_samples: Maximum dataset size to include. Defaults to 10000.
+        upper_bound_num_features: Maximum number of features to include. Defaults to 500.
+        save_result_dataframe: Whether to save results to disk. Defaults to True.
+        result_dir: Directory where results should be saved. Defaults to "result_outlier".
+        timestamp: Timestamp string for saving results. Defaults to current timestamp.
 
     Returns:
-        pl.DataFrame: A Polars DataFrame containing the benchmark results, including
-            dataset names, dataset sizes, embedding model names, number of neighbors
-            used for outlier detection, AUC scores, computation times for embeddings,
-            and the benchmark category.
+        pl.DataFrame: Polars DataFrame containing the benchmark results.
 
     References:
         [1] Han, S., et al. (2022). "Adbench: Anomaly detection benchmark."
