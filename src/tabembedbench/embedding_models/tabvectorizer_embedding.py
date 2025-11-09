@@ -8,22 +8,35 @@ from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
     """TableVectorizer-based embedding generator for tabular data.
 
-    This embedding model uses skrub's TableVectorizer to transform tabular data
-    into numerical embeddings. It provides a simple baseline approach for
-    converting mixed-type tabular data into vector representations.
+    This class uses skrub's TableVectorizer to transform mixed-type tabular data
+    into numerical embeddings. TableVectorizer automatically handles different column
+    types (numerical, categorical, datetime, text) and applies appropriate encoding
+    strategies for each, making it a robust baseline for tabular data representation.
+
+    The embedding generation process:
+    1. Automatically detects column types in the input data
+    2. Applies appropriate transformations (one-hot encoding, target encoding, etc.)
+    3. Returns dense numerical representations suitable for downstream tasks
 
     Attributes:
-        tablevectorizer (TableVectorizer): The underlying TableVectorizer instance.
+        tablevectorizer (TableVectorizer): The underlying skrub TableVectorizer instance
+            that handles the automatic feature transformation.
         _is_fitted (bool): Whether the model has been fitted to data.
+
+    Example:
+        >>> embedding_gen = TabVectorizerEmbedding()
+        >>> train_emb, test_emb, time = embedding_gen.generate_embeddings(
+        ...     X_train, X_test
+        ... )
     """
 
     def __init__(self, **kwargs):
         """Initialize the TableVectorizer embedding generator.
 
         Args:
-            optimize (bool, optional): Whether to optimize hyperparameters.
-                Currently not implemented. Defaults to False.
-            **kwargs: Additional keyword arguments to pass to TableVectorizer.
+            **kwargs: Additional keyword arguments to pass to TableVectorizer,
+                such as 'n_jobs' for parallel processing or specific encoder
+                configurations.
         """
         super().__init__(name="TableVectorizerEmbedding")
 
@@ -31,29 +44,21 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
         self._is_fitted = False
 
     def _preprocess_data(
-            self,
-            X,
-            train=True,
-            outlier: bool = False,
-            **kwargs
+        self, X: np.ndarray, train: bool = True, outlier: bool = False, **kwargs
     ) -> np.ndarray:
-        """
-        Preprocesses the input data for use in model training or prediction. This
-        method prepares the dataset by applying necessary transformations or filtering
-        based on whether the data is considered part of the training phase or
-        contains outliers.
+        """Preprocess input data (no-op for TableVectorizer).
+
+        TableVectorizer handles preprocessing internally, so this method
+        simply returns the input data unchanged.
 
         Args:
-            X (np.ndarray): Input data to be processed.
-            train (bool): Specifies whether the input data is in the training phase.
-                Defaults to True.
-            outlier (bool): Specifies whether to account for outliers during
-                preprocessing. Defaults to False.
-            **kwargs: Additional arguments that can be used for further customization
-                during preprocessing.
+            X (np.ndarray): Input data to preprocess.
+            train (bool, optional): Whether this is training mode. Defaults to True.
+            outlier (bool, optional): Whether to handle outliers. Defaults to False.
+            **kwargs: Additional keyword arguments (unused).
 
         Returns:
-            np.ndarray: Processed version of the input data.
+            np.ndarray: The input data unchanged.
         """
         return X
 
@@ -62,24 +67,43 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
         X_preprocessed: np.ndarray,
         **kwargs,
     ) -> None:
+        """Fit the TableVectorizer to the input data.
+
+        This method fits the TableVectorizer, which learns the appropriate
+        transformations for each column type in the data.
+
+        Args:
+            X_preprocessed (np.ndarray): Preprocessed input data.
+            **kwargs: Additional keyword arguments (unused).
+        """
         self.tablevectorizer.fit(X_preprocessed)
         self._is_fitted = True
 
     def _compute_embeddings(
-            self,
-            X_train_preprocessed: np.ndarray,
-            X_test_preprocessed: np.ndarray | None = None,
-            outlier: bool = False,
-            **kwargs
-    ):
+        self,
+        X_train_preprocessed: np.ndarray,
+        X_test_preprocessed: np.ndarray | None = None,
+        outlier: bool = False,
+        **kwargs,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Compute embeddings using the fitted TableVectorizer.
 
+        Transforms the input data into dense numerical representations using
+        the fitted TableVectorizer. Handles both outlier mode (train only) and
+        standard mode (train + test).
+
         Args:
-            X (np.ndarray): Input data to transform into embeddings.
+            X_train_preprocessed (np.ndarray): Preprocessed training data.
+            X_test_preprocessed (np.ndarray | None, optional): Preprocessed test data.
+                Required when outlier is False. Defaults to None.
+            outlier (bool, optional): If True, transforms only training data.
+                Defaults to False.
             **kwargs: Additional keyword arguments (unused).
 
         Returns:
-            np.ndarray: The computed embeddings.
+            tuple[np.ndarray, np.ndarray | None]: A tuple containing:
+                - train_embeddings: Transformed training data
+                - test_embeddings: Transformed test data, or None if outlier is True.
 
         Raises:
             ValueError: If the model has not been fitted.
@@ -88,7 +112,6 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
             embeddings = self.tablevectorizer.transform(X_train_preprocessed)
             return embeddings.to_numpy(), None
         if self._is_fitted:
-
             X_train = pl.from_numpy(X_train_preprocessed)
             X_test = pl.from_numpy(X_test_preprocessed)
 

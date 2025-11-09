@@ -1,39 +1,44 @@
-import logging
 import warnings
 
 import numpy as np
-import pandas as pd
-import torch
 from tabpfn import TabPFNClassifier, TabPFNRegressor
 from tabpfn_extensions.utils import infer_categorical_features
-from tabpfn_extensions.many_class import ManyClassClassifier
-from tabicl.sklearn.preprocessing import TransformToNumerical
 
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.utils.torch_utils import get_device
 
+
 class TabPFNEmbedding(AbstractEmbeddingGenerator):
-    """Universal TabPFN-based embedding generator for tabular data.
+    """TabPFN-based embedding generator for tabular data.
 
-    This class generates embeddings using TabPFN (Tabular Prior-data Fitted Networks)
-    by treating each feature as a target and using the remaining features as inputs.
-    It supports both classification and regression tasks automatically based on
-    feature type detection.
+    This class generates embeddings using the TabPFN (Tabular Prior-Fitted Network)
+    foundation model. It employs a unique self-supervised approach where each column
+    is treated alternately as a target variable while other columns serve as features.
+    This column-wise prediction strategy captures rich feature interactions and
+    relationships within the tabular data.
 
-    The embedding process works by:
-    1. For each feature column, mask it as the target
-    2. Use remaining features as inputs to predict the masked feature
-    3. Extract embeddings from the trained TabPFN model
-    4. Aggregate embeddings across features and estimators
+    The embedding generation process:
+    1. For each column, treat it as the target and remaining columns as features
+    2. Fit a TabPFN classifier (for categorical) or regressor (for numerical) model
+    3. Extract embeddings from the fitted model
+    4. Aggregate embeddings across columns and estimators
 
     Attributes:
-        num_estimators (int): Number of TabPFN estimators to use.
-        estimator_agg (str): Aggregation method for multiple estimators.
-        emb_agg (str): Aggregation method for feature embeddings.
-        device (torch.device): Device for computation (CPU/GPU).
+        num_estimators (int): Number of estimators used for ensemble predictions.
+        device (str): Device for computation ('cpu' or 'cuda').
         tabpfn_dim (int): Dimensionality of TabPFN embeddings (192).
-        categorical_indices (list[int]): Indices of categorical features.
-        num_features (int): Number of features in the dataset.
+        emb_agg (str): Method for aggregating embeddings across columns ('mean' or 'concat').
+        estimator_agg (str): Method for aggregating outputs from multiple estimators.
+        tabpfn_clf (TabPFNClassifier): TabPFN classifier instance for categorical targets.
+        tabpfn_reg (TabPFNRegressor): TabPFN regressor instance for numerical targets.
+        num_features (int | None): Number of features in the input data.
+        categorical_indices (list[int] | None): Indices of categorical features.
+
+    Example:
+        >>> embedding_gen = TabPFNEmbedding(num_estimators=1, emb_agg='mean')
+        >>> train_emb, test_emb, time = embedding_gen.generate_embeddings(
+        ...     X_train, X_test
+        ... )
     """
 
     def __init__(
@@ -42,19 +47,15 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         estimator_agg: str = "mean",
         emb_agg: str = "mean",
     ) -> None:
-        """Initialize the UniversalTabPFNEmbedding.
+        """Initialize the TabPFN embedding generator.
 
         Args:
-            num_estimators (int, optional): Number of TabPFN estimators to use for
-                ensemble predictions. Defaults to 1.
-            estimator_agg (str, optional): Aggregation method for combining embeddings
-                from multiple estimators. Options are "mean" or "first_element".
-                Defaults to "mean".
-            emb_agg (str, optional): Aggregation method for combining embeddings
-                across features. Options are "concat" or "mean". Defaults to "mean".
-
-        Raises:
-            NotImplementedError: If unsupported aggregation methods are specified.
+            num_estimators (int, optional): Number of estimators for ensemble predictions.
+                Defaults to 1.
+            estimator_agg (str, optional): Method for aggregating estimator outputs.
+                Options: 'mean', 'first_element'. Defaults to "mean".
+            emb_agg (str, optional): Method for aggregating embeddings across columns.
+                Options: 'mean', 'concat'. Defaults to "mean".
         """
         super().__init__(name="TabPFN")
         self.num_estimators = num_estimators
@@ -80,22 +81,17 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
 
     def _preprocess_data(
         self, X: np.ndarray, train: bool = True, outlier: bool = False, **kwargs
-    ):
-        """Preprocess input data for TabPFN embedding generation.
-
-        Converts numpy arrays to PyTorch tensors and moves them to the appropriate
-        device (CPU/GPU) for computation.
+    ) -> np.ndarray:
+        """Preprocess input data by converting to float64.
 
         Args:
-            X (np.ndarray): Input data matrix of shape (n_samples, n_features).
-            train (bool, optional): Whether this is training data. Currently unused
-                but kept for interface compatibility. Defaults to True.
-            outlier (bool, optional): Whether this is outlier data. Currently unused
-                but kept for interface compatibility. Defaults to False.
+            X (np.ndarray): Input data to preprocess.
+            train (bool, optional): Whether this is training mode. Defaults to True.
+            outlier (bool, optional): Whether to handle outliers. Defaults to False.
             **kwargs: Additional keyword arguments (unused).
 
         Returns:
-            torch.Tensor: Preprocessed data as a float tensor on the specified device.
+            np.ndarray: Data converted to float64 dtype.
         """
         return X.astype(np.float64)
 
@@ -105,28 +101,22 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         categorical_indices: list[int] | None = None,
         **kwargs,
     ) -> None:
-        """Fit the TabPFN embedding model to the preprocessed data.
+        """Fit the model by identifying categorical features.
 
-        This method prepares the model for embedding generation by identifying
-        categorical features and storing dataset metadata. No actual model training
-        occurs here as TabPFN models are fitted during embedding computation.
+        This method prepares the model for embedding generation by determining
+        which features are categorical (either from provided indices or by inference)
+        and storing the number of features.
 
         Args:
-            X_preprocessed (torch.Tensor): Preprocessed input data of shape
-                (n_samples, n_features).
-            categorical_indices (list[int] | None, optional): List of indices
-                indicating which features are categorical. If None, categorical
-                features will be automatically inferred. Defaults to None.
+            X_preprocessed (np.ndarray): Preprocessed input data.
+            categorical_indices (list[int] | None, optional): Indices of categorical
+                features. If None, categorical features are automatically inferred.
+                Defaults to None.
             **kwargs: Additional keyword arguments (unused).
-
-        Note:
-            Sets the internal state to fitted and stores feature information
-            for subsequent embedding computation.
         """
         if categorical_indices is not None:
             self.categorical_indices = categorical_indices
         else:
-            # Convert CUDA tensor to CPU numpy array for categorical inference
             self.categorical_indices = infer_categorical_features(X_preprocessed)
 
         self.num_features = X_preprocessed.shape[-1]
@@ -139,35 +129,32 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         X_test_preprocessed: np.ndarray | None = None,
         outlier: bool = False,
         **kwargs,
-    ):
-        """
-        Computes the embeddings for the provided data depending on the presence of outliers.
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """Compute embeddings using the column-wise TabPFN approach.
 
-        If `outlier` is set to True, only the embeddings for the training data are generated
-        and returned, while the corresponding embeddings for the test data are set to None.
-        Otherwise, both training and test embeddings are computed and returned separately.
+        In standard mode, computes embeddings for both train and test data by stacking
+        them together to ensure consistent feature representations. In outlier mode,
+        only training data embeddings are computed.
 
         Args:
-            X_train_preprocessed: Preprocessed training data as a numpy array.
-            X_test_preprocessed: Optional preprocessed test data as a numpy array. Defaults to None.
-            outlier: Boolean indicating whether to compute embeddings by treating the data as
-                outliers. Defaults to False.
-            **kwargs: Additional arguments for internal embedding computation.
+            X_train_preprocessed (np.ndarray): Preprocessed training dataset.
+            X_test_preprocessed (np.ndarray | None, optional): Preprocessed test dataset.
+                Required when outlier is False. Defaults to None.
+            outlier (bool, optional): If True, computes embeddings only for training data.
+                Defaults to False.
+            **kwargs: Additional keyword arguments (unused).
 
         Returns:
-            Tuple containing the computed training embeddings and test embeddings (or None if
-            `outlier` is True).
+            tuple[np.ndarray, np.ndarray | None]: A tuple containing:
+                - train_embeddings: Embeddings for training data
+                - test_embeddings: Embeddings for test data, or None if outlier is True.
         """
         if outlier:
-            X_embeddings = self._compute_internal_embeddings(
-                X_train_preprocessed
-            )
+            X_embeddings = self._compute_internal_embeddings(X_train_preprocessed)
 
             return X_embeddings, None
         else:
-            X_train_embeddings = self._compute_internal_embeddings(
-                X_train_preprocessed
-            )
+            X_train_embeddings = self._compute_internal_embeddings(X_train_preprocessed)
 
             size_X_train = X_train_preprocessed.shape[0]
 
@@ -179,11 +166,36 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
 
             return X_train_embeddings, X_test_embeddings
 
-    def _compute_internal_embeddings(self, X):
+    def _compute_internal_embeddings(self, X: np.ndarray) -> np.ndarray:
+        """Compute embeddings by treating each column as a prediction target.
+
+        This method implements the core column-wise embedding strategy. For each column:
+        1. Treat the column as the target variable
+        2. Use remaining columns as features
+        3. Fit appropriate TabPFN model (classifier for categorical, regressor for numerical)
+        4. Extract embeddings from the fitted model
+        5. Aggregate across estimators and columns
+
+        Args:
+            X (np.ndarray): Input matrix of shape (n_samples, n_features).
+
+        Returns:
+            np.ndarray: Aggregated embeddings. Shape depends on aggregation method:
+                - If emb_agg='mean': (n_samples, tabpfn_dim)
+                - If emb_agg='concat': (n_samples, n_features * tabpfn_dim)
+
+        Raises:
+            ValueError: If TabPFN model cannot be fitted to a column.
+            NotImplementedError: If an unsupported aggregation method is specified.
+
+        Note:
+            Automatically falls back to regression model if a column marked as
+            categorical contains continuous values or too many classes.
+        """
         num_samples = X.shape[0]
         tmp_embeddings = []
         with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
             for column_idx in range(X.shape[1]):
                 # Create mask for the current column
                 mask = np.zeros_like(X, dtype=bool)
@@ -212,8 +224,9 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
                         )
                         model = self.tabpfn_reg
                         model.fit(features, target)
-                    elif "Number of classes" in str(e) and ("exceeds the maximal "
-                                                                "number" in str(e)):
+                    elif "Number of classes" in str(e) and (
+                        "exceeds the maximal number" in str(e)
+                    ):
                         self._logger.warning(
                             f"Using regression model for column {column_idx} "
                             f"due to the error: "

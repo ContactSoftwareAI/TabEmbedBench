@@ -241,10 +241,7 @@ class AbstractEmbeddingGenerator(ABC):
 
         start_time = time.time()
         train_embeddings, test_embeddings = self._compute_embeddings(
-            X_train_preprocessed,
-            X_test_preprocessed,
-            outlier=outlier,
-            **kwargs
+            X_train_preprocessed, X_test_preprocessed, outlier=outlier, **kwargs
         )
         compute_embeddings_time = time.time() - start_time
 

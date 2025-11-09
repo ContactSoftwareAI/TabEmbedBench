@@ -110,11 +110,49 @@ class TabICLRowEmbedding(nn.Module):
 
 
 class TabICLEmbedding(AbstractEmbeddingGenerator):
-    def __init__(
-        self,
-        model_path: str | None = None,
-        device: str | None = None
-    ):
+    """TabICL-based embedding generator for tabular data.
+
+    This class implements an embedding generator using the TabICL (Tabular In-Context
+    Learning) foundation model. It leverages pre-trained transformer-based architectures
+    with hierarchical attention mechanisms to generate contextual embeddings for
+    tabular data. The model processes data through column embeddings and row interactions
+    to capture both feature-level and sample-level relationships.
+
+    The embedding generation process includes:
+    1. Data preprocessing using TabICL-specific pipelines (standard or outlier-specific)
+    2. Conversion to torch tensors and device placement
+    3. Forward pass through the pre-trained TabICL model
+    4. Extraction of row-level embeddings
+
+    Attributes:
+        model_path (Path | None): Path to a local model checkpoint. If None, downloads
+            from HuggingFace hub.
+        tabicl_row_embedder (TabICLRowEmbedding): The loaded TabICL model with frozen
+            parameters.
+        preprocess_pipeline (PreprocessingPipeline | OutlierPreprocessingPipeline | None):
+            Fitted preprocessing pipeline for data transformation.
+        device (str): Device for computation ('cuda' or 'cpu').
+
+    References:
+        [1] Qu, J. et al. (2025). Tabicl: A tabular foundation model for in-context
+            learning on large data. arXiv preprint arXiv:2502.05564.
+
+    Example:
+        >>> embedding_gen = TabICLEmbedding()
+        >>> train_emb, test_emb, time = embedding_gen.generate_embeddings(
+        ...     X_train, X_test
+        ... )
+    """
+
+    def __init__(self, model_path: str | None = None, device: str | None = None):
+        """Initialize the TabICL embedding generator.
+
+        Args:
+            model_path (str | None, optional): Path to a local TabICL model checkpoint.
+                If None, the model will be downloaded from HuggingFace. Defaults to None.
+            device (str | None, optional): Device to use for computation ('cuda' or 'cpu').
+                If None, automatically detects GPU availability. Defaults to None.
+        """
         super().__init__(name="TabICL")
 
         self.model_path = Path(model_path) if model_path is not None else None
@@ -123,11 +161,20 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         self.device = device if device is not None else get_device()
 
     def get_tabicl_model(self):
-        """Load or download the TabICL model.
+        """Load or download the TabICL model with pre-trained weights.
+
+        This method either loads a model from a local checkpoint or downloads
+        the pre-trained TabICL classifier from HuggingFace Hub. The model's
+        parameters are frozen to prevent updates during embedding generation.
 
         Returns:
             TabICLRowEmbedding: The loaded TabICL row embedding model with
-                pre-trained weights and frozen parameters.
+                pre-trained weights and frozen parameters for both column
+                embedder and row interactor components.
+
+        Note:
+            The model is automatically set to evaluation mode with all gradients
+            disabled to ensure consistent embedding generation.
         """
         if self.model_path is not None and self.model_path.exists():
             model_ckpt_path = self.model_path
@@ -161,11 +208,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         return row_embedding_model
 
     def _preprocess_data(
-        self,
-        X: np.ndarray,
-        train: bool = True,
-        outlier: bool = False,
-        **kwargs
+        self, X: np.ndarray, train: bool = True, outlier: bool = False, **kwargs
     ) -> np.ndarray:
         """Preprocess input data using TabICL-specific pipelines.
 
@@ -199,10 +242,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         return X_preprocessed
 
     def _fit_model(
-            self,
-            X_preprocessed: np.ndarray,
-            train: bool = True,
-            **kwargs
+        self, X_preprocessed: np.ndarray, train: bool = True, **kwargs
     ) -> None:
         """Fit the model (no-op for TabICL as it uses pre-trained weights).
 
@@ -221,47 +261,54 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         X_train_preprocessed: np.ndarray,
         X_test_preprocessed: np.ndarray | None = None,
         outlier: bool = False,
-        **kwargs
+        **kwargs,
     ) -> Tuple[np.ndarray, np.ndarray | None]:
-        """
-        Computes embeddings for input data using a pre-defined row embedder model. Depending on the
-        `outlier` parameter, either computes a single set of embeddings for the training data or
-        separate embeddings for both training and testing datasets.
+        """Compute embeddings using the pre-trained TabICL model.
+
+        This method generates embeddings by passing preprocessed data through the
+        TabICL row embedder. In standard mode, it processes train and test data
+        together to leverage TabICL's in-context learning capabilities. In outlier
+        mode, only training data embeddings are computed.
 
         Args:
             X_train_preprocessed (np.ndarray): Preprocessed training dataset. Must be a 2D or
-                3D NumPy array.
+                3D NumPy array of shape (n_samples, n_features) or (1, n_samples, n_features).
             X_test_preprocessed (np.ndarray | None, optional): Preprocessed testing dataset.
-                Must be a 2D or 3D NumPy array. Optional if `outlier` is True.
-            outlier (bool): Determines whether to perform embeddings computation only for training
-                data (`True`), or for both training and testing datasets (`False`).
-            **kwargs: Additional arguments for further customization.
+                Must be a 2D or 3D NumPy array. Required when outlier is False. Defaults to None.
+            outlier (bool, optional): If True, computes embeddings only for training data.
+                If False, computes embeddings for both train and test by concatenating them
+                to enable in-context learning. Defaults to False.
+            **kwargs: Additional keyword arguments (unused).
 
         Returns:
-            tuple: A tuple containing embeddings for the training data and, if `outlier` is False,
-                embeddings for the testing data as well. If `outlier` is True, the second element
-                of the tuple is `None`.
+            tuple[np.ndarray, np.ndarray | None]: A tuple containing:
+                - train_embeddings: Embeddings for training data of shape (n_train, embed_dim)
+                - test_embeddings: Embeddings for test data of shape (n_test, embed_dim),
+                  or None if outlier is True.
 
         Raises:
-            ValueError: If the input data is not a 2D or 3D array.
+            ValueError: If the input data is not a 2D or 3D array, or if the model
+                is not fitted.
         """
         if len(X_train_preprocessed.shape) not in [2, 3]:
             raise ValueError("Input must be 2D or 3D array")
 
         if outlier:
-            X_preprocessed = torch.from_numpy(X_train_preprocessed).float().to(
-                self.device
+            X_preprocessed = (
+                torch.from_numpy(X_train_preprocessed).float().to(self.device)
             )
             if len(X_preprocessed.shape) == 2:
                 X_preprocessed = X_preprocessed.unsqueeze(0)
 
-            embeddings = self.tabicl_row_embedder.forward(
-                X_preprocessed
-            ).cpu().squeeze().numpy()
+            embeddings = (
+                self.tabicl_row_embedder.forward(X_preprocessed).cpu().squeeze().numpy()
+            )
 
             return embeddings, None
         if self._is_fitted:
-            X_train_torch = torch.from_numpy(X_train_preprocessed).float().to(self.device)
+            X_train_torch = (
+                torch.from_numpy(X_train_preprocessed).float().to(self.device)
+            )
             X_test_torch = torch.from_numpy(X_test_preprocessed).float().to(self.device)
 
             if len(X_train_torch.shape) == 2:
@@ -270,16 +317,20 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
             if len(X_test_torch.shape) == 2:
                 X_test_torch = X_test_torch.unsqueeze(0)
 
-            embeddings_train = self.tabicl_row_embedder.forward(
-                X_train_torch
-            ).cpu().squeeze().numpy()
+            embeddings_train = (
+                self.tabicl_row_embedder.forward(X_train_torch).cpu().squeeze().numpy()
+            )
 
             size_X_train = X_train_torch.shape[1]
 
             X_train_test_stack = torch.cat((X_train_torch, X_test_torch), dim=1)
 
-            X_embeddings = self.tabicl_row_embedder.forward(
-                X_train_test_stack).cpu().squeeze().numpy()
+            X_embeddings = (
+                self.tabicl_row_embedder.forward(X_train_test_stack)
+                .cpu()
+                .squeeze()
+                .numpy()
+            )
 
             embeddings_test = X_embeddings[size_X_train:]
 
@@ -299,6 +350,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         """
         self.preprocess_pipeline = None
         self._is_fitted = False
+
 
 def filter_params_for_class(cls, params_dict):
     """Filter parameters dictionary to only include valid parameters for a class.
