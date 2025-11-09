@@ -245,9 +245,6 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         Raises:
             ValueError: If the input data is not a 2D or 3D array.
         """
-        if self.device is None:
-        self.tabicl_row_embedder.to(self.device)
-
         if len(X_train_preprocessed.shape) not in [2, 3]:
             raise ValueError("Input must be 2D or 3D array")
 
