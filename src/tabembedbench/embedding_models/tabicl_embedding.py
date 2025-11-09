@@ -254,7 +254,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         Returns:
             np.ndarray: The preprocessed data unchanged.
         """
-        self.is_fitted = True
+        self._is_fitted = True
 
     def _compute_embeddings(
         self,
@@ -305,6 +305,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
             )
 
             return embeddings, None
+
         if self._is_fitted:
             X_train_torch = (
                 torch.from_numpy(X_train_preprocessed).float().to(self.device)
