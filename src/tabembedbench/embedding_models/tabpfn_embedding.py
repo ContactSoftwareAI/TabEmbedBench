@@ -97,68 +97,14 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         Returns:
             torch.Tensor: Preprocessed data as a float tensor on the specified device.
         """
-        numerical_transformer = TransformToNumerical()
-        if outlier:
-            X_preprocessed = numerical_transformer.fit_transform(X)
-        else:
-            train_indices = kwargs.get("train_indices")
-            test_indices = kwargs.get("test_indices")
-
-            if isinstance(X, pd.DataFrame):
-                X_train = X.iloc[train_indices]
-                X_test = X.iloc[test_indices]
-
-                X_train = numerical_transformer.fit_transform(X_train)
-                X_test = numerical_transformer.transform(X_test)
-            else:
-                X_train = X[train_indices]
-                X_test = X[test_indices]
-
-                X_train = numerical_transformer.fit_transform(X_train)
-                X_test = numerical_transformer.transform(X_test)
-
-            X_preprocessed = np.empty(X.values.shape, dtype=np.float64)
-
-            X_preprocessed[train_indices] = X_train
-            X_preprocessed[test_indices] = X_test
-
-        X_preprocessed = self._handle_constant_features(X_preprocessed)
-
-        return X_preprocessed.astype(np.float64)
-
-    def _handle_constant_features(self, X: np.ndarray, eps: float = 1e-8) -> np.ndarray:
-        """Handle constant features by adding small noise to avoid numerical issues.
-
-        Args:
-            X (np.ndarray): Input data matrix.
-            eps (float): Small epsilon value to add to constant features.
-
-        Returns:
-            np.ndarray: Data with constant features handled.
-        """
-        X = X.copy()
-
-        # Check for constant columns (zero variance)
-        feature_std = np.std(X, axis=0)
-        constant_mask = feature_std < eps
-
-        if np.any(constant_mask):
-            self._logger.warning(
-                f"Found {np.sum(constant_mask)} constant feature(s). "
-                f"Adding small noise to avoid numerical issues."
-            )
-            # Add very small random noise to constant columns
-            for col_idx in np.where(constant_mask)[0]:
-                X[:, col_idx] += np.random.normal(0, eps, size=X.shape[0])
-
-        return X
+        return X.astype(np.float64)
 
     def _fit_model(
         self,
         X_preprocessed: np.ndarray,
         categorical_indices: list[int] | None = None,
         **kwargs,
-    ):
+    ) -> None:
         """Fit the TabPFN embedding model to the preprocessed data.
 
         This method prepares the model for embedding generation by identifying
@@ -189,53 +135,47 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
 
     def _compute_embeddings(
         self,
-        X_preprocessed: np.ndarray,
+        X_train_preprocessed: np.ndarray,
+        X_test_preprocessed: np.ndarray | None = None,
         outlier: bool = False,
         **kwargs,
     ):
-        """Compute embeddings using TabPFN models.
+        """
+        Computes the embeddings for the provided data depending on the presence of outliers.
 
-        For each feature column, this method:
-        1. Masks the feature as the target variable
-        2. Uses remaining features as inputs to train a TabPFN model
-        3. Extracts embeddings from the trained model
-        4. Aggregates embeddings according to the specified strategy
-
-        The method automatically selects TabPFNClassifier for categorical features
-        and TabPFNRegressor for continuous features.
+        If `outlier` is set to True, only the embeddings for the training data are generated
+        and returned, while the corresponding embeddings for the test data are set to None.
+        Otherwise, both training and test embeddings are computed and returned separately.
 
         Args:
-            X_preprocessed (np.ndarray): Preprocessed input data of shape
-                (n_samples, n_features).
-            **kwargs: Additional keyword arguments (unused).
+            X_train_preprocessed: Preprocessed training data as a numpy array.
+            X_test_preprocessed: Optional preprocessed test data as a numpy array. Defaults to None.
+            outlier: Boolean indicating whether to compute embeddings by treating the data as
+                outliers. Defaults to False.
+            **kwargs: Additional arguments for internal embedding computation.
 
         Returns:
-            np.ndarray: Generated embeddings. Shape depends on aggregation method:
-                - If emb_agg="concat": (n_samples, n_features * tabpfn_dim)
-                - If emb_agg="mean": (n_samples, tabpfn_dim)
-
-        Raises:
-            NotImplementedError: If unsupported aggregation methods are used.
-
-        Note:
-            This method creates fresh TabPFN models for each feature to avoid
-            interference between different prediction tasks.
+            Tuple containing the computed training embeddings and test embeddings (or None if
+            `outlier` is True).
         """
         if outlier:
             X_embeddings = self._compute_internal_embeddings(
-                X_preprocessed)
+                X_train_preprocessed
+            )
 
             return X_embeddings, None
         else:
-            train_indices = kwargs.get("train_indices")
-            test_indices = kwargs.get("test_indices")
-            X_train = X_preprocessed[train_indices]
+            X_train_embeddings = self._compute_internal_embeddings(
+                X_train_preprocessed
+            )
 
-            X_train_embeddings = self._compute_internal_embeddings(X_train)
+            size_X_train = X_train_preprocessed.shape[0]
 
-            X_embeddings = self._compute_internal_embeddings(X_preprocessed)
+            X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
 
-            X_test_embeddings = X_embeddings[test_indices]
+            X_embeddings = self._compute_internal_embeddings(X_train_test_stack)
+
+            X_test_embeddings = X_embeddings[size_X_train:]
 
             return X_train_embeddings, X_test_embeddings
 

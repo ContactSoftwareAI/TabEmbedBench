@@ -5,8 +5,6 @@ from typing import Tuple, Union
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
-import polars as pl
-import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
@@ -16,7 +14,6 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 from sklearn.utils.validation import check_is_fitted
-from skrub import TableVectorizer
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
@@ -24,7 +21,6 @@ from tabicl.sklearn.preprocessing import (
     CustomStandardScaler,
     PreprocessingPipeline,
     RTDLQuantileTransformer,
-    TransformToNumerical
 )
 from torch import nn
 
@@ -114,59 +110,16 @@ class TabICLRowEmbedding(nn.Module):
 
 
 class TabICLEmbedding(AbstractEmbeddingGenerator):
-    """TabICL-based embedding generator for tabular data.
-
-    This embedding model uses the TabICL (Tabular In-Context Learning) architecture
-    to generate embeddings. It supports optional preprocessing pipelines and can
-    download pre-trained models from HuggingFace Hub.
-
-    Attributes:
-        model_path (Path | None): Path to the TabICL model checkpoint.
-        tabicl_row_embedder (TabICLRowEmbedding): The row embedding model loaded
-            with pre-trained weights.
-        normalize_embeddings (bool): Whether to normalize generated embeddings.
-        preprocess_pipeline (PreprocessingPipeline): Pipeline for standard preprocessing.
-        outlier_preprocessing_pipeline (OutlierPreprocessingPipeline): Pipeline for
-            outlier detection preprocessing.
-        _preprocess_tabicl_data (bool): Whether to apply TabICL-specific preprocessing.
-        _tabvectorizer_preprocess (bool): Whether to apply TableVectorizer preprocessing.
-        _tabvectorizer (TableVectorizer | None): TableVectorizer instance if enabled.
-
-    References:
-        Qu, J. et al. (2025). Tabicl: A tabular foundation model for in-context
-        learning on large data. arXiv preprint arXiv:2502.05564.
-    """
-
     def __init__(
         self,
         model_path: str | None = None,
-        normalize_embeddings: bool = False,
-        preprocess_tabicl_data: bool = False,
-        split_train_data: bool = False,
         device: str | None = None
     ):
-        """Initialize the TabICL embedding generator.
-
-        Args:
-            model_path (str | None, optional): Path to the model checkpoint file.
-                If None or path doesn't exist, downloads from HuggingFace Hub.
-                Defaults to None.
-            normalize_embeddings (bool, optional): Whether to normalize embeddings.
-                Defaults to False.
-            preprocess_tabicl_data (bool, optional): Whether to apply TabICL-specific
-                preprocessing. Defaults to False.
-            tabvectorizer_preprocess (bool, optional): Whether to apply TableVectorizer
-                preprocessing before TabICL preprocessing. Defaults to False.
-        """
-        super().__init__(name="tabicl-classifier-v1.1-0506")
+        super().__init__(name="TabICL")
 
         self.model_path = Path(model_path) if model_path is not None else None
         self.tabicl_row_embedder = self.get_tabicl_model()
-
-        self.normalize_embeddings = normalize_embeddings
-        self._preprocess_tabicl_data = preprocess_tabicl_data
-        self.split_train_data = split_train_data
-        self.outlier_run = False
+        self.preprocess_pipeline = None
         self.device = device if device is not None else get_device()
 
     def get_tabicl_model(self):
@@ -208,9 +161,11 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         return row_embedding_model
 
     def _preprocess_data(
-        self, X: Union[pl.DataFrame, np.ndarray], train: bool = True,
-            outlier: bool = False,
-            **kwargs
+        self,
+        X: np.ndarray,
+        train: bool = True,
+        outlier: bool = False,
+        **kwargs
     ) -> np.ndarray:
         """Preprocess input data using TabICL-specific pipelines.
 
@@ -228,54 +183,27 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         Returns:
             np.ndarray: Preprocessed data ready for embedding computation.
         """
-        numerical_transformer = TransformToNumerical()
-        preprocess_pipeline = PreprocessingPipeline()
-        outlier_preprocessing_pipeline = OutlierPreprocessingPipeline()
-
-        if not outlier:
-            train_indices = kwargs.get("train_indices")
-            test_indices = kwargs.get("test_indices")
-
-            if isinstance(X, pd.DataFrame):
-                original_shape = X.values.shape
-
-                X_train = X.iloc[train_indices]
-                X_test = X.iloc[test_indices]
-
-                X_train = numerical_transformer.fit_transform(X_train)
-                X_test = numerical_transformer.transform(X_test)
+        if train:
+            if outlier:
+                self.preprocess_pipeline = OutlierPreprocessingPipeline()
+                X_preprocessed = self.preprocess_pipeline.fit_transform(X)
             else:
-                original_shape = X.shape
-                X_train = X[train_indices]
-                X_test = X[test_indices]
-
-                X_train = numerical_transformer.fit_transform(X_train)
-                X_test = numerical_transformer.transform(X_test)
-
-            if self._preprocess_tabicl_data:
-                X_train = preprocess_pipeline.fit_transform(X_train)
-                X_test = preprocess_pipeline.transform(X_test)
-
-            X_preprocessed = np.empty(original_shape, dtype=np.float64)
-            X_preprocessed[train_indices] = X_train
-            X_preprocessed[test_indices] = X_test
+                self.preprocess_pipeline = PreprocessingPipeline()
+                X_preprocessed = self.preprocess_pipeline.fit_transform(X)
         else:
-            X_preprocessed = numerical_transformer.fit_transform(X)
-
-            if self._preprocess_tabicl_data:
-                if outlier:
-                    self.outlier_run = True
-                    X_preprocessed = (
-                        outlier_preprocessing_pipeline.fit_transform(
-                        X_preprocessed
-                    ))
-                else:
-                    X_preprocessed = preprocess_pipeline.fit_transform(
-                        X_preprocessed)
+            if self.preprocess_pipeline is None:
+                raise ValueError("Preprocessing pipeline is not fitted")
+            else:
+                X_preprocessed = self.preprocess_pipeline.transform(X)
 
         return X_preprocessed
 
-    def _fit_model(self, X_preprocessed: np.ndarray, train: bool = True, **kwargs):
+    def _fit_model(
+            self,
+            X_preprocessed: np.ndarray,
+            train: bool = True,
+            **kwargs
+    ) -> None:
         """Fit the model (no-op for TabICL as it uses pre-trained weights).
 
         Args:
@@ -286,59 +214,77 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         Returns:
             np.ndarray: The preprocessed data unchanged.
         """
-        return X_preprocessed
+        self.is_fitted = True
 
     def _compute_embeddings(
         self,
-        X_preprocessed: np.ndarray,
+        X_train_preprocessed: np.ndarray,
+        X_test_preprocessed: np.ndarray | None = None,
         outlier: bool = False,
         **kwargs
-    ):
-        """Compute embeddings using the TabICL model.
+    ) -> Tuple[np.ndarray, np.ndarray | None]:
+        """
+        Computes embeddings for input data using a pre-defined row embedder model. Depending on the
+        `outlier` parameter, either computes a single set of embeddings for the training data or
+        separate embeddings for both training and testing datasets.
 
         Args:
-            X_preprocessed (np.ndarray): Input data of shape (n_samples, n_features) or
-                (batch_size, n_samples, n_features).
-            device (torch.device | None, optional): Device for computation.
-                If None, uses default device. Defaults to None.
-            **kwargs: Additional keyword arguments (unused).
+            X_train_preprocessed (np.ndarray): Preprocessed training dataset. Must be a 2D or
+                3D NumPy array.
+            X_test_preprocessed (np.ndarray | None, optional): Preprocessed testing dataset.
+                Must be a 2D or 3D NumPy array. Optional if `outlier` is True.
+            outlier (bool): Determines whether to perform embeddings computation only for training
+                data (`True`), or for both training and testing datasets (`False`).
+            **kwargs: Additional arguments for further customization.
 
         Returns:
-            np.ndarray: Computed embeddings.
+            tuple: A tuple containing embeddings for the training data and, if `outlier` is False,
+                embeddings for the testing data as well. If `outlier` is True, the second element
+                of the tuple is `None`.
 
         Raises:
-            ValueError: If input is not 2D or 3D array.
+            ValueError: If the input data is not a 2D or 3D array.
         """
+        if self.device is None:
         self.tabicl_row_embedder.to(self.device)
 
-        if len(X_preprocessed.shape) not in [2, 3]:
+        if len(X_train_preprocessed.shape) not in [2, 3]:
             raise ValueError("Input must be 2D or 3D array")
 
         if outlier:
-            X_preprocessed = torch.from_numpy(X_preprocessed).float().to(self.device)
+            X_preprocessed = torch.from_numpy(X_train_preprocessed).float().to(
+                self.device
+            )
             if len(X_preprocessed.shape) == 2:
                 X_preprocessed = X_preprocessed.unsqueeze(0)
 
-            embeddings = self.tabicl_row_embedder.forward(X_preprocessed).cpu().squeeze().numpy()
+            embeddings = self.tabicl_row_embedder.forward(
+                X_preprocessed
+            ).cpu().squeeze().numpy()
 
             return embeddings, None
-        elif self.split_train_data:
-            train_indices = kwargs.get("train_indices")
-            test_indices = kwargs.get("test_indices")
-            X_train_torch = X_preprocessed[train_indices]
-            X_test = X_preprocessed[test_indices]
-
-            X_train_torch = torch.from_numpy(X_train_torch).float().to(self.device)
-            X_test = torch.from_numpy(X_test).float().to(self.device)
+        if self._is_fitted:
+            X_train_torch = torch.from_numpy(X_train_preprocessed).float().to(self.device)
+            X_test_torch = torch.from_numpy(X_test_preprocessed).float().to(self.device)
 
             if len(X_train_torch.shape) == 2:
                 X_train_torch = X_train_torch.unsqueeze(0)
 
-            if len(X_test.shape) == 2:
-                X_test = X_test.unsqueeze(0)
+            if len(X_test_torch.shape) == 2:
+                X_test_torch = X_test_torch.unsqueeze(0)
 
-            embeddings_train = self.tabicl_row_embedder.forward(X_train_torch).cpu().squeeze().numpy()
-            embeddings_test = self.tabicl_row_embedder.forward(X_test).cpu().squeeze().numpy()
+            embeddings_train = self.tabicl_row_embedder.forward(
+                X_train_torch
+            ).cpu().squeeze().numpy()
+
+            size_X_train = X_train_torch.shape[1]
+
+            X_train_test_stack = torch.cat((X_train_torch, X_test_torch), dim=1)
+
+            X_embeddings = self.tabicl_row_embedder.forward(
+                X_train_test_stack).cpu().squeeze().numpy()
+
+            embeddings_test = X_embeddings[size_X_train:]
 
             if embeddings_train.ndim == 1:
                 embeddings_train = embeddings_train.reshape(1, -1)
@@ -347,36 +293,15 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
 
             return embeddings_train, embeddings_test
         else:
-            train_indices = kwargs.get("train_indices")
-            test_indices = kwargs.get("test_indices")
-            X_train = X_preprocessed[train_indices]
-            X_test = X_preprocessed[test_indices]
-
-            X_train_torch = torch.from_numpy(X_train).float().to(self.device)
-
-            if len(X_train_torch.shape) == 2:
-                X_train_torch = X_train_torch.unsqueeze(0)
-
-            embeddings_train = self.tabicl_row_embedder.forward(X_train_torch).cpu().squeeze().numpy()
-
-            X_whole = np.concat((X_train, X_test), axis=0)
-            X_whole_torch = torch.from_numpy(X_whole).float().to(self.device)
-
-            if len(X_whole_torch.shape) == 2:
-                X_whole_torch = X_whole_torch.unsqueeze(0)
-
-            embeddings = self.tabicl_row_embedder.forward(X_whole_torch).cpu().squeeze().numpy()
-
-            embeddings_test = embeddings[len(train_indices):]
-
-            return embeddings_train, embeddings_test
+            raise ValueError("Model is not fitted")
 
     def _reset_embedding_model(self):
         """Reset the embedding model to its initial state.
 
         Reinitializes all preprocessing pipelines to clear fitted state.
         """
-        pass
+        self.preprocess_pipeline = None
+        self._is_fitted = False
 
 def filter_params_for_class(cls, params_dict):
     """Filter parameters dictionary to only include valid parameters for a class.

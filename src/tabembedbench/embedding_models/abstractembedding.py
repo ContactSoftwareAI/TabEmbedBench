@@ -33,19 +33,6 @@ class AbstractEmbeddingGenerator(ABC):
         self._logger = logging.getLogger(__name__)
 
     @property
-    def is_computing_embeddings(self) -> bool:
-        """Indicates whether the current object is restricted to a task-only context.
-
-        This property is a simple boolean flag that returns `False`, indicating
-        that the object is not limited to task-only usage. The flag can be
-        overridden or modified within derived classes as needed.
-
-        Returns:
-            bool: False, representing that the object is not task-only.
-        """
-        return True
-
-    @property
     def name(self) -> str:
         """Gets the name attribute value.
 
@@ -108,29 +95,28 @@ class AbstractEmbeddingGenerator(ABC):
     @abstractmethod
     def _compute_embeddings(
         self,
-        X_preprocessed: np.ndarray,
+        X_train_preprocessed: np.ndarray,
+        X_test_preprocessed: np.ndarray | None = None,
         **kwargs,
     ) -> np.ndarray:
-        """Computes embeddings for the given input data.
+        """
+        Compute embeddings for the provided preprocessed data.
 
-        This is an abstract method that subclasses must implement. The method
-        is designed to process the input data, represented as a NumPy array, and
-        return a NumPy array containing computed embeddings. The actual computation
-        logic is determined by the specific implementation in the subclass.
+        This is an abstract method that must be implemented in a subclass. It is responsible
+        for generating the embeddings for the training data and optionally for the test data.
 
         Args:
-            X (np.ndarray): A NumPy array representing the input data for which
-                embeddings need to be computed. The input dimensions and structure
-                are dependent on the specific implementation.
+            X_train_preprocessed (np.ndarray): Preprocessed training data used to compute
+                embeddings.
+            X_test_preprocessed (np.ndarray | None): Preprocessed test data used to compute
+                embeddings. If None, embeddings are generated only for the training data.
+            **kwargs: Additional keyword arguments for embedding computation.
 
         Returns:
-            np.ndarray: A NumPy array representing the computed embeddings. The
-                dimensions and structure of the returned array are determined by
-                the implementation in the subclass.
+            np.ndarray: Computed embeddings for the provided data.
 
         Raises:
-            NotImplementedError: Raised when this abstract method is called directly
-                without being overridden in a subclass.
+            NotImplementedError: If the method is not implemented in a subclass.
         """
         raise NotImplementedError
 
@@ -207,6 +193,7 @@ class AbstractEmbeddingGenerator(ABC):
     def generate_embeddings(
         self,
         X_train: np.ndarray,
+        X_test: np.ndarray | None = None,
         outlier: bool = False,
         **kwargs,
     ):
@@ -243,11 +230,22 @@ class AbstractEmbeddingGenerator(ABC):
             X_train, train=True, outlier=outlier, **kwargs
         )
 
+        if X_test is not None:
+            X_test_preprocessed = self._preprocess_data(
+                X_test, train=False, outlier=outlier, **kwargs
+            )
+        else:
+            X_test_preprocessed = None
+
         self._fit_model(X_train_preprocessed, outlier=outlier, **kwargs)
 
         start_time = time.time()
         train_embeddings, test_embeddings = self._compute_embeddings(
-            X_train_preprocessed, outlier=outlier, **kwargs)
+            X_train_preprocessed,
+            X_test_preprocessed,
+            outlier=outlier,
+            **kwargs
+        )
         compute_embeddings_time = time.time() - start_time
 
         if not self._validate_embeddings(train_embeddings):
