@@ -216,10 +216,11 @@ class TabArenaBenchmark(AbstractBenchmark):
                     target=task.target_name, dataset_format="dataframe"
                 )
 
-                # Remove categorical columns with only one category
+                #TODO: What to do with categorical columns with only one category
+                #Here: Trying to remove the columns with only one category
                 X, categorical_indicator = (
                     self._remove_categorical_columns_with_one_category(
-                        X, categorical_indicator
+                        X, categorical_indicator, dataset.name
                     )
                 )
 
@@ -385,20 +386,35 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         return folds, tabarena_repeats
 
-    @staticmethod
     def _remove_categorical_columns_with_one_category(
-        X: pd.DataFrame, categorical_indices: List[bool]
+        self,
+        X: pd.DataFrame,
+        categorical_indices: List[bool],
+        dataset_name: str = "",
     ) -> tuple[pd.DataFrame, List[bool]]:
-        """Remove categorical columns that have only one unique category.
+        """
+        Removes categorical columns with only one unique category from a DataFrame and updates
+        the categorical indices accordingly.
+
+        This method processes the input DataFrame and identifies categorical columns with only
+        one unique value (ignoring NaN values). These columns are dropped from the DataFrame,
+        and the corresponding categorical indices are updated to reflect the changes.
 
         Args:
-            X: DataFrame containing the features.
-            categorical_indices: List of boolean indicators for categorical columns.
+            X (pd.DataFrame): The input DataFrame containing data.
+            categorical_indices (List[bool]): A list of boolean values where each entry
+                indicates whether the corresponding column in X is categorical.
+            dataset_name (str): An optional name for the dataset, used for logging
+                purposes. Defaults to an empty string.
 
         Returns:
-            Tuple of (cleaned DataFrame, updated categorical indicators).
+            tuple[pd.DataFrame, List[bool]]: A tuple containing the updated DataFrame after
+                removing columns with only one unique category and the updated list of
+                categorical indices.
         """
         X_copy = X.copy()
+
+        num_features_before = X_copy.shape[1]
         categorical_indices_updated = categorical_indices.copy()
 
         # Get column names for categorical columns
@@ -415,6 +431,12 @@ class TabArenaBenchmark(AbstractBenchmark):
             if n_unique <= 1:
                 cols_to_drop.append(col)
 
+        if len(cols_to_drop) > 0:
+            self.logger.info(f"Dataset: {dataset_name}")
+            self.logger.info(f"Number of features before: {num_features_before}")
+            self.logger.info(f"Dropping {len(cols_to_drop)} columns with "
+                              f"only one category in dataset {dataset_name}.")
+
         # Drop columns with one category
         if cols_to_drop:
             X_copy = X_copy.drop(columns=cols_to_drop)
@@ -426,7 +448,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                 for i, cat_ind in enumerate(categorical_indices)
                 if i not in drop_indices
             ]
-
+            self.logger.info(f"Number of features after: {X_copy.shape[1]}")
         return X_copy, categorical_indices_updated
 
 
