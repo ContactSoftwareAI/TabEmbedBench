@@ -15,30 +15,25 @@ It evaluates embedding models on:
 
 ```python
 from tabembedbench.benchmark import run_benchmark
-from tabembedbench.embedding_models import TabVectorizerEmbedding
+from tabembedbench.embedding_models import TableVectorizerEmbedding
 from tabembedbench.evaluators.outlier import LocalOutlierFactorEvaluator
 from tabembedbench.evaluators.classifier import KNNClassifierEvaluator
 
 # Create models and evaluators
-models = [TabVectorizerEmbedding()]
+models = [TableVectorizerEmbedding()]
 evaluators = [
     LocalOutlierFactorEvaluator(
         model_params={
-            "n_neighbors": 5,
-        "contamination": 0.1,
-        "metric": "euclidean"
+            "n_neighbors": 5, "contamination": 0.1, "metric": "euclidean"
         }
-    ), 
-    KNNClassifierEvaluator(
-        num_neighbors=5,
-        weights="distance",
-        metric="euclidean"
-    )]
+    ), KNNClassifierEvaluator(
+        num_neighbors=5, weights="distance", metric="euclidean"
+    )
+]
 
 # Run benchmark
 outlier_results, tabarena_results, result_dir = run_benchmark(
-    embedding_models=models,
-    evaluator_algorithms=evaluators
+    embedding_models=models, evaluator_algorithms=evaluators
 )
 ```
 
