@@ -14,7 +14,7 @@ from tabembedbench.benchmark.run_benchmark import (
 )
 from tabembedbench.embedding_models import (
     TabICLEmbedding,
-    TabVectorizerEmbedding,
+    TableVectorizerEmbedding,
     TabPFNEmbedding,
     TabICLClusteringEmbedding
 )
@@ -33,18 +33,28 @@ from tabembedbench.evaluators.regression import KNNRegressorEvaluator
 logger = logging.getLogger("EuRIPS_Run_Benchmark")
 
 
-def get_embedding_models():
-    """Initialize and configure embedding models for benchmarking.
-    
-    Creates a collection of tabular embedding models including TabICL,
-    TabPFN, and TableVectorizer. Also creates task-specific embedding
-    models like TabICL clustering.
-    
+def get_embedding_models(debug=False):
+    """
+    Gets a list of embedding models and optional embedding clustering models.
+
+    This function initializes and returns a list of embedding models, along with
+    any optional clustering-related embedding models, if applicable.
+    When the `debug` parameter is set to True, a test embedding model is returned
+    with no clustering models.
+
+    Args:
+        debug (bool, optional): If True, returns a test embedding model and no
+            clustering models. Defaults to False.
+
     Returns:
         tuple: A tuple containing:
-            - list: General-purpose embedding models
-            - list: Task-specific embedding models (e.g., clustering)
+            - list: List of embedding models.
+            - list or None: List of clustering embedding models or None.
     """
+    if debug:
+        return [TableVectorizerEmbedding()], None
+
+
     tabicl_row_embedder = TabICLEmbedding()
 
     tabicl_clustering = TabICLClusteringEmbedding(
@@ -52,8 +62,7 @@ def get_embedding_models():
         random_state=42
     )
 
-    tablevector = TabVectorizerEmbedding()
-    tablevector.name = "TableVectorizer"
+    tablevector = TableVectorizerEmbedding()
 
     tabpfn_embedder = TabPFNEmbedding(
         num_estimators=5,
@@ -101,8 +110,6 @@ def get_evaluators(debug=False):
                     weights="distance",
                     metric="euclidean"
                 ),
-                DeepSVDDEvaluator(),
-                deep_svdd_dynamic,
                 LocalOutlierFactorEvaluator(
                     model_params={
                         "n_neighbors": 5,
@@ -184,9 +191,9 @@ def run_main(debug, max_samples, max_features, run_outlier,
         max_features = 50
 
 
-    embedding_models, task_embedding_models = get_embedding_models()
+    embedding_models, task_embedding_models = get_embedding_models(debug=debug)
 
-    evaluators = get_evaluators(debug)
+    evaluators = get_evaluators(debug=debug)
 
     logger.info(f"Using {len(embedding_models)} embedding model(s)")
     logger.info(f"Using {len(evaluators)} evaluator(s)")
