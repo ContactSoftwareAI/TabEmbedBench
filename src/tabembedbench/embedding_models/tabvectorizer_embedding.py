@@ -5,7 +5,7 @@ from skrub import TableVectorizer
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 
 
-class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
+class TableVectorizerEmbedding(AbstractEmbeddingGenerator):
     """TableVectorizer-based embedding generator for tabular data.
 
     This class uses skrub's TableVectorizer to transform mixed-type tabular data
@@ -24,7 +24,7 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
         _is_fitted (bool): Whether the model has been fitted to data.
 
     Example:
-        >>> embedding_gen = TabVectorizerEmbedding()
+        >>> embedding_gen = TableVectorizerEmbedding()
         >>> train_emb, test_emb, time = embedding_gen.generate_embeddings(
         ...     X_train, X_test
         ... )
@@ -38,14 +38,14 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
                 such as 'n_jobs' for parallel processing or specific encoder
                 configurations.
         """
-        super().__init__(name="TableVectorizerEmbedding")
+        super().__init__(name="TableVectorizer")
 
         self.tablevectorizer = TableVectorizer(**kwargs)
         self._is_fitted = False
 
     def _preprocess_data(
         self, X: np.ndarray, train: bool = True, outlier: bool = False, **kwargs
-    ) -> np.ndarray:
+    ) -> pl.DataFrame:
         """Preprocess input data (no-op for TableVectorizer).
 
         TableVectorizer handles preprocessing internally, so this method
@@ -60,6 +60,8 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
         Returns:
             np.ndarray: The input data unchanged.
         """
+        X = pl.from_numpy(X)
+
         return X
 
     def _fit_model(
@@ -112,11 +114,8 @@ class TabVectorizerEmbedding(AbstractEmbeddingGenerator):
             embeddings = self.tablevectorizer.transform(X_train_preprocessed)
             return embeddings.to_numpy(), None
         if self._is_fitted:
-            X_train = pl.from_numpy(X_train_preprocessed)
-            X_test = pl.from_numpy(X_test_preprocessed)
-
-            embeddings_train = self.tablevectorizer.transform(X_train)
-            embeddings_test = self.tablevectorizer.transform(X_test)
+            embeddings_train = self.tablevectorizer.transform(X_train_preprocessed)
+            embeddings_test = self.tablevectorizer.transform(X_test_preprocessed)
 
             return embeddings_train.to_numpy(), embeddings_test.to_numpy()
         else:
