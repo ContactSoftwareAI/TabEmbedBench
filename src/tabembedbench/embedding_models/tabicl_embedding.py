@@ -156,11 +156,11 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         super().__init__(name="TabICL")
 
         self.model_path = Path(model_path) if model_path is not None else None
-        self.tabicl_row_embedder = self.get_tabicl_model()
         self.preprocess_pipeline = None
         self.device = device if device is not None else get_device()
+        self.tabicl_row_embedder = self.get_tabicl_model().to(self.device)
 
-    def get_tabicl_model(self):
+    def get_tabicl_model(self) -> TabICLRowEmbedding:
         """Load or download the TabICL model with pre-trained weights.
 
         This method either loads a model from a local checkpoint or downloads
