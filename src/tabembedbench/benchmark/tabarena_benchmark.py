@@ -257,7 +257,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                     "y_test": y_test,
                     "dataset_name": dataset.name,
                     "dataset_size": X.shape[0],
-                    "num_features": X.shape[1],
+                    "num_features": X_train.shape[1],
                     "metadata": {
                         "task_type": task.task_type,
                         "categorical_indices": categorical_indices,
