@@ -1,7 +1,7 @@
 from tabembedbench.embedding_models.abstractembedding import AbstractEmbeddingGenerator
 from tabembedbench.embedding_models.tabicl_embedding import TabICLEmbedding
 from tabembedbench.embedding_models.tabvectorizer_embedding import (
-    TabVectorizerEmbedding,
+    TableVectorizerEmbedding,
 )
 from tabembedbench.embedding_models.tabpfn_embedding import TabPFNEmbedding
 from tabembedbench.embedding_models.spherebased_embedding import SphereBasedEmbedding
