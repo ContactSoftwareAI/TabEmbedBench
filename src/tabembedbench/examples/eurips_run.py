@@ -16,7 +16,6 @@ from tabembedbench.embedding_models import (
     TabICLEmbedding,
     TableVectorizerEmbedding,
     TabPFNEmbedding,
-    TabICLClusteringEmbedding
 )
 from tabembedbench.evaluators.classifier import KNNClassifierEvaluator
 from tabembedbench.evaluators.outlier import (
@@ -57,11 +56,6 @@ def get_embedding_models(debug=False):
 
     tabicl_row_embedder = TabICLEmbedding()
 
-    tabicl_clustering = TabICLClusteringEmbedding(
-        num_samples_per_center=50,
-        random_state=42
-    )
-
     tablevector = TableVectorizerEmbedding()
 
     tabpfn_embedder = TabPFNEmbedding(
@@ -74,7 +68,7 @@ def get_embedding_models(debug=False):
             tablevector,
     ]
 
-    return embedding_models, [tabicl_clustering]
+    return embedding_models, None
 
 def get_evaluators(debug=False):
     """Configure and initialize evaluation algorithms for the benchmark.
