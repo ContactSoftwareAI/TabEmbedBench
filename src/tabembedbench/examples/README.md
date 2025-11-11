@@ -12,7 +12,7 @@ The examples module serves as:
 
 ## Available Examples
 
-### 1. EuRIPS Run (`eurips_run.py`)
+### 1. EurIPS Run (`eurips_run.py`)
 
 A comprehensive example script that demonstrates a full benchmarking pipeline used for research experiments. This script showcases the complete workflow from model configuration to benchmark execution.
 
@@ -24,7 +24,7 @@ Configures and returns a list of embedding models for benchmarking.
 **Models Included:**
 - **TabPFNEmbedding**: TabPFN model
 - **TabICLEmbedding**: TabICL model with preprocessing enabled
-- **TabVectorizerEmbedding**: Table vectorization approach
+- **TableVectorizerEmbedding**: Table vectorization approach
 
 **Debug Mode**: When `debug=True`, returns a reduced set of models for faster testing.
 

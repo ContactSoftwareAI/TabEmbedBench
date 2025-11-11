@@ -90,36 +90,7 @@ model._reset_embedding_model()
 
 ## Available Implementations
 
-### 1. SphereBasedEmbedding (`spherebased_embedding.py`)
-
-A geometric embedding approach that projects tabular data onto high-dimensional spheres.
-
-#### Key Features:
-- **Geometric Projection**: Maps features to spherical coordinates
-- **Configurable Dimensions**: Adjustable embedding dimensionality
-- **Mixed Data Types**: Handles both numerical and categorical features
-- **Scikit-learn Compatible**: Implements TransformerMixin interface
-
-#### Core Methods:
-- `fit(data, y=None)`: Learns projection parameters from training data
-- `transform(data)`: Applies learned projection to new data
-- `_embed_numerical_column()`: Specialized numerical feature embedding
-- `_embed_categorical_column()`: Specialized categorical feature embedding
-- `_generate_random_sphere_point()`: Generates random points on unit sphere
-
-#### Parameters:
-- `embed_dim`: Dimensionality of the embedding space
-- `random_state`: Random seed for reproducibility
-
-#### Usage:
-
-```python
-model = SphereBasedEmbedding(embed_dim=128)
-model.name = "sphere-128d"
-embeddings = model.generate_embeddings(X_train, X_test)
-```
-
-### 2. TabICLEmbedding (`tabicl_embedding.py`)
+### 1. TabICLEmbedding (`tabicl_embedding.py`)
 
 Neural embedding model based on TabICL (Tabular In-Context Learning) architecture.
 
@@ -151,7 +122,7 @@ model.name = "tabicl-preprocessed"
 embeddings = model.generate_embeddings(X_train, X_test)
 ```
 
-### 3. UniversalTabPFNEmbedding (`tabpfn_embedding.py`)
+### 2. UniversalTabPFNEmbedding (`tabpfn_embedding.py`)
 
 Embedding model based on TabPFN (Tabular Prior-Fitted Networks) architecture.
 
@@ -180,7 +151,7 @@ model.name = "tabpfn-universal"
 embeddings = model.generate_embeddings(X_train, X_test)
 ```
 
-### 4. TabVectorizerEmbedding (`tabvectorizer_embedding.py`)
+### 3. TableVectorizerEmbedding (`tablevectorizer_embedding.py`)
 
 Traditional embedding approach using table vectorization techniques.
 
@@ -202,8 +173,8 @@ Traditional embedding approach using table vectorization techniques.
 #### Usage:
 
 ```python
-model = TabVectorizerEmbedding(optimize=True)
-model.name = "tabvectorizer-optimized"
+model = TableVectorizerEmbedding(optimize=True)
+model.name = "tablevectorizer-optimized"
 embeddings = model.generate_embeddings(X_train, X_test)
 ```
 
@@ -232,15 +203,13 @@ embeddings = model.generate_embeddings(X_train, X_test)
 ## Model Selection Guidelines
 
 ### For Large Datasets:
-- **TabVectorizerEmbedding**: Fast and memory-efficient
-- **SphereBasedEmbedding**: Good balance of speed and quality
+- **TableVectorizerEmbedding**: Fast and memory-efficient
 
 ### For High-Quality Embeddings:
 - **TabICLEmbedding**: State-of-the-art neural approach
 - **UniversalTabPFNEmbedding**: Pre-trained knowledge transfer
 
 ### For Mixed Data Types:
-- **SphereBasedEmbedding**: Explicit handling of categorical/numerical features
 - **TabICLEmbedding**: Robust preprocessing pipeline
 
 ### For GPU-Accelerated Computation:
