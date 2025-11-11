@@ -1,8 +1,6 @@
 import polars as pl
-import plotly.express as px
 from pathlib import Path
 import numpy as np
-import plotly.io as pio  # Für PNG Export hinzufügen
 from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns

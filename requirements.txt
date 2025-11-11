@@ -49,7 +49,6 @@ charset-normalizer==2.1.1
 click==8.2.1
     # via
     #   marimo
-    #   ray
     #   tabembedbench
     #   uvicorn
     #   wandb
@@ -83,7 +82,6 @@ eval-type-backport==0.2.2
 filelock==3.13.1
     # via
     #   huggingface-hub
-    #   ray
     #   torch
     #   transformers
 fonttools==4.59.0
