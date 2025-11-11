@@ -9,7 +9,6 @@ All embedding models inherit from the `AbstractEmbeddingGenerator` abstract base
 - **Embedding Computation**: Core methods for generating vector representations
 - **Model State Management**: Methods for resetting and managing model state
 - **Naming Conventions**: Consistent model identification and tracking
-- **Task Specification**: Distinguishing between task-specific and general-purpose models
 
 The module supports both neural and traditional embedding approaches, providing flexibility for different use cases and computational requirements.
 
@@ -24,16 +23,11 @@ The `AbstractEmbeddingGenerator` class (`abstractembedding.py`) provides the fou
 - **Embedding Computation**: Core method for generating embeddings from input data
 - **Model State Management**: Methods for resetting and managing model state between datasets
 - **Flexible Naming**: Configurable naming system for model instances and experiment tracking
-- **Task Specification**: Distinguishes between task-specific and general-purpose models
 - **Validation**: Built-in validation for embedding quality and consistency
 
 ### Core Methods
 
 #### Abstract Methods (must be implemented by subclasses):
-
-##### `task_only` (property) -> bool
-Indicates whether the model is restricted to task-specific functionality.
-- **Returns**: `True` if model requires task labels, `False` for unsupervised models
 
 ##### `_preprocess_data(X, train=True)`
 Preprocesses input data for training or inference.
@@ -266,9 +260,6 @@ class MyEmbeddingModel(AbstractEmbeddingGenerator):
         # Initialize model-specific components
     
     @property
-    def task_only(self) -> bool:
-        return False  # or True if task-specific
-    
     def _preprocess_data(self, X, train=True):
         # Implement preprocessing logic
         return processed_X

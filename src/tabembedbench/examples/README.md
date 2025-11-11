@@ -22,7 +22,7 @@ A comprehensive example script that demonstrates a full benchmarking pipeline us
 Configures and returns a list of embedding models for benchmarking.
 
 **Models Included:**
-- **SphereBasedEmbedding**: Multiple instances with different embedding dimensions (2³ to 2⁹)
+- **TabPFNEmbedding**: TabPFN model
 - **TabICLEmbedding**: TabICL model with preprocessing enabled
 - **TabVectorizerEmbedding**: Table vectorization approach
 
@@ -40,16 +40,16 @@ Configures and returns a comprehensive set of evaluators for different tasks.
 - **IsolationForestEvaluator**: Alternative outlier detection
 
 **Parameter Sweeps:**
-- **Neighbor counts**: 5-50 neighbors (step size 5)
-- **Distance metrics**: Euclidean and cosine
-- **Weighting schemes**: Uniform and distance-based
-- **Ensemble sizes**: 50-300 estimators for Isolation Forest
+- **Neighbor counts**: 5-45 neighbors (step size 5)
+- **Distance metrics**: Euclidean
+- **Weighting schemes**: distance-based
+- **Ensemble sizes**: 50-250 estimators for Isolation Forest
 
 **Debug Mode**: When `debug=True`, returns minimal evaluators for quick testing.
 
 **Returns**: List of configured evaluator instances
 
-##### `run_main(debug, max_samples, max_features, run_outlier, run_task_specific)`
+##### `run_main(debug, max_samples, max_features, run_outlier, run_supervised)`
 Orchestrates the complete benchmarking process.
 
 **Parameters:**
@@ -57,7 +57,7 @@ Orchestrates the complete benchmarking process.
 - `max_samples`: Upper bound on dataset size
 - `max_features`: Upper bound on number of features
 - `run_outlier`: Whether to run outlier detection benchmarks
-- `run_task_specific`: Whether to run TabArena task-specific benchmarks
+- `run_supervised`: Whether to run TabArena supervised benchmarks
 
 **Workflow:**
 1. Configure embedding models and evaluators
@@ -73,7 +73,7 @@ Command-line interface using Click framework for easy execution.
 - `--max-samples`: Set maximum dataset size (default: 100,001)
 - `--max-features`: Set maximum feature count (default: 500)
 - `--run-outlier/--no-run-outlier`: Toggle outlier detection (default: True)
-- `--run-task-specific/--no-run-task-specific`: Toggle TabArena tasks (default: True)
+- `--run-supervised/--no-run-supervised`: Toggle TabArena tasks (default: True)
 
 ## Usage Examples
 
@@ -86,7 +86,7 @@ python eurips_run.py
 python eurips_run.py --debug
 
 # Run only outlier detection
-python eurips_run.py --no-run-task-specific
+python eurips_run.py --no-run-supervised
 
 # Limit dataset size and features
 python eurips_run.py --max-samples 1000 --max-features 50
@@ -106,30 +106,7 @@ run_main(
     max_samples=10000,
     max_features=100,
     run_outlier=True,
-    run_task_specific=True
-)
-```
-
-### Custom Configuration
-```python
-from tabembedbench.examples.eurips_run import get_embedding_models
-from tabembedbench.benchmark.run_benchmark import run_benchmark
-
-# Get base models and customize
-models = get_embedding_models(debug=True)
-
-# Add custom model
-from tabembedbench.embedding_models import SphereBasedEmbedding
-custom_model = SphereBasedEmbedding(embed_dim=64)
-custom_model.name = "custom-sphere-64"
-models.append(custom_model)
-
-# Run with custom configuration
-results = run_benchmark(
-    embedding_models=models,
-    exclude_adbench_datasets=["3_backdoor.npz"],
-    upper_bound_dataset_size=5000,
-    logging_level="INFO"
+    run_supervised=True
 )
 ```
 
@@ -145,7 +122,7 @@ The examples demonstrate best practices for:
 ### Evaluator Setup Patterns
 Examples show how to:
 - **Create Evaluator Grids**: Systematic parameter combinations
-- **Task-Specific Configuration**: Different evaluators for different tasks
+- **supervised Configuration**: Different evaluators for different tasks
 - **Performance Optimization**: Balancing thoroughness with execution time
 - **Metric Selection**: Appropriate metrics for each evaluation type
 
@@ -219,7 +196,7 @@ def run_specialized_benchmark():
     # Focus on specific model types
     models = [get_neural_models(), get_traditional_models()]
     
-    # Task-specific evaluators
+    # Supervised evaluators
     evaluators = get_classification_evaluators()
     
     # Custom constraints

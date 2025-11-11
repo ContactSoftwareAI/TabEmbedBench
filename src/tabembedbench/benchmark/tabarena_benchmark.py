@@ -216,10 +216,9 @@ class TabArenaBenchmark(AbstractBenchmark):
                     target=task.target_name, dataset_format="dataframe"
                 )
 
-                #TODO: What to do with categorical columns with only one category
-                #Here: Trying to remove the columns with only one category
+                # Remove the columns with only one unique value
                 X, categorical_indicator = (
-                    self._remove_categorical_columns_with_one_category(
+                    self._remove_columns_with_one_unique_value(
                         X, categorical_indicator, dataset.name
                     )
                 )
@@ -386,17 +385,17 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         return folds, tabarena_repeats
 
-    def _remove_categorical_columns_with_one_category(
+    def _remove_columns_with_one_unique_value(
         self,
         X: pd.DataFrame,
         categorical_indices: List[bool],
         dataset_name: str = "",
     ) -> tuple[pd.DataFrame, List[bool]]:
         """
-        Removes categorical columns with only one unique category from a DataFrame and updates
+        Removes columns with only one unique value from a DataFrame and updates
         the categorical indices accordingly.
 
-        This method processes the input DataFrame and identifies categorical columns with only
+        This method processes the input DataFrame and identifies columns with only
         one unique value (ignoring NaN values). These columns are dropped from the DataFrame,
         and the corresponding categorical indices are updated to reflect the changes.
 
@@ -409,7 +408,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         Returns:
             tuple[pd.DataFrame, List[bool]]: A tuple containing the updated DataFrame after
-                removing columns with only one unique category and the updated list of
+                removing columns with only one unique value and the updated list of
                 categorical indices.
         """
         X_copy = X.copy()
@@ -417,16 +416,16 @@ class TabArenaBenchmark(AbstractBenchmark):
         num_features_before = X_copy.shape[1]
         categorical_indices_updated = categorical_indices.copy()
 
-        # Get column names for categorical columns
-        categorical_cols = [
-            col for col, is_cat in zip(X.columns, categorical_indices) if is_cat
+        # Get column names
+        cols = [
+            col for col, is_cat in zip(X.columns, categorical_indices)
         ]
 
         # Track columns to drop
         cols_to_drop = []
 
-        # Check each categorical column
-        for col in categorical_cols:
+        # Check each column
+        for col in cols:
             n_unique = X_copy[col].nunique(dropna=True)
             if n_unique <= 1:
                 cols_to_drop.append(col)
@@ -435,7 +434,7 @@ class TabArenaBenchmark(AbstractBenchmark):
             self.logger.info(f"Dataset: {dataset_name}")
             self.logger.info(f"Number of features before: {num_features_before}")
             self.logger.info(f"Dropping {len(cols_to_drop)} columns with "
-                              f"only one category in dataset {dataset_name}.")
+                              f"only one distinct value in dataset {dataset_name}.")
 
         # Drop columns with one category
         if cols_to_drop:

@@ -1,7 +1,7 @@
 """Simplified main benchmark orchestration module for TabEmbedBench.
 
 This module provides the main entry point for running comprehensive benchmarks
-on embedding models, coordinating outlier detection and task-specific evaluations.
+on embedding models, coordinating outlier detection and supervised evaluations.
 """
 
 import gc
@@ -62,7 +62,7 @@ class BenchmarkConfig:
     Attributes:
         run_outlier (bool): Whether to include outlier detection benchmarks in the
             run.
-        run_task_specific (bool): Whether to run task-specific benchmarks.
+        run_supervised (bool): Whether to run supervised benchmarks.
         run_tabpfn_subset (bool): Whether to include TabPFN subset benchmarks in
             the run.
         data_dir (str | Path): Path to the directory where necessary data is
@@ -74,7 +74,7 @@ class BenchmarkConfig:
     """
 
     run_outlier: bool = True
-    run_task_specific: bool = True
+    run_supervised: bool = True
     run_tabpfn_subset: bool = False
     data_dir: str | Path = "data"
     save_logs: bool = True
@@ -84,21 +84,18 @@ class BenchmarkConfig:
 def run_benchmark(
     embedding_models: list[AbstractEmbeddingGenerator],
     evaluator_algorithms: list[AbstractEvaluator],
-    tabarena_specific_embedding_models: list[AbstractEmbeddingGenerator] | None = None,
     dataset_config: DatasetConfig | None = None,
     benchmark_config: BenchmarkConfig | None = None,
 ) -> Tuple[pl.DataFrame, pl.DataFrame, Path]:
     """Run comprehensive benchmark evaluation for embedding models.
 
     This function orchestrates the complete benchmarking process, running both
-    outlier detection and task-specific (classification/regression) benchmarks
+    outlier detection and supervised (classification/regression) benchmarks
     on the provided embedding models.
 
     Args:
         embedding_models: List of embedding model instances to evaluate.
         evaluator_algorithms: List of evaluator instances to use for assessment.
-        tabarena_specific_embedding_models: Optional list of models to use only
-            for TabArena benchmarks. Defaults to None.
         dataset_config: Configuration for dataset parameters. If None, uses defaults.
         benchmark_config: Configuration for benchmark execution. If None, uses defaults.
 
@@ -130,7 +127,6 @@ def run_benchmark(
 
     # Validate inputs
     models = _validate_models(embedding_models)
-    tabarena_models = _validate_models(tabarena_specific_embedding_models or [])
     evaluators = _validate_evaluators(evaluator_algorithms)
 
     logger.info(f"Using {len(models)} embedding model(s)")
@@ -158,12 +154,11 @@ def run_benchmark(
         result_outlier_df = pl.DataFrame()
 
     # Run TabArena benchmark
-    if benchmark_config.run_task_specific:
-        logger.info("Running task-specific benchmark (TabArena)...")
-        all_models = tabarena_models + models
+    if benchmark_config.run_supervised:
+        logger.info("Running supervised benchmark (TabArena)...")
         try:
             result_tabarena_df = run_tabarena_benchmark(
-                embedding_models=all_models,
+                embedding_models=models,
                 evaluators=evaluators,
                 tabarena_version=dataset_config.tabarena_version,
                 tabarena_lite=dataset_config.tabarena_lite,
@@ -173,12 +168,12 @@ def run_benchmark(
                 result_dir=result_dir,
                 run_tabpfn_subset=benchmark_config.run_tabpfn_subset,
             )
-            _cleanup_models(all_models, logger)
+            _cleanup_models(models, logger)
         except Exception as e:
-            logger.exception(f"Error during task-specific benchmark: {e}")
+            logger.exception(f"Error during supervised benchmark: {e}")
             result_tabarena_df = pl.DataFrame()
     else:
-        logger.info("Skipping task-specific benchmark.")
+        logger.info("Skipping supervised benchmark.")
         result_tabarena_df = pl.DataFrame()
 
     logger.info(f"Benchmark completed at {datetime.now()}")

@@ -15,19 +15,17 @@ from tabembedbench.benchmark.run_benchmark import (
 from tabembedbench.embedding_models import (
     TabICLEmbedding,
     TableVectorizerEmbedding,
-    TabPFNEmbedding,
+    TabPFNEmbedding
 )
-from tabembedbench.evaluators.classifier import KNNClassifierEvaluator
 from tabembedbench.evaluators.outlier import (
     IsolationForestEvaluator,
     LocalOutlierFactorEvaluator,
     DeepSVDDEvaluator
 )
-from tabembedbench.evaluators.mlp_evaluator import (
-    MLPClassifierEvaluator,
-    MLPRegressorEvaluator
-)
-from tabembedbench.evaluators.regression import KNNRegressorEvaluator
+from tabembedbench.evaluators.mlp_classifier import MLPClassifierEvaluator
+from tabembedbench.evaluators.mlp_regressor import MLPRegressorEvaluator
+from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
+from tabembedbench.evaluators.knn_regressor import KNNRegressorEvaluator
 
 logger = logging.getLogger("EuRIPS_Run_Benchmark")
 
@@ -36,23 +34,16 @@ def get_embedding_models(debug=False):
     """
     Gets a list of embedding models and optional embedding clustering models.
 
-    This function initializes and returns a list of embedding models, along with
-    any optional clustering-related embedding models, if applicable.
-    When the `debug` parameter is set to True, a test embedding model is returned
-    with no clustering models.
+    This function initializes and returns a list of embedding models.
 
     Args:
-        debug (bool, optional): If True, returns a test embedding model and no
-            clustering models. Defaults to False.
+        debug (bool, optional): If True, returns a test embedding model. Defaults to False.
 
     Returns:
-        tuple: A tuple containing:
-            - list: List of embedding models.
-            - list or None: List of clustering embedding models or None.
+        list: List of embedding models
     """
     if debug:
-        return [TableVectorizerEmbedding()], None
-
+        return [TableVectorizerEmbedding()]
 
     tabicl_row_embedder = TabICLEmbedding()
 
@@ -68,15 +59,14 @@ def get_embedding_models(debug=False):
             tablevector,
     ]
 
-    return embedding_models, None
+    return embedding_models
 
 def get_evaluators(debug=False):
     """Configure and initialize evaluation algorithms for the benchmark.
     
     Creates a comprehensive set of evaluators including K-Nearest Neighbors
-    (KNN) for classification and regression, outlier detection algorithms
-    (DeepSVDD, Isolation Forest, Local Outlier Factor), and neural network
-    evaluators (MLP).
+    (KNN) and neural network evaluators (MLP) for classification and regression,
+    and outlier detection algorithms (DeepSVDD, Isolation Forest, Local Outlier Factor).
     
     Args:
         debug (bool, optional): If True, uses a minimal set of evaluators
@@ -87,9 +77,6 @@ def get_evaluators(debug=False):
         list: A list of configured evaluator instances ready for benchmarking.
     """
     evaluator_algorithms = []
-
-    deep_svdd_dynamic = DeepSVDDEvaluator(dynamic_hidden_neurons=True)
-    deep_svdd_dynamic._name = "DeepSVDD-dynamic"
 
     if debug:
         evaluator_algorithms.extend(
@@ -113,39 +100,40 @@ def get_evaluators(debug=False):
         )
         return evaluator_algorithms
 
-    for num_neighbors in range(0, 50, 5):
-        if num_neighbors > 0:
-            for metric in ["euclidean", "cosine"]:
-                for weights in ["uniform", "distance"]:
-                    evaluator_algorithms.extend([
-                        KNNRegressorEvaluator(
-                            num_neighbors=num_neighbors,
-                            weights=weights,
-                            metric=metric
-                        ),
-                        KNNClassifierEvaluator(
-                            num_neighbors=num_neighbors,
-                            weights=weights,
-                            metric=metric
-                        )
-                    ])
-                evaluator_algorithms.append(
-                    LocalOutlierFactorEvaluator(
-                        model_params={
-                            "n_neighbors": num_neighbors,
-                            "metric": metric,
-                        }
+    for num_neighbors in range(5, 50, 5):
+        for metric in ["euclidean",]:
+            for weights in ["distance",]:
+                evaluator_algorithms.extend([
+                    KNNRegressorEvaluator(
+                        num_neighbors=num_neighbors,
+                        weights=weights,
+                        metric=metric
+                    ),
+                    KNNClassifierEvaluator(
+                        num_neighbors=num_neighbors,
+                        weights=weights,
+                        metric=metric
                     )
-                )
-    for num_estimators in range(0, 300, 50):
-        if num_estimators > 0:
+                ])
             evaluator_algorithms.append(
-                IsolationForestEvaluator(
+                LocalOutlierFactorEvaluator(
                     model_params={
-                        "n_estimators": num_estimators,
+                        "n_neighbors": num_neighbors,
+                        "metric": metric,
                     }
                 )
             )
+    for num_estimators in range(50, 300, 50):
+        evaluator_algorithms.append(
+            IsolationForestEvaluator(
+                model_params={
+                    "n_estimators": num_estimators,
+                }
+            )
+        )
+
+    deep_svdd_dynamic = DeepSVDDEvaluator(dynamic_hidden_neurons=True)
+    deep_svdd_dynamic._name = "DeepSVDD-dynamic"
 
     evaluator_algorithms.extend(
         [
@@ -158,8 +146,9 @@ def get_evaluators(debug=False):
 
     return evaluator_algorithms
 
+
 def run_main(debug, max_samples, max_features, run_outlier,
-             run_task_specific, adbench_dataset_path):
+             run_supervised, adbench_dataset_path):
     """Execute the main benchmark pipeline.
     
     Orchestrates the complete benchmarking process including initializing
@@ -174,7 +163,7 @@ def run_main(debug, max_samples, max_features, run_outlier,
         max_features (int): Upper bound on the number of features per dataset.
             In debug mode, this is overridden to 50.
         run_outlier (bool): Whether to run outlier detection benchmarks.
-        run_task_specific (bool): Whether to run task-specific evaluations
+        run_supervised (bool): Whether to run supervised evaluations
             (e.g., TabArena-specific tasks).
         adbench_dataset_path (str): Path to the ADBoard benchmark datasets
             directory.
@@ -185,7 +174,7 @@ def run_main(debug, max_samples, max_features, run_outlier,
         max_features = 50
 
 
-    embedding_models, task_embedding_models = get_embedding_models(debug=debug)
+    embedding_models = get_embedding_models(debug=debug)
 
     evaluators = get_evaluators(debug=debug)
 
@@ -201,7 +190,7 @@ def run_main(debug, max_samples, max_features, run_outlier,
 
     benchmark_config = BenchmarkConfig(
         run_outlier=run_outlier,
-        run_task_specific=run_task_specific,
+        run_supervised=run_supervised,
         run_tabpfn_subset=True,
         logging_level=logging.DEBUG,
     )
@@ -209,26 +198,23 @@ def run_main(debug, max_samples, max_features, run_outlier,
     run_benchmark(
         embedding_models=embedding_models,
         evaluator_algorithms=evaluators,
-        tabarena_specific_embedding_models=task_embedding_models,
         dataset_config=dataset_config,
         benchmark_config=benchmark_config
     )
 
 
-
 @click.command()
 @click.option('--debug', is_flag=True, help='Run in debug mode ')
-@click.option('--max-samples', default=15000, help='Upper bound for dataset '
-                                                  'size')
+@click.option('--max-samples', default=15000, help='Upper bound for dataset size')
 @click.option('--max-features', default=500, help='Upper bound for number of features')
 @click.option('--run-outlier/--no-run-outlier', default=True, help='Run outlier detection')
-@click.option('--run-task-specific/--no-run-task-specific', default=True, help='Run task-specific evaluations')
+@click.option('--run-supervised/--no-run-supervised', default=True, help='Run supervised evaluations')
 @click.option('--adbench-data', default='data/adbench_tabular_datasets',
-              help='Run task-specific '
+              help='Run supervised '
                                                  'evaluations')
-def main(debug, max_samples, max_features, run_outlier, run_task_specific,
+def main(debug, max_samples, max_features, run_outlier, run_supervised,
          adbench_data):
-    """Command-line interface for running the EuRIPS benchmark.
+    """Command-line interface for running the EurIPS benchmark.
     
     This CLI entry point allows configuring and executing the benchmark with
     various options for debugging, dataset filtering, and task selection.
@@ -238,7 +224,7 @@ def main(debug, max_samples, max_features, run_outlier, run_task_specific,
         max_samples (int): Maximum number of samples per dataset.
         max_features (int): Maximum number of features per dataset.
         run_outlier (bool): Enable/disable outlier detection benchmarks.
-        run_task_specific (bool): Enable/disable task-specific evaluations.
+        run_supervised (bool): Enable/disable supervised evaluations.
         adbench_data (str): Path to ADBoard benchmark datasets.
     """
     run_main(
@@ -246,7 +232,7 @@ def main(debug, max_samples, max_features, run_outlier, run_task_specific,
         max_samples=max_samples,
         max_features=max_features,
         run_outlier=run_outlier,
-        run_task_specific=run_task_specific,
+        run_supervised=run_supervised,
         adbench_dataset_path=adbench_data
     )
 

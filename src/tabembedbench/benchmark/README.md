@@ -17,7 +17,7 @@ It evaluates embedding models on:
 from tabembedbench.benchmark import run_benchmark
 from tabembedbench.embedding_models import TableVectorizerEmbedding
 from tabembedbench.evaluators.outlier import LocalOutlierFactorEvaluator
-from tabembedbench.evaluators.classifier import KNNClassifierEvaluator
+from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
 
 # Create models and evaluators
 models = [TableVectorizerEmbedding()]
@@ -264,7 +264,7 @@ class CustomBenchmark(AbstractBenchmark):
 ### Custom Evaluators
 
 ```python
-from tabembedbench.evaluators import KNNClassifierEvaluator
+from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
 
 # Create evaluator with specific parameters
 evaluator = KNNClassifierEvaluator(
@@ -290,7 +290,7 @@ run_benchmark(
     upper_bound_dataset_size: int = 10000,
     upper_bound_num_features: int = 500,
     run_outlier: bool = True,
-    run_task_specific: bool = True,
+    run_supervised: bool = True,
     data_dir: str | Path = "data",
     save_logs: bool = True,
     run_tabpfn_subset: bool = False,
