@@ -67,6 +67,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         self,
         tabarena_version: str = "tabarena-v0.1",
         tabarena_lite: bool = True,
+        exclude_datasets: list[str] | None = None,
         result_dir: str | Path = "result_tabarena",
         timestamp: str = TIMESTAMP,
         save_result_dataframe: bool = True,
@@ -79,6 +80,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         Args:
             tabarena_version: OpenML suite identifier.
             tabarena_lite: Whether to use lite mode (fewer folds/repeats).
+            exclude_datasets: List of dataset names to exclude from the benchmark.
             result_dir: Directory for saving results.
             timestamp: Timestamp string for result file naming.
             save_result_dataframe: Whether to save results to disk.
@@ -104,6 +106,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         self.benchmark_suite = None
         self.task_ids = None
         self.len_tabpfn_subset = len(TABARENA_TABPFN_SUBSET)
+        self.exclude_datasets = exclude_datasets or []
 
     def _load_datasets(self, **kwargs) -> list:
         """Load TabArena tasks from OpenML.
@@ -157,6 +160,8 @@ class TabArenaBenchmark(AbstractBenchmark):
         if not should_skip:
             if self.run_tabpfn_subset and task_id not in TABARENA_TABPFN_SUBSET:
                 should_skip, reason = True, f"Not in TabPFN subset"
+            elif dataset.name in self.exclude_datasets:
+                should_skip, reason = True, f"Excluded dataset {dataset.name} by request of user."
             else:
                 self.len_tabpfn_subset -= 1
                 task = dataset_info["task"]
@@ -454,6 +459,7 @@ def run_tabarena_benchmark(
     evaluators: list[AbstractEvaluator],
     tabarena_version: str = "tabarena-v0.1",
     tabarena_lite: bool = True,
+    exclude_datasets: list[str] | None = None,
     upper_bound_num_samples: int = 100000,
     upper_bound_num_features: int = 500,
     result_dir: str | Path = "result_tabarena",
@@ -474,6 +480,7 @@ def run_tabarena_benchmark(
             Defaults to "tabarena-v0.1".
         tabarena_lite: Whether to run in lite mode with fewer splits and repetitions.
             Defaults to True.
+        exclude_datasets: List of dataset names to exclude from the benchmark.
         upper_bound_num_samples: Maximum dataset size to consider. Datasets larger
             than this will be skipped. Defaults to 100000.
         upper_bound_num_features: Maximum number of features to consider. Datasets
@@ -489,6 +496,7 @@ def run_tabarena_benchmark(
     benchmark = TabArenaBenchmark(
         tabarena_version=tabarena_version,
         tabarena_lite=tabarena_lite,
+        exclude_datasets=exclude_datasets,
         result_dir=result_dir,
         timestamp=timestamp,
         save_result_dataframe=save_result_dataframe,
