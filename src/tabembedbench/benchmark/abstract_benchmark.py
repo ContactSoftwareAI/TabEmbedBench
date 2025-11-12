@@ -8,7 +8,11 @@ import polars as pl
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
 from tabembedbench.utils.logging_utils import get_benchmark_logger
-from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device
+from tabembedbench.utils.torch_utils import (
+    empty_gpu_cache,
+    get_device,
+    log_gpu_memory
+)
 from tabembedbench.utils.tracking_utils import save_result_df
 
 
@@ -198,6 +202,7 @@ class AbstractBenchmark(ABC):
             for data_split in data_splits:
                 # Process each embedding model
                 for embedding_model in embedding_models:
+                    log_gpu_memory(self.logger)
                     self.logger.info(
                         f"Processing {embedding_model.name} on {data_split['dataset_name']}..."
                     )

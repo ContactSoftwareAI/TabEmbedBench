@@ -1,3 +1,5 @@
+import logging
+
 import torch
 
 
@@ -34,3 +36,24 @@ def empty_gpu_cache(device: torch.device) -> None:
         torch.cuda.empty_cache()
     elif device == "mps":
         torch.mps.empty_cache()
+
+
+def log_gpu_memory(logger: logging.Logger):
+    message_lines = []
+
+    if torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()):
+            allocated = torch.cuda.memory_allocated(i) / 1024**3
+            reserved = torch.cuda.memory_reserved(i) / 1024**3
+            max_allocated = torch.cuda.max_memory_allocated(i) / 1024**3
+
+            message_lines.append(f"GPU {i}:")
+            message_lines.append(f"Allocated: {allocated:.2f} GB")
+            message_lines.append(f"Reserved: {reserved:.2f} GB")
+            message_lines.append(f"Max Allocated: {max_allocated:.2f} GB")
+    else:
+        message_lines.append(f"No GPU available")
+
+    message = "\n".join(message_lines)
+
+    logger.info(message)
