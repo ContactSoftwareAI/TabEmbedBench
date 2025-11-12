@@ -164,7 +164,7 @@ def run_benchmark(
                 evaluators=evaluators,
                 tabarena_version=dataset_config.tabarena_version,
                 tabarena_lite=dataset_config.tabarena_lite,
-                exclude_dataset=dataset_config.exclude_tabarena_datasets,
+                exclude_datasets=dataset_config.exclude_tabarena_datasets,
                 upper_bound_num_samples=dataset_config.upper_bound_dataset_size,
                 upper_bound_num_features=dataset_config.upper_bound_num_features,
                 timestamp=timestamp,
