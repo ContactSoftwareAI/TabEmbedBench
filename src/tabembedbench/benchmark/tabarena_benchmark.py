@@ -461,6 +461,7 @@ def run_tabarena_benchmark(
     evaluators: list[AbstractEvaluator],
     tabarena_version: str = "tabarena-v0.1",
     tabarena_lite: bool = True,
+    exclude_datasets: list[str] | None = None,
     upper_bound_num_samples: int = 100000,
     upper_bound_num_features: int = 500,
     result_dir: str | Path = "result_tabarena",
@@ -481,6 +482,7 @@ def run_tabarena_benchmark(
             Defaults to "tabarena-v0.1".
         tabarena_lite: Whether to run in lite mode with fewer splits and repetitions.
             Defaults to True.
+        exclude_datasets: List of dataset names to exclude from the benchmark.
         upper_bound_num_samples: Maximum dataset size to consider. Datasets larger
             than this will be skipped. Defaults to 100000.
         upper_bound_num_features: Maximum number of features to consider. Datasets
@@ -496,6 +498,7 @@ def run_tabarena_benchmark(
     benchmark = TabArenaBenchmark(
         tabarena_version=tabarena_version,
         tabarena_lite=tabarena_lite,
+        exclude_datasets=exclude_datasets,
         result_dir=result_dir,
         timestamp=timestamp,
         save_result_dataframe=save_result_dataframe,
