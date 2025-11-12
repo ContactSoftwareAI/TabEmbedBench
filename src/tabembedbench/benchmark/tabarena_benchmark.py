@@ -161,7 +161,10 @@ class TabArenaBenchmark(AbstractBenchmark):
             if self.run_tabpfn_subset and task_id not in TABARENA_TABPFN_SUBSET:
                 should_skip, reason = True, f"Not in TabPFN subset"
             elif dataset.name in self.exclude_datasets:
-                should_skip, reason = True, f"Excluded dataset {dataset.name} by request of user."
+                should_skip, reason = (
+                    True,
+                    f"Excluded dataset {dataset.name} by request of user.",
+                )
             else:
                 self.len_tabpfn_subset -= 1
                 task = dataset_info["task"]

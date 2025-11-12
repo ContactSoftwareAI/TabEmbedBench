@@ -8,11 +8,7 @@ import polars as pl
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
 from tabembedbench.utils.logging_utils import get_benchmark_logger
-from tabembedbench.utils.torch_utils import (
-    empty_gpu_cache,
-    get_device,
-    log_gpu_memory
-)
+from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device, log_gpu_memory
 from tabembedbench.utils.tracking_utils import save_result_df
 
 

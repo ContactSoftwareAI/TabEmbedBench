@@ -45,8 +45,8 @@ class DatasetConfig:
     adbench_dataset_path: str | Path | None = None
     exclude_adbench_datasets: list[str] | None = None
     tabarena_version: str = "tabarena-v0.1"
-    tabarena_lite: bool = True,
-    exclude_tabarena_datasets: list[str] | None = None,
+    tabarena_lite: bool = (True,)
+    exclude_tabarena_datasets: list[str] | None = (None,)
     upper_bound_dataset_size: int = 10000
     upper_bound_num_features: int = 500
 

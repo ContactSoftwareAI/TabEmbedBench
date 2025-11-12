@@ -39,6 +39,12 @@ def empty_gpu_cache(device: torch.device) -> None:
 
 
 def log_gpu_memory(logger: logging.Logger):
+    """
+    Logs memory usage information for available GPUs. If no GPUs are available, logs a message indicating their absence.
+
+    Args:
+        logger (logging.Logger): The logger instance used to record GPU memory usage information.
+    """
     message_lines = []
 
     if torch.cuda.is_available():
