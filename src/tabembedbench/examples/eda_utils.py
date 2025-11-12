@@ -7,9 +7,10 @@ import seaborn as sns
 
 logger = logging.getLogger("Results processing ")
 
+
 def setup_publication_style():
     """Set up matplotlib/seaborn for publication-quality figures.
-    
+
     Configures matplotlib and seaborn settings to produce publication-ready
     visualizations with appropriate font sizes, styles, and context.
     """
@@ -26,76 +27,72 @@ def setup_publication_style():
 
 def separate_by_task_type(df: pl.DataFrame):
     """Separate a DataFrame into binary, multiclass, and regression task subsets.
-    
+
     Args:
-        df: A Polars DataFrame containing results with 'classification_type' 
+        df: A Polars DataFrame containing results with 'classification_type'
             and 'task' columns.
-    
+
     Returns:
         tuple: A tuple containing three Polars DataFrames:
             - binary_results_df: Results for binary classification tasks
             - multiclass_results_df: Results for multiclass classification tasks
             - regression_results_df: Results for regression tasks
     """
-    binary_results_df = (
-        df.filter(
-            pl.col("classification_type") == "binary"
-        )
-    )
+    binary_results_df = df.filter(pl.col("classification_type") == "binary")
 
-    multiclass_results_df = (
-        df.filter(
-            pl.col("classification_type") == "multiclass"
-        )
-    )
+    multiclass_results_df = df.filter(pl.col("classification_type") == "multiclass")
 
-    regression_results_df = (
-        df.filter(
-            pl.col("task") == "regression"
-        )
-    )
+    regression_results_df = df.filter(pl.col("task") == "regression")
 
     return binary_results_df, multiclass_results_df, regression_results_df
 
+
+def create_color_mapping(models_to_keep: list[str]):
+    colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
+    color_mapping = {
+        model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+        for model, (r, g, b) in zip(models_to_keep, colors)
+    }
+    return color_mapping
+
+
 def keeping_models(df: pl.DataFrame, keep_models: list[str]):
     """Filter DataFrame to keep only specified embedding models.
-    
+
     Args:
         df: A Polars DataFrame containing an 'embedding_model' column.
         keep_models: List of embedding model names to retain.
-    
+
     Returns:
         pl.DataFrame: Filtered DataFrame containing only rows with embedding
             models in the keep_models list.
     """
-    return df.filter(
-        pl.col("embedding_model").is_in(keep_models)
-    )
+    return df.filter(pl.col("embedding_model").is_in(keep_models))
+
 
 def rename_models(df: pl.DataFrame, renaming_mapping: dict):
     """Rename embedding models according to a mapping dictionary.
-    
+
     Args:
         df: A Polars DataFrame containing an 'embedding_model' column.
         renaming_mapping: Dictionary mapping old model names to new names.
-    
+
     Returns:
         pl.DataFrame: DataFrame with renamed embedding models.
     """
-    return df.with_columns(
-        pl.col("embedding_model").replace(renaming_mapping)
-    )
+    return df.with_columns(pl.col("embedding_model").replace(renaming_mapping))
+
 
 def save_fig(
-        ax,
-        data_path: str,
-        file_name: str,
+    ax,
+    data_path: str,
+    file_name: str,
 ):
     """Save a matplotlib figure to a PDF file.
-    
+
     Creates the output directory if it doesn't exist and saves the figure
     with publication-quality settings.
-    
+
     Args:
         ax: Matplotlib axes object containing the plot to save.
         data_path: Directory path where the figure will be saved.
@@ -118,28 +115,25 @@ def save_fig(
         pad_inches=0.02,
     )
 
+
 def clean_results(df: pl.DataFrame):
     """Clean results by filtering datasets with inconsistent algorithm coverage.
-    
+
     Ensures that all embedding models have been evaluated with the same set
     of algorithms for each dataset. Datasets with inconsistent algorithm
     coverage across embedding models are filtered out and a warning is logged.
-    
+
     Args:
         df: A Polars DataFrame containing benchmark results with columns:
             'dataset_name', 'embedding_model', and 'algorithm'.
-    
+
     Returns:
         pl.DataFrame: Filtered DataFrame containing only datasets where all
             embedding models were evaluated with the same algorithms.
     """
     set_included_dataset = set(df.get_column("dataset_name").to_list())
-    unique_counts = (
-        df.group_by(
-            ["dataset_name", "embedding_model"]
-        ).agg(
-            pl.col("algorithm").n_unique().alias("num_unique_algorithms")
-        )
+    unique_counts = df.group_by(["dataset_name", "embedding_model"]).agg(
+        pl.col("algorithm").n_unique().alias("num_unique_algorithms")
     )
 
     agg_counts = (
@@ -147,20 +141,21 @@ def clean_results(df: pl.DataFrame):
         .agg(
             [
                 pl.col("num_unique_algorithms").min().alias("min_unique_algorithms"),
-                pl.col("num_unique_algorithms").max().alias(
-                    "max_unique_algorithms"),
+                pl.col("num_unique_algorithms").max().alias("max_unique_algorithms"),
             ]
         )
         .with_columns(
-            (pl.col("max_unique_algorithms") == pl.col(
-                "min_unique_algorithms")).alias("equal")
+            (pl.col("max_unique_algorithms") == pl.col("min_unique_algorithms")).alias(
+                "equal"
+            )
         )
     )
 
     valid_datasets = (
         agg_counts.filter(pl.col("equal"))
         .unique("dataset_name")
-        .get_column("dataset_name").to_list()
+        .get_column("dataset_name")
+        .to_list()
     )
 
     set_valid_datasets = set(valid_datasets)
@@ -173,13 +168,12 @@ def clean_results(df: pl.DataFrame):
             f" - Consider the logs to check for any errors."
         )
 
-    return df.filter(
-        pl.col("dataset_name").is_in(valid_datasets)
-    )
+    return df.filter(pl.col("dataset_name").is_in(valid_datasets))
+
 
 def create_descriptive_dataframe(
-        df: pl.DataFrame,
-        metric_col: str,
+    df: pl.DataFrame,
+    metric_col: str,
 ):
     """
     Computes a descriptive statistics dataframe grouped by specific features.
@@ -197,29 +191,27 @@ def create_descriptive_dataframe(
         pl.DataFrame: A dataframe containing grouped descriptive statistics for the specified
             metric column and additional computed statistics.
     """
-    descriptive_statistic_df = (
-        df.group_by(["embedding_model", "algorithm"])
-        .agg(
-            pl.col(metric_col).mean().alias(f"average_{metric_col}"),
-            pl.col(metric_col).std().alias(f"std_{metric_col}"),
-            pl.col(metric_col).min().alias(f"min_{metric_col}"),
-            pl.col(metric_col).max().alias(f"max_{metric_col}"),
-            pl.col(metric_col).median().alias(f"median_{metric_col}"),
-            pl.col("time_to_compute_embedding").mean().alias(
-                f"averaged_embedding_compute_time"),
-            pl.col("dataset_name").n_unique().alias("num_datasets"),
-        )
+    descriptive_statistic_df = df.group_by(["embedding_model", "algorithm"]).agg(
+        pl.col(metric_col).mean().alias(f"average_{metric_col}"),
+        pl.col(metric_col).std().alias(f"std_{metric_col}"),
+        pl.col(metric_col).min().alias(f"min_{metric_col}"),
+        pl.col(metric_col).max().alias(f"max_{metric_col}"),
+        pl.col(metric_col).median().alias(f"median_{metric_col}"),
+        pl.col("time_to_compute_embedding")
+        .mean()
+        .alias(f"averaged_embedding_compute_time"),
+        pl.col("dataset_name").n_unique().alias("num_datasets"),
     )
 
     return descriptive_statistic_df
 
 
 def create_outlier_plots(
-        df: pl.DataFrame,
-        data_path: str | Path = "data",
-        name_mapping: dict | None = None,
-        color_mapping: dict | None = None,
-        models_to_keep: list | None = None,
+    df: pl.DataFrame,
+    data_path: str | Path = "data",
+    name_mapping: dict | None = None,
+    color_mapping: dict | None = None,
+    models_to_keep: list | None = None,
 ):
     data_path = Path(data_path)
     data_path.mkdir(parents=True, exist_ok=True)
@@ -243,18 +235,21 @@ def create_outlier_plots(
 
     setup_publication_style()
 
-    agg_result = (
-        df.filter(
-            (pl.col("algorithm_metric") == "euclidean") | pl.col("algorithm_metric").is_null()
-        )
+    agg_result = df.filter(
+        (pl.col("algorithm_metric") == "euclidean")
+        | pl.col("algorithm_metric").is_null()
     )
 
-    agg_result = (
-        agg_result.group_by([
-            "algorithm", "embedding_model", "algorithm_metric", "dataset_name", "time_to_compute_train_embedding"
-        ]).agg(
-            pl.col("auc_score").max().alias("auc_score"),
-        )
+    agg_result = agg_result.group_by(
+        [
+            "algorithm",
+            "embedding_model",
+            "algorithm_metric",
+            "dataset_name",
+            "time_to_compute_embedding",
+        ]
+    ).agg(
+        pl.col("auc_score").max().alias("auc_score"),
     )
 
     agg_result = clean_results(agg_result)
@@ -270,23 +265,23 @@ def create_outlier_plots(
         y="auc_score",
         hue="embedding_model",
         palette=color_mapping,
-        hue_order=models_to_keep
+        hue_order=models_to_keep,
     )
 
     boxplot.set_xlabel("Algorithm")
     boxplot.set_ylabel("AUC Score")
-    plt.setp(boxplot.get_xticklabels(), rotation=45, ha='right')
+    plt.setp(boxplot.get_xticklabels(), rotation=45, ha="right")
 
     save_fig(boxplot, outlier_path, "outlier_algorithm_comparison")
     plt.close()
 
 
 def create_tabarena_plots(
-        df: pl.DataFrame,
-        data_path: str | Path = "data",
-        name_mapping: dict | None = None,
-        color_mapping: dict | None = None,
-        models_to_keep: list | None = None,
+    df: pl.DataFrame,
+    data_path: str | Path = "data",
+    name_mapping: dict | None = None,
+    color_mapping: dict | None = None,
+    models_to_keep: list | None = None,
 ):
     data_path = Path(data_path)
     data_path.mkdir(parents=True, exist_ok=True)
@@ -309,10 +304,14 @@ def create_tabarena_plots(
         }
 
     # Filter "euclidean" metric and "distance" weight
-    df = (
-        df.filter(
-            ((pl.col("algorithm_metric") == "euclidean") | pl.col("algorithm_metric").is_null()) &
-            ((pl.col("algorithm_weights") == "distance") | pl.col("algorithm_weights").is_null())
+    df = df.filter(
+        (
+            (pl.col("algorithm_metric") == "euclidean")
+            | pl.col("algorithm_metric").is_null()
+        )
+        & (
+            (pl.col("algorithm_weights") == "distance")
+            | pl.col("algorithm_weights").is_null()
         )
     )
 
@@ -326,12 +325,16 @@ def create_tabarena_plots(
     setup_publication_style()
 
     # Boxplot for binary classification
-    binary_agg_result = (
-        binary.group_by([
-            "algorithm", "embedding_model", "algorithm_metric", "dataset_name", "time_to_compute_embedding"
-        ]).agg(
-            pl.col("auc_score").max().alias("auc_score"),
-        )
+    binary_agg_result = binary.group_by(
+        [
+            "algorithm",
+            "embedding_model",
+            "algorithm_metric",
+            "dataset_name",
+            "time_to_compute_embedding",
+        ]
+    ).agg(
+        pl.col("auc_score").max().alias("auc_score"),
     )
 
     boxplot = sns.boxplot(
@@ -340,23 +343,27 @@ def create_tabarena_plots(
         y="auc_score",
         hue="embedding_model",
         palette=color_mapping,
-        hue_order=models_to_keep
+        hue_order=models_to_keep,
     )
 
     boxplot.set_xlabel("Algorithm")
     boxplot.set_ylabel("AUC Score")
-    plt.setp(boxplot.get_xticklabels(), rotation=45, ha='right')
+    plt.setp(boxplot.get_xticklabels(), rotation=45, ha="right")
 
     save_fig(boxplot, tabarena_path, "binary_clf_algorithm_comparison")
     plt.close()
 
     # Boxplot for multiclass classification
-    multiclass_agg_result = (
-        multiclass.group_by([
-            "algorithm", "embedding_model", "algorithm_metric", "dataset_name", "time_to_compute_embedding"
-        ]).agg(
-            pl.col("auc_score").max().alias("auc_score"),
-        )
+    multiclass_agg_result = multiclass.group_by(
+        [
+            "algorithm",
+            "embedding_model",
+            "algorithm_metric",
+            "dataset_name",
+            "time_to_compute_embedding",
+        ]
+    ).agg(
+        pl.col("auc_score").max().alias("auc_score"),
     )
 
     boxplot = sns.boxplot(
@@ -365,23 +372,27 @@ def create_tabarena_plots(
         y="auc_score",
         hue="embedding_model",
         palette=color_mapping,
-        hue_order=models_to_keep
+        hue_order=models_to_keep,
     )
 
     boxplot.set_xlabel("Algorithm")
     boxplot.set_ylabel("AUC Score")
-    plt.setp(boxplot.get_xticklabels(), rotation=45, ha='right')
+    plt.setp(boxplot.get_xticklabels(), rotation=45, ha="right")
 
     save_fig(boxplot, tabarena_path, "multiclass_clf_algorithm_comparison")
     plt.close()
 
     # Boxplot for regression
-    regression_agg_result = (
-        regression.group_by([
-            "algorithm", "embedding_model", "algorithm_metric", "dataset_name", "time_to_compute_embedding"
-        ]).agg(
-            pl.col("mape_score").max().alias("mape_score"),
-        )
+    regression_agg_result = regression.group_by(
+        [
+            "algorithm",
+            "embedding_model",
+            "algorithm_metric",
+            "dataset_name",
+            "time_to_compute_embedding",
+        ]
+    ).agg(
+        pl.col("mape_score").max().alias("mape_score"),
     )
 
     boxplot = sns.boxplot(
@@ -390,12 +401,12 @@ def create_tabarena_plots(
         y="mape_score",
         hue="embedding_model",
         palette=color_mapping,
-        hue_order=models_to_keep
+        hue_order=models_to_keep,
     )
 
     boxplot.set_xlabel("Algorithm")
     boxplot.set_ylabel("MAPE Score")
-    plt.setp(boxplot.get_xticklabels(), rotation=45, ha='right')
+    plt.setp(boxplot.get_xticklabels(), rotation=45, ha="right")
 
     # Speichere den kombinierten Plot
     save_fig(boxplot, tabarena_path, "regression_algorithm_comparison")
@@ -408,30 +419,15 @@ def create_tabarena_plots(
     descriptive_binary_df.write_csv(
         Path(tabarena_path / "binary_auc_score_descriptive.csv")
     )
-    descriptive_multiclass_df = create_descriptive_dataframe(multiclass_agg_result, "auc_score")
+    descriptive_multiclass_df = create_descriptive_dataframe(
+        multiclass_agg_result, "auc_score"
+    )
     descriptive_multiclass_df.write_csv(
         Path(tabarena_path / "multiclass_auc_score_descriptive.csv")
     )
-    descriptive_regression_df = create_descriptive_dataframe(regression_agg_result, "mape_score")
+    descriptive_regression_df = create_descriptive_dataframe(
+        regression_agg_result, "mape_score"
+    )
     descriptive_regression_df.write_csv(
         Path(tabarena_path / "regression_auc_score_descriptive.csv")
     )
-
-if __name__ == "__main__":
-    path_tab_arena = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\tabarena_result.parquet"
-    path_outlier = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\results_ADBench_Tabular_20251007_115000.parquet"
-
-    mapping_renames = {"tabicl-classifier-v1.1-0506_preprocessed": "TabICL","TabVectorizerEmbedding": "TableVectorizer"}
-    models_to_keep = ["TableVectorizer", "TabICL", "TabPFN"]
-
-    create_outlier_plots(
-        pl.read_parquet(path_outlier),
-        name_mapping=mapping_renames,
-        models_to_keep=models_to_keep,
-    )
-    create_tabarena_plots(
-        pl.read_parquet(path_tab_arena),
-        name_mapping=mapping_renames,
-        models_to_keep=models_to_keep,
-    )
-

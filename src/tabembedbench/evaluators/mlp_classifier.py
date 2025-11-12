@@ -10,6 +10,7 @@ from sklearn.neural_network import MLPClassifier
 from tabembedbench.evaluators.abstractevaluator import AbstractHPOEvaluator
 from tabembedbench.utils.torch_utils import get_device
 
+
 class SklearnMLPClassifierWrapper(BaseEstimator, ClassifierMixin):
     """Wrapper for sklearn MLPClassifier with consistent interface.
 
@@ -48,7 +49,6 @@ class SklearnMLPClassifierWrapper(BaseEstimator, ClassifierMixin):
     def __sklearn_tags__(self):
         """Implement sklearn tags for compatibility with newer sklearn versions."""
         try:
-
             tags = Tags(
                 estimator_type="classifier", target_tags=TargetTags(required=True)
             )
@@ -91,8 +91,8 @@ class SklearnMLPClassifierWrapper(BaseEstimator, ClassifierMixin):
         X_scaled = self.scaler_.fit_transform(X)
 
         with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=RuntimeWarning)
-        # Create and fit the model
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
+            # Create and fit the model
             self.model = MLPClassifier(
                 hidden_layer_sizes=self.hidden_layer_sizes,
                 activation=self.activation,
@@ -123,7 +123,7 @@ class SklearnMLPClassifierWrapper(BaseEstimator, ClassifierMixin):
         X_scaled = self.scaler_.transform(X)
 
         with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
             pred = self.model.predict(X_scaled)
 
         return pred
@@ -139,7 +139,7 @@ class SklearnMLPClassifierWrapper(BaseEstimator, ClassifierMixin):
         X_scaled = self.scaler_.transform(X)
 
         with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
             proba = self.model.predict_proba(X_scaled)
 
         return proba
@@ -192,10 +192,18 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
             "n_layers": {"type": "int", "low": 1, "high": 5},
             "hidden_dim_base": {"type": "int", "low": 32, "high": 512, "log": True},
             "alpha": {"type": "float", "low": 1e-5, "high": 1e-1, "log": True},
-            "learning_rate_init": {"type": "float", "low": 1e-4, "high": 1e-2, "log": True},
+            "learning_rate_init": {
+                "type": "float",
+                "low": 1e-4,
+                "high": 1e-2,
+                "log": True,
+            },
             "batch_size": {"type": "categorical", "choices": [16, 32, 64, 128]},
             "max_iter": {"type": "int", "low": 50, "high": 200},
-            "activation": {"type": "categorical", "choices": ['relu', 'tanh', 'logistic']},
+            "activation": {
+                "type": "categorical",
+                "choices": ["relu", "tanh", "logistic"],
+            },
         }
 
     def create_model(self, trial: optuna.Trial):

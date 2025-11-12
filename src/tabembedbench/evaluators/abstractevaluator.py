@@ -173,7 +173,12 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         scoring = self.get_scoring_metric()
 
         scores = cross_val_score(
-            model, embeddings, y, cv=self.cv_folds, scoring=scoring, n_jobs=1,
+            model,
+            embeddings,
+            y,
+            cv=self.cv_folds,
+            scoring=scoring,
+            n_jobs=1,
         )
 
         # Return mean score

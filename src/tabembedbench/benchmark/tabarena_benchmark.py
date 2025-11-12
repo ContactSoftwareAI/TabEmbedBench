@@ -217,10 +217,8 @@ class TabArenaBenchmark(AbstractBenchmark):
                 )
 
                 # Remove the columns with only one unique value
-                X, categorical_indicator = (
-                    self._remove_columns_with_one_unique_value(
-                        X, categorical_indicator, dataset.name
-                    )
+                X, categorical_indicator = self._remove_columns_with_one_unique_value(
+                    X, categorical_indicator, dataset.name
                 )
 
                 # Get categorical indices
@@ -417,9 +415,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         categorical_indices_updated = categorical_indices.copy()
 
         # Get column names
-        cols = [
-            col for col, is_cat in zip(X.columns, categorical_indices)
-        ]
+        cols = [col for col, is_cat in zip(X.columns, categorical_indices)]
 
         # Track columns to drop
         cols_to_drop = []
@@ -433,8 +429,10 @@ class TabArenaBenchmark(AbstractBenchmark):
         if len(cols_to_drop) > 0:
             self.logger.info(f"Dataset: {dataset_name}")
             self.logger.info(f"Number of features before: {num_features_before}")
-            self.logger.info(f"Dropping {len(cols_to_drop)} columns with "
-                              f"only one distinct value in dataset {dataset_name}.")
+            self.logger.info(
+                f"Dropping {len(cols_to_drop)} columns with "
+                f"only one distinct value in dataset {dataset_name}."
+            )
 
         # Drop columns with one category
         if cols_to_drop:
