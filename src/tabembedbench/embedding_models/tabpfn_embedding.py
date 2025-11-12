@@ -1,4 +1,5 @@
 import warnings
+import gc
 
 import numpy as np
 from tabpfn import TabPFNClassifier, TabPFNRegressor
@@ -279,6 +280,24 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
             After calling this method, the model will need to be fitted again
             before generating embeddings.
         """
+        # Delete old model references
+        del self.tabpfn_clf
+        del self.tabpfn_reg
+
+        # Force garbage collection
+        gc.collect()
+
+        # Clear GPU cache if using CUDA or MPS
+        if self.device == "cuda":
+            import torch
+
+            torch.cuda.empty_cache()
+        elif self.device == "mps":
+            import torch
+
+            torch.mps.empty_cache()
+
+        # Reinitialize models
         self.tabpfn_clf = TabPFNClassifier(**self._init_tabpfn_configs)
         self.tabpfn_reg = TabPFNRegressor(**self._init_tabpfn_configs)
         self.num_features = None

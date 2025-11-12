@@ -1,6 +1,7 @@
 import inspect
 from pathlib import Path
 from typing import Tuple, Union
+import gc
 
 import numpy as np
 import torch
@@ -347,10 +348,33 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
     def _reset_embedding_model(self):
         """Reset the embedding model to its initial state.
 
-        Reinitializes all preprocessing pipelines to clear fitted state.
+        Reinitializes all preprocessing pipelines to clear fitted state
+        and moves model back to CPU to free GPU memory.
         """
+        # Move model to CPU before deleting references
+        if self.tabicl_row_embedder is not None:
+            self.tabicl_row_embedder.cpu()
+
+        # Clear preprocessing pipeline
         self.preprocess_pipeline = None
         self._is_fitted = False
+
+        # Force garbage collection
+        gc.collect()
+
+        # Clear GPU cache
+        if self.device == "cuda":
+            import torch
+
+            torch.cuda.empty_cache()
+        elif self.device == "mps":
+            import torch
+
+            torch.mps.empty_cache()
+
+        # Move model back to the device for next use
+        if self.tabicl_row_embedder is not None:
+            self.tabicl_row_embedder.to(self.device)
 
 
 def filter_params_for_class(cls, params_dict):
