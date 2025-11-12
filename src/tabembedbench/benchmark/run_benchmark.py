@@ -37,6 +37,7 @@ class DatasetConfig:
             If None, no datasets are excluded.
         tabarena_version (str): Version of the TabArena dataset to use.
         tabarena_lite (bool): Indicates if the 'lite' version of TabArena should be used.
+        exclude_tabarena_datasets (list[str] | None): List of dataset names to exclude.
         upper_bound_dataset_size (int): Maximum number of samples allowed in a dataset.
         upper_bound_num_features (int): Maximum number of features allowed in a dataset.
     """
@@ -44,7 +45,8 @@ class DatasetConfig:
     adbench_dataset_path: str | Path | None = None
     exclude_adbench_datasets: list[str] | None = None
     tabarena_version: str = "tabarena-v0.1"
-    tabarena_lite: bool = True
+    tabarena_lite: bool = True,
+    exclude_tabarena_datasets: list[str] | None = None,
     upper_bound_dataset_size: int = 10000
     upper_bound_num_features: int = 500
 
