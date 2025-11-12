@@ -1,7 +1,6 @@
 import logging
 from pathlib import Path
 
-from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 import polars as pl
 import seaborn as sns
@@ -206,239 +205,14 @@ def create_descriptive_dataframe(
             pl.col(metric_col).min().alias(f"min_{metric_col}"),
             pl.col(metric_col).max().alias(f"max_{metric_col}"),
             pl.col(metric_col).median().alias(f"median_{metric_col}"),
-            pl.col("time_to_compute_train_embedding").mean().alias(
-                f"average_embedding_compute_time_training"),
+            pl.col("time_to_compute_embedding").mean().alias(
+                f"averaged_embedding_compute_time"),
             pl.col("dataset_name").n_unique().alias("num_datasets"),
         )
     )
 
     return descriptive_statistic_df
 
-def create_detailed_boxplots(
-        df: pl.DataFrame,
-        metric_col: str,
-        metric_name: str,
-        algorithm: str | None = None,
-        title: str | None = None,
-        embedding_model_palette: dict[str, str] | None = None,
-        agg_algorithm: str = "maximize",
-        embedding_model_order: list | None = None
-):
-    """Create boxplots comparing embedding model performance.
-    
-    Generates boxplots showing the distribution of a performance metric across
-    different embedding models. Optionally filters by algorithm and aggregates
-    results per dataset.
-    
-    Args:
-        df: A Polars DataFrame containing benchmark results.
-        metric_col: Name of the column containing the metric to plot.
-        metric_name: Display name for the metric (used in y-axis label).
-        algorithm: Optional algorithm name to filter results. If provided,
-            results are aggregated by dataset. Defaults to None.
-        title: Optional title prefix for the plot. Defaults to None.
-        embedding_model_palette: Optional dictionary mapping model names to
-            colors. Defaults to None.
-        agg_algorithm: Aggregation method when filtering by algorithm.
-            Either 'maximize' or 'minimize'. Defaults to 'maximize'.
-        embedding_model_order: Optional list specifying the order of models
-            on the x-axis. Defaults to None.
-    
-    Returns:
-        matplotlib.axes.Axes: The boxplot axes object.
-    
-    Raises:
-        ValueError: If agg_algorithm is not 'maximize' or 'minimize'.
-    """
-    if algorithm:
-        df = df.filter(pl.col("algorithm") == algorithm)
-        plot_title = f"{title} ({metric_name}, {algorithm})"
-        if agg_algorithm == "maximize":
-            df = df.group_by(["embedding_model", "dataset_name", "algorithm"]).agg(
-                pl.col(metric_col).max()
-            )
-        elif agg_algorithm == "minimize":
-            df = df.group_by(["embedding_model", "dataset_name", "algorithm"]).agg(
-                pl.col(metric_col).min()
-            )
-        else:
-            raise ValueError("agg_algorithm must be 'maximize' or 'minimize'.")
-    else:
-        plot_title = f"{title} ({metric_name})"
-
-    if title is None:
-        plot_title = None
-
-    boxplot = sns.boxplot(
-        data=df,
-        x="embedding_model",
-        y=metric_col,
-        hue="embedding_model",
-        palette=embedding_model_palette,
-        order=embedding_model_order
-    )
-
-    boxplot.set_xlabel("Embedding Model")
-
-    if metric_name:
-        boxplot.set_ylabel(metric_name)
-
-    if title:
-        boxplot.set_title(plot_title)
-
-    plt.setp(boxplot.get_xticklabels(), rotation=45, ha='right')
-
-    return boxplot
-
-def create_dataset_performance_heatmaps(
-        df: pl.DataFrame,
-        metric_col: str,
-        metric_name: str | None = None,
-        algorithm: str | None = None,
-        title: str | None = None,
-        agg_algorithm: str = "maximize",
-        embedding_model_order: list | None = None
-):
-    """Create heatmaps showing performance across datasets and models.
-    
-    Generates a heatmap with datasets on the y-axis and embedding models on
-    the x-axis, with cell colors representing performance metric values.
-    
-    Args:
-        df: A Polars DataFrame containing benchmark results.
-        metric_col: Name of the column containing the metric to plot.
-        metric_name: Optional display name for the metric. Defaults to None.
-        algorithm: Optional algorithm name to filter results. If provided,
-            results are aggregated by dataset. Defaults to None.
-        title: Optional title prefix for the plot. Defaults to None.
-        agg_algorithm: Aggregation method when filtering by algorithm.
-            Either 'maximize' or 'minimize'. Defaults to 'maximize'.
-        embedding_model_order: Optional list specifying the order of models
-            on the x-axis. Defaults to None.
-    
-    Returns:
-        matplotlib.axes.Axes: The heatmap axes object.
-    
-    Raises:
-        ValueError: If agg_algorithm is not 'maximize' or 'minimize'.
-    """
-    filtered_df = df
-
-    if algorithm:
-        filtered_df = df.filter((pl.col("algorithm") == algorithm))
-        plot_title = f"{title} ({metric_name}, {algorithm})"
-        if agg_algorithm == "maximize":
-            filtered_df = filtered_df.group_by(
-                ["embedding_model", "dataset_name", "algorithm"]
-            ).agg(pl.col(metric_col).max())
-        elif agg_algorithm == "minimize":
-            filtered_df = filtered_df.group_by(
-                ["embedding_model", "dataset_name", "algorithm"]
-            ).agg(pl.col(metric_col).min())
-        else:
-            raise ValueError("agg_algorithm must be 'maximize' or 'minimize'.")
-    else:
-        plot_title = f"{title} ({metric_name})"
-
-    pivoted_df = filtered_df.pivot(
-        on="embedding_model",
-        index="dataset_name",
-        values=metric_col
-    )
-
-    if title is None:
-        plot_title = None
-
-    pivoted_df = pivoted_df.select(["dataset_name"] + embedding_model_order)
-    heatmap = sns.heatmap(
-        data=pivoted_df.to_pandas().set_index("dataset_name"),
-        cmap='viridis',
-    )
-
-    heatmap.set_xlabel("Embedding Model")
-    heatmap.set_ylabel("Dataset")
-
-    if title:
-        heatmap.set_title(plot_title)
-
-    plt.setp(heatmap.get_yticklabels(), rotation=0, ha="right")
-
-    # Adjust layout to prevent label cutoff
-    plt.tight_layout()
-
-    return heatmap
-
-def create_neighbors_effect_analysis(
-    df: pl.DataFrame,
-    metric_col: str,
-    metric_name: str,
-    num_neighbors_col: str = "algorithm_num_neighbors",
-    algorithm: str | None = None,
-    title: str | None = None,
-    embedding_model_palette: dict[str, str] | None = None,
-    embedding_model_order: list | None = None
-):
-    """Create line plots analyzing the effect of number of neighbors on performance.
-    
-    Generates line plots showing how performance metrics vary with the number
-    of neighbors (K) for different embedding models. Useful for analyzing
-    K-nearest neighbor algorithms.
-    
-    Args:
-        df: A Polars DataFrame containing benchmark results.
-        metric_col: Name of the column containing the metric to plot.
-        metric_name: Display name for the metric (used in y-axis label).
-        num_neighbors_col: Name of the column containing the number of
-            neighbors. Defaults to 'algorithm_num_neighbors'.
-        algorithm: Optional algorithm name to filter results. Defaults to None.
-        title: Optional title prefix for the plot. Defaults to None.
-        embedding_model_palette: Optional dictionary mapping model names to
-            colors. Defaults to None.
-        embedding_model_order: Optional list specifying the order of models
-            in the legend. Defaults to None.
-    
-    Returns:
-        matplotlib.axes.Axes: The line plot axes object.
-    
-    Raises:
-        ValueError: If the num_neighbors_col contains no non-null values.
-    """
-    filtered_df = df
-    if algorithm:
-        filtered_df = df.filter(pl.col("algorithm") == algorithm)
-        plot_title = f"{title} ({metric_name}, {algorithm})"
-    else:
-        plot_title = f"{title} ({metric_name})"
-
-    non_null_count = filtered_df.select(
-        pl.col(num_neighbors_col).is_not_null().sum()
-    ).item()
-    if non_null_count == 0:
-        raise ValueError(
-            f"Column '{num_neighbors_col}' exists but contains no non-null values"
-        )
-
-    lineplot = sns.lineplot(
-        data=filtered_df,
-        x=num_neighbors_col,
-        y=metric_col,
-        hue="embedding_model",
-        palette=embedding_model_palette,
-        hue_order=embedding_model_order,
-        errorbar=None
-    )
-
-    lineplot.set_xlabel("Number of Neighbors (K)")
-
-    if metric_name:
-        lineplot.set_ylabel(metric_name)
-
-    if title:
-        lineplot.set_title(plot_title)
-
-    lineplot.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
-
-    return lineplot
 
 def create_outlier_plots(
         df: pl.DataFrame,
@@ -450,8 +224,8 @@ def create_outlier_plots(
     data_path = Path(data_path)
     data_path.mkdir(parents=True, exist_ok=True)
 
-    output_path = data_path / "outlier_plots"
-    output_path.mkdir(parents=True, exist_ok=True)
+    outlier_path = data_path / "outlier_plots"
+    outlier_path.mkdir(parents=True, exist_ok=True)
 
     if name_mapping is not None:
         df = rename_models(df, name_mapping)
@@ -467,51 +241,44 @@ def create_outlier_plots(
             for model, (r, g, b) in zip(models_to_keep, colors)
         }
 
-    evaluator_algorithms = df.get_column("algorithm").unique().to_list()
+    setup_publication_style()
 
-    descriptive_df = create_descriptive_dataframe(df, "auc_score")
-
-    descriptive_df.write_csv(Path(output_path / "binary_auc_score_descriptive.csv"))
-
-    for algorithm in evaluator_algorithms:
-        ax_box = create_detailed_boxplots(
-            df,
-            metric_col="auc_score",
-            metric_name="AUC Score",
-            algorithm=algorithm,
-            title="Outlier Detection Performance",
-            embedding_model_palette=color_mapping,
-            embedding_model_order=models_to_keep,
+    agg_result = (
+        df.filter(
+            (pl.col("algorithm_metric") == "euclidean") | pl.col("algorithm_metric").is_null()
         )
-        save_fig(ax_box, output_path, f"outlier_boxplot_{algorithm}")
-        plt.close()
+    )
 
-        ax_heat = create_dataset_performance_heatmaps(
-            df,
-            metric_col="auc_score",
-            metric_name="AUC Score",
-            algorithm=algorithm,
-            title="Outlier Detection Performance",
-            embedding_model_order=models_to_keep,
+    agg_result = (
+        agg_result.group_by([
+            "algorithm", "embedding_model", "algorithm_metric", "dataset_name", "time_to_compute_train_embedding"
+        ]).agg(
+            pl.col("auc_score").max().alias("auc_score"),
         )
-        save_fig(ax_heat, output_path, f"outlier_heatmap_{algorithm}")
-        plt.close()
+    )
 
-        try:
-            ax_neighbors = create_neighbors_effect_analysis(
-                df,
-                metric_col="auc_score",
-                metric_name="AUC Score",
-                algorithm=algorithm,
-                num_neighbors_col="algorithm_n_neighbors",
-                title="Outlier Detection Performance",
-                embedding_model_palette=color_mapping,
-                embedding_model_order=models_to_keep,
-            )
-            save_fig(ax_neighbors, output_path, f"outlier_neighbors_{algorithm}")
-            plt.close()
-        except ValueError as e:
-            logger.warning(f"Skipping neighbors analysis for binary {algorithm}: {e}")
+    agg_result = clean_results(agg_result)
+
+    # descriptive_df = create_descriptive_dataframe(agg_result, "auc_score")
+    # descriptive_df.write_csv(
+    #     Path(outlier_path / "outlier_descriptive.csv")
+    # )
+
+    boxplot = sns.boxplot(
+        data=agg_result,
+        x="algorithm",
+        y="auc_score",
+        hue="embedding_model",
+        palette=color_mapping,
+        hue_order=models_to_keep
+    )
+
+    boxplot.set_xlabel("Algorithm")
+    boxplot.set_ylabel("AUC Score")
+    plt.setp(boxplot.get_xticklabels(), rotation=45, ha='right')
+
+    save_fig(boxplot, outlier_path, "outlier_algorithm_comparison")
+    plt.close()
 
 
 def create_tabarena_plots(
@@ -541,6 +308,14 @@ def create_tabarena_plots(
             for model, (r, g, b) in zip(models_to_keep, colors)
         }
 
+    # Filter "euclidean" metric and "distance" weight
+    df = (
+        df.filter(
+            ((pl.col("algorithm_metric") == "euclidean") | pl.col("algorithm_metric").is_null()) &
+            ((pl.col("algorithm_weights") == "distance") | pl.col("algorithm_weights").is_null())
+        )
+    )
+
     binary, multiclass, regression = separate_by_task_type(df)
 
     # Clean results for each task type
@@ -550,215 +325,113 @@ def create_tabarena_plots(
 
     setup_publication_style()
 
-    # Get unique algorithms for each task type
-    binary_algorithms = binary.get_column("algorithm").unique().to_list()
-    multiclass_algorithms = multiclass.get_column("algorithm").unique().to_list()
-    regression_algorithms = regression.get_column("algorithm").unique().to_list()
-
-    # Process binary classification tasks
-    for algorithm in binary_algorithms:
-        logger.info(f"Processing binary classification with {algorithm}")
-
-        descriptive_df = create_descriptive_dataframe(binary, "auc_score")
-
-        descriptive_df.write_csv(
-            Path(tabarena_path / "binary_auc_score_descriptive.csv")
+    # Boxplot for binary classification
+    binary_agg_result = (
+        binary.group_by([
+            "algorithm", "embedding_model", "algorithm_metric", "dataset_name", "time_to_compute_embedding"
+        ]).agg(
+            pl.col("auc_score").max().alias("auc_score"),
         )
+    )
 
-        # Create boxplot
-        ax_box = create_detailed_boxplots(
-            binary,
-            metric_col="auc_score",
-            metric_name="AUC Score",
-            algorithm=algorithm,
-            title="Binary Classification Performance",
-            embedding_model_palette=color_mapping,
-            embedding_model_order=models_to_keep,
+    boxplot = sns.boxplot(
+        data=binary_agg_result,
+        x="algorithm",
+        y="auc_score",
+        hue="embedding_model",
+        palette=color_mapping,
+        hue_order=models_to_keep
+    )
+
+    boxplot.set_xlabel("Algorithm")
+    boxplot.set_ylabel("AUC Score")
+    plt.setp(boxplot.get_xticklabels(), rotation=45, ha='right')
+
+    save_fig(boxplot, tabarena_path, "binary_clf_algorithm_comparison")
+    plt.close()
+
+    # Boxplot for multiclass classification
+    multiclass_agg_result = (
+        multiclass.group_by([
+            "algorithm", "embedding_model", "algorithm_metric", "dataset_name", "time_to_compute_embedding"
+        ]).agg(
+            pl.col("auc_score").max().alias("auc_score"),
         )
-        save_fig(ax_box, tabarena_path, f"binary_boxplot_{algorithm}")
-        plt.close()
+    )
 
-        # Create heatmap
-        ax_heat = create_dataset_performance_heatmaps(
-            binary,
-            metric_col="auc_score",
-            metric_name="AUC Score",
-            algorithm=algorithm,
-            title="Binary Classification Performance",
-            embedding_model_order=models_to_keep,
+    boxplot = sns.boxplot(
+        data=multiclass_agg_result,
+        x="algorithm",
+        y="auc_score",
+        hue="embedding_model",
+        palette=color_mapping,
+        hue_order=models_to_keep
+    )
+
+    boxplot.set_xlabel("Algorithm")
+    boxplot.set_ylabel("AUC Score")
+    plt.setp(boxplot.get_xticklabels(), rotation=45, ha='right')
+
+    save_fig(boxplot, tabarena_path, "multiclass_clf_algorithm_comparison")
+    plt.close()
+
+    # Boxplot for regression
+    regression_agg_result = (
+        regression.group_by([
+            "algorithm", "embedding_model", "algorithm_metric", "dataset_name", "time_to_compute_embedding"
+        ]).agg(
+            pl.col("mape_score").max().alias("mape_score"),
         )
-        save_fig(ax_heat, tabarena_path, f"binary_heatmap_{algorithm}")
-        plt.close()
+    )
 
-        try:
-            ax_neighbors = create_neighbors_effect_analysis(
-                binary,
-                metric_col="auc_score",
-                metric_name="AUC Score",
-                algorithm=algorithm,
-                title="Binary Classification Performance",
-                embedding_model_palette=color_mapping,
-                embedding_model_order=models_to_keep,
-            )
-            save_fig(ax_neighbors, tabarena_path, f"binary_neighbors_{algorithm}")
-            plt.close()
-        except ValueError as e:
-            logger.warning(f"Skipping neighbors analysis for binary {algorithm}: {e}")
+    boxplot = sns.boxplot(
+        data=regression_agg_result,
+        x="algorithm",
+        y="mape_score",
+        hue="embedding_model",
+        palette=color_mapping,
+        hue_order=models_to_keep
+    )
 
-    # Process multiclass classification tasks
-    for algorithm in multiclass_algorithms:
-        logger.info(f"Processing multiclass classification with "
-                    f"{algorithm}_auc_score")
-        descriptive_df = create_descriptive_dataframe(multiclass,
-                                                      "auc_score")
+    boxplot.set_xlabel("Algorithm")
+    boxplot.set_ylabel("MAPE Score")
+    plt.setp(boxplot.get_xticklabels(), rotation=45, ha='right')
 
-        descriptive_df.write_csv(
-            Path(tabarena_path / "multiclass_auc_score_descriptive.csv")
-        )
-
-        # Create boxplot
-        ax_box = create_detailed_boxplots(
-            multiclass,
-            metric_col="auc_score",
-            metric_name="AUC Score",
-            algorithm=algorithm,
-            title="Multiclass Classification Performance",
-            embedding_model_palette=color_mapping,
-            embedding_model_order=models_to_keep,
-        )
-        save_fig(ax_box, tabarena_path, f"multiclass_boxplot_{algorithm}_auc_score")
-        plt.close()
-
-        # Create heatmap
-        ax_heat = create_dataset_performance_heatmaps(
-            multiclass,
-            metric_col="auc_score",
-            metric_name="AUC Score",
-            algorithm=algorithm,
-            title="Multiclass Classification Performance",
-            embedding_model_order=models_to_keep,
-        )
-        save_fig(ax_heat, tabarena_path, f"multiclass_heatmap_"
-                                     f"{algorithm}_auc_score")
-        plt.close()
-
-        try:
-            ax_neighbors = create_neighbors_effect_analysis(
-                multiclass,
-                metric_col="auc_score",
-                metric_name="AUC Score",
-                algorithm=algorithm,
-                title="Multiclass Classification Performance",
-                embedding_model_palette=color_mapping,
-                embedding_model_order=models_to_keep,
-            )
-            save_fig(ax_neighbors, tabarena_path, f"multiclass_neighbors"
-                                              f"_{algorithm}_auc_score")
-            plt.close()
-        except ValueError as e:
-            logger.warning(f"Skipping neighbors analysis for multiclass"
-                           f" {algorithm}: {e}")
-
-        descriptive_df = create_descriptive_dataframe(multiclass,
-                                                      "log_loss_score")
-
-        descriptive_df.write_csv(Path(tabarena_path /
-                                      "multiclass_log_loss_descriptive.csv"))
-
-        ax_box = create_detailed_boxplots(
-            multiclass,
-            metric_col="log_loss_score",
-            metric_name="log-Loss",
-            algorithm=algorithm,
-            title="Multiclass Classification Performance",
-            embedding_model_palette=color_mapping,
-            embedding_model_order=models_to_keep,
-        )
-        save_fig(ax_box, tabarena_path, f"multiclass_boxplot_{algorithm}_log_loss")
-        plt.close()
-
-        # Create heatmap
-        ax_heat = create_dataset_performance_heatmaps(
-            multiclass,
-            metric_col="log_loss_score",
-            metric_name="log-Loss",
-            algorithm=algorithm,
-            title="Multiclass Classification Performance",
-            embedding_model_order=models_to_keep,
-        )
-        save_fig(ax_heat, tabarena_path, f"multiclass_heatmap_{algorithm}_log_loss")
-        plt.close()
-
-        try:
-            ax_neighbors = create_neighbors_effect_analysis(
-                multiclass,
-                metric_col="log_loss_score",
-                metric_name="log-Loss",
-                algorithm=algorithm,
-                title="Multiclass Classification Performance",
-                embedding_model_palette=color_mapping,
-                embedding_model_order=models_to_keep,
-            )
-            save_fig(ax_neighbors, tabarena_path, f"multiclass_neighbors"
-                                              f"_{algorithm}_log_loss")
-            plt.close()
-        except ValueError as e:
-            logger.warning(f"Skipping neighbors analysis for multiclass"
-                           f" {algorithm}: {e}")
-
-    # Process regression tasks
-    for algorithm in regression_algorithms:
-        logger.info(f"Processing regression with {algorithm}")
-
-        descriptive_df = create_descriptive_dataframe(regression, "mape_score")
-
-        descriptive_df.write_csv(Path(tabarena_path /
-                                 "regression_descriptive.csv"))
-
-        # Create boxplot (minimizing RMSE)
-        ax_box = create_detailed_boxplots(
-            regression,
-            metric_col="mape_score",
-            metric_name="MAPE",
-            algorithm=algorithm,
-            title="Regression Performance",
-            embedding_model_palette=color_mapping,
-            agg_algorithm="minimize",
-            embedding_model_order=models_to_keep,
-        )
-        save_fig(ax_box, tabarena_path, f"regression_boxplot_{algorithm}")
-        plt.close()
-
-        # Create heatmap (minimizing RMSE)
-        ax_heat = create_dataset_performance_heatmaps(
-            regression,
-            metric_col="mape_score",
-            metric_name="MAPE",
-            algorithm=algorithm,
-            title="Regression Performance",
-            agg_algorithm="minimize",
-            embedding_model_order=models_to_keep,
-        )
-        save_fig(ax_heat, tabarena_path, f"regression_heatmap_{algorithm}")
-        plt.close()
-
-        # Create neighbors effect analysis
-        try:
-            ax_neighbors = create_neighbors_effect_analysis(
-                regression,
-                metric_col="mape_score",
-                metric_name="MAPE",
-                algorithm=algorithm,
-                title="Regression Performance",
-                embedding_model_palette=color_mapping,
-                embedding_model_order=models_to_keep,
-            )
-            save_fig(ax_neighbors, tabarena_path, f"regression_neighbors_{algorithm}")
-            plt.close()
-        except ValueError as e:
-            logger.warning(f"Skipping neighbors analysis for regression {algorithm}: {e}")
+    # Speichere den kombinierten Plot
+    save_fig(boxplot, tabarena_path, "regression_algorithm_comparison")
+    plt.close()
 
     logger.info("All visualizations completed successfully")
 
+    # Save descriptive statistics
+    descriptive_binary_df = create_descriptive_dataframe(binary_agg_result, "auc_score")
+    descriptive_binary_df.write_csv(
+        Path(tabarena_path / "binary_auc_score_descriptive.csv")
+    )
+    descriptive_multiclass_df = create_descriptive_dataframe(multiclass_agg_result, "auc_score")
+    descriptive_multiclass_df.write_csv(
+        Path(tabarena_path / "multiclass_auc_score_descriptive.csv")
+    )
+    descriptive_regression_df = create_descriptive_dataframe(regression_agg_result, "mape_score")
+    descriptive_regression_df.write_csv(
+        Path(tabarena_path / "regression_auc_score_descriptive.csv")
+    )
 
+if __name__ == "__main__":
+    path_tab_arena = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\tabarena_result.parquet"
+    path_outlier = r"C:\Users\fho\Documents\code\TabData\TabEmbedBench\data\tabembedbench_20250918_151705\results_ADBench_Tabular_20251007_115000.parquet"
+
+    mapping_renames = {"tabicl-classifier-v1.1-0506_preprocessed": "TabICL","TabVectorizerEmbedding": "TableVectorizer"}
+    models_to_keep = ["TableVectorizer", "TabICL", "TabPFN"]
+
+    create_outlier_plots(
+        pl.read_parquet(path_outlier),
+        name_mapping=mapping_renames,
+        models_to_keep=models_to_keep,
+    )
+    create_tabarena_plots(
+        pl.read_parquet(path_tab_arena),
+        name_mapping=mapping_renames,
+        models_to_keep=models_to_keep,
+    )
 
