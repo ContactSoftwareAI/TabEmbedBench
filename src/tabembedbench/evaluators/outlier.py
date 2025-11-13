@@ -1,9 +1,9 @@
-import numpy as np
 import math
-from sklearn.neighbors import LocalOutlierFactor
-from sklearn.ensemble import IsolationForest
-from pyod.models.ecod import ECOD
+
+import numpy as np
 from pyod.models.deep_svdd import DeepSVDD
+from sklearn.ensemble import IsolationForest
+from sklearn.neighbors import LocalOutlierFactor
 
 from tabembedbench.evaluators import AbstractEvaluator
 
@@ -218,9 +218,9 @@ class DeepSVDDEvaluator(AbstractEvaluator):
             upper_power = 2 ** (int(log_val) + 1)
 
             if (half_features - lower_power) < (upper_power - half_features):
-                start_power = min(64, lower_power)
+                start_power = max(64, lower_power)
             else:
-                start_power = min(64, upper_power)
+                start_power = max(64, upper_power)
 
         result = []
         current = start_power
