@@ -212,6 +212,7 @@ def create_outlier_plots(
     name_mapping: dict | None = None,
     color_mapping: dict | None = None,
     models_to_keep: list | None = None,
+    algorithm_order: list | None = None,
 ):
     data_path = Path(data_path)
     data_path.mkdir(parents=True, exist_ok=True)
@@ -254,10 +255,10 @@ def create_outlier_plots(
 
     agg_result = clean_results(agg_result)
 
-    # descriptive_df = create_descriptive_dataframe(agg_result, "auc_score")
-    # descriptive_df.write_csv(
-    #     Path(outlier_path / "outlier_descriptive.csv")
-    # )
+    descriptive_df = create_descriptive_dataframe(agg_result, "auc_score")
+    descriptive_df.write_csv(
+        Path(outlier_path / "outlier_descriptive.csv")
+    )
 
     boxplot = sns.boxplot(
         data=agg_result,
@@ -266,10 +267,12 @@ def create_outlier_plots(
         hue="embedding_model",
         palette=color_mapping,
         hue_order=models_to_keep,
+        order=algorithm_order,
     )
 
-    boxplot.set_xlabel("Algorithm")
+    boxplot.set_xlabel("")
     boxplot.set_ylabel("AUC Score")
+    boxplot.legend(title="Embedding Models")
     plt.setp(boxplot.get_xticklabels(), rotation=45, ha="right")
 
     save_fig(boxplot, outlier_path, "outlier_algorithm_comparison")
@@ -282,6 +285,8 @@ def create_tabarena_plots(
     name_mapping: dict | None = None,
     color_mapping: dict | None = None,
     models_to_keep: list | None = None,
+    algorithm_order_classification: list | None = None,
+    algorithm_order_regression: list | None = None,
 ):
     data_path = Path(data_path)
     data_path.mkdir(parents=True, exist_ok=True)
@@ -344,10 +349,12 @@ def create_tabarena_plots(
         hue="embedding_model",
         palette=color_mapping,
         hue_order=models_to_keep,
+        order=algorithm_order_classification,
     )
 
-    boxplot.set_xlabel("Algorithm")
+    boxplot.set_xlabel("")
     boxplot.set_ylabel("AUC Score")
+    boxplot.legend(title="Embedding Models")
     plt.setp(boxplot.get_xticklabels(), rotation=45, ha="right")
 
     save_fig(boxplot, tabarena_path, "binary_clf_algorithm_comparison")
@@ -373,10 +380,12 @@ def create_tabarena_plots(
         hue="embedding_model",
         palette=color_mapping,
         hue_order=models_to_keep,
+        order=algorithm_order_classification,
     )
 
-    boxplot.set_xlabel("Algorithm")
+    boxplot.set_xlabel("")
     boxplot.set_ylabel("AUC Score")
+    boxplot.legend(title="Embedding Models")
     plt.setp(boxplot.get_xticklabels(), rotation=45, ha="right")
 
     save_fig(boxplot, tabarena_path, "multiclass_clf_algorithm_comparison")
@@ -402,10 +411,12 @@ def create_tabarena_plots(
         hue="embedding_model",
         palette=color_mapping,
         hue_order=models_to_keep,
+        order=algorithm_order_regression,
     )
 
-    boxplot.set_xlabel("Algorithm")
+    boxplot.set_xlabel("")
     boxplot.set_ylabel("MAPE Score")
+    boxplot.legend(title="Embedding Models")
     plt.setp(boxplot.get_xticklabels(), rotation=45, ha="right")
 
     # Speichere den kombinierten Plot
