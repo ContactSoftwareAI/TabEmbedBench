@@ -206,6 +206,45 @@ def create_descriptive_dataframe(
     return descriptive_statistic_df
 
 
+def create_outlier_ratio_dataframe(
+    df: pl.DataFrame,
+    bin_edges: list,
+    metric_col: str,
+):
+    binning_expr = pl.lit(None, dtype=pl.Int64)
+    for i in range(len(bin_edges), -1, -1):
+        if i == len(bin_edges):
+            lower_bound = bin_edges[i-1]
+            condition = (pl.col("outlier_ratio") >= lower_bound)
+            bin_label = f">={lower_bound}"
+        elif i == 0:
+            upper_bound = bin_edges[i]
+            condition = (pl.col("outlier_ratio") < upper_bound)
+            bin_label = f"<{upper_bound}"
+        else:
+            lower_bound = bin_edges[i-1]
+            upper_bound = bin_edges[i]
+            condition = (pl.col("outlier_ratio") >= lower_bound) & (pl.col("outlier_ratio") < upper_bound)
+            bin_label = f"[{lower_bound},{upper_bound})"
+        binning_expr = pl.when(condition).then(pl.lit(bin_label)).otherwise(binning_expr)
+    temp_df = df.with_columns(
+        binning_expr.alias("outlier_ratio_bin_based")
+    )
+    descriptive_statistic_df = temp_df.group_by(["embedding_model", "outlier_ratio_bin_based"]).agg(
+        pl.col(metric_col).mean().alias(f"average_{metric_col}"),
+        pl.col(metric_col).std().alias(f"std_{metric_col}"),
+        pl.col(metric_col).min().alias(f"min_{metric_col}"),
+        pl.col(metric_col).max().alias(f"max_{metric_col}"),
+        pl.col(metric_col).median().alias(f"median_{metric_col}"),
+        pl.col("time_to_compute_embedding")
+        .mean()
+        .alias(f"averaged_embedding_compute_time"),
+        pl.col("dataset_name").n_unique().alias("num_datasets"),
+    )
+
+    return descriptive_statistic_df
+
+
 def create_outlier_plots(
     df: pl.DataFrame,
     data_path: str | Path = "data",
@@ -213,6 +252,7 @@ def create_outlier_plots(
     color_mapping: dict | None = None,
     models_to_keep: list | None = None,
     algorithm_order: list | None = None,
+    bin_edges: list | None = None,
 ):
     data_path = Path(data_path)
     data_path.mkdir(parents=True, exist_ok=True)
@@ -246,6 +286,7 @@ def create_outlier_plots(
             "embedding_model",
             "algorithm_metric",
             "dataset_name",
+            "outlier_ratio",
             "time_to_compute_embedding",
         ]
     else:
@@ -253,6 +294,7 @@ def create_outlier_plots(
             "algorithm",
             "embedding_model",
             "dataset_name",
+            "outlier_ratio",
             "time_to_compute_embedding",
         ]
 
@@ -268,6 +310,12 @@ def create_outlier_plots(
     descriptive_df.write_csv(
         Path(outlier_path / "outlier_descriptive.csv")
     )
+
+    if bin_edges:
+        outlier_ratio_df = create_outlier_ratio_dataframe(agg_result, bin_edges, "auc_score")
+        outlier_ratio_df.write_csv(
+            Path(outlier_path / "outlier_ratio.csv")
+        )
 
     boxplot = sns.boxplot(
         data=agg_result,

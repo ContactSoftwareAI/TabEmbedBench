@@ -7,9 +7,7 @@ datasets. It supports classification, regression, and outlier detection tasks.
 
 import logging
 import click
-import polars as pl
-from tabembedbench.examples.eda_utils import (
-    create_color_mapping,
+from tabembedbench.utils.eda_utils import (
     create_outlier_plots,
     create_tabarena_plots,
 )
@@ -161,6 +159,7 @@ def run_main(
     run_supervised,
     adbench_dataset_path,
     data_dir,
+    bin_edges
 ):
     """
     Runs the main execution flow for the benchmark process, including data configuration,
@@ -230,6 +229,7 @@ def run_main(
             data_path=result_dir,
             models_to_keep=models_to_keep,
             algorithm_order=order_evaluators_outlier,
+            bin_edges=bin_edges,
         )
 
     if not result_tabarena.is_empty():
@@ -291,6 +291,7 @@ def main(
         run_supervised=run_supervised,
         adbench_dataset_path=adbench_data,
         data_dir=data_dir,
+        bin_edges=[0.05,0.1]
     )
 
 
