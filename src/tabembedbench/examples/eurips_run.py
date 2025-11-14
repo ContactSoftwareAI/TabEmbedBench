@@ -98,7 +98,6 @@ def get_evaluators(debug=False):
                 LocalOutlierFactorEvaluator(
                     model_params={
                         "n_neighbors": 5,
-                        "metric": "euclidean",
                     }
                 ),
             ]
@@ -225,19 +224,22 @@ def run_main(
         benchmark_config=benchmark_config,
     )
 
-    create_outlier_plots(
-        result_outlier,
-        data_path=result_dir,
-        models_to_keep=models_to_keep,
-        algorithm_order=order_evaluators_outlier,
-    )
-    create_tabarena_plots(
-        result_tabarena,
-        data_path=result_dir,
-        models_to_keep=models_to_keep,
-        algorithm_order_classification=order_evaluators_classification,
-        algorithm_order_regression=order_evaluators_regression,
-    )
+    if not result_outlier.is_empty():
+        create_outlier_plots(
+            result_outlier,
+            data_path=result_dir,
+            models_to_keep=models_to_keep,
+            algorithm_order=order_evaluators_outlier,
+        )
+
+    if not result_tabarena.is_empty():
+        create_tabarena_plots(
+            result_tabarena,
+            data_path=result_dir,
+            models_to_keep=models_to_keep,
+            algorithm_order_classification=order_evaluators_classification,
+            algorithm_order_regression=order_evaluators_regression,
+        )
 
 
 @click.command()

@@ -236,19 +236,28 @@ def create_outlier_plots(
 
     setup_publication_style()
 
-    agg_result = df.filter(
-        (pl.col("algorithm_metric") == "euclidean")
-        | pl.col("algorithm_metric").is_null()
-    )
-
-    agg_result = agg_result.group_by(
-        [
+    if "algorithm_metric" in df.columns:
+        df = df.filter(
+            (pl.col("algorithm_metric") == "euclidean")
+            | pl.col("algorithm_metric").is_null()
+        )
+        grouped_columns = [
             "algorithm",
             "embedding_model",
             "algorithm_metric",
             "dataset_name",
             "time_to_compute_embedding",
         ]
+    else:
+        grouped_columns = [
+            "algorithm",
+            "embedding_model",
+            "dataset_name",
+            "time_to_compute_embedding",
+        ]
+
+    agg_result = df.group_by(
+        grouped_columns
     ).agg(
         pl.col("auc_score").max().alias("auc_score"),
     )
@@ -287,7 +296,34 @@ def create_tabarena_plots(
     models_to_keep: list | None = None,
     algorithm_order_classification: list | None = None,
     algorithm_order_regression: list | None = None,
-):
+) -> None:
+    """
+    Creates and saves a series of visualizations and descriptive statistics for different
+    machine learning tasks and algorithms, including binary classification, multiclass
+    classification, and regression. The function processes the given data, applies filtering
+    and transformations, and generates boxplots and descriptive statistics for evaluation.
+
+    Args:
+        df (pl.DataFrame): Input DataFrame containing the results to process and visualize.
+            The DataFrame is expected to include relevant columns for models, algorithms,
+            metrics, and scores.
+        data_path (str | Path, optional): Path to the directory where the plots and statistics
+            files will be saved. Defaults to "data".
+        name_mapping (dict | None, optional): Dictionary mapping original model names to
+            new names for visualization purposes. Supports renaming models for better clarity in
+            plots. Defaults to None.
+        color_mapping (dict | None, optional): Dictionary mapping model names to specific colors
+            for visualization. If None, colors will be assigned automatically using a colorblind
+            palette. Defaults to None.
+        models_to_keep (list | None, optional): List of model names to keep in the dataset for
+            plotting. Filters datasets to include only specified models. Defaults to None.
+        algorithm_order_classification (list | None, optional): Order of algorithms to display
+            on the x-axis for binary and multiclass classification plots. Adjusts plot appearance
+            for consistent ordering. Defaults to None.
+        algorithm_order_regression (list | None, optional): Order of algorithms to display on
+            the x-axis for regression plots. Adjusts plot appearance for consistent ordering.
+            Defaults to None.
+    """
     data_path = Path(data_path)
     data_path.mkdir(parents=True, exist_ok=True)
 
@@ -309,16 +345,31 @@ def create_tabarena_plots(
         }
 
     # Filter "euclidean" metric and "distance" weight
-    df = df.filter(
-        (
-            (pl.col("algorithm_metric") == "euclidean")
-            | pl.col("algorithm_metric").is_null()
+    if "algorithm_metric" in df.columns and "algorithm_weights" in df.columns:
+        df = df.filter(
+            (
+                (pl.col("algorithm_metric") == "euclidean")
+                | pl.col("algorithm_metric").is_null()
+            )
+            & (
+                (pl.col("algorithm_weights") == "distance")
+                | pl.col("algorithm_weights").is_null()
+            )
         )
-        & (
-            (pl.col("algorithm_weights") == "distance")
-            | pl.col("algorithm_weights").is_null()
-        )
-    )
+        grouped_columns = [
+            "algorithm",
+            "embedding_model",
+            "algorithm_metric",
+            "dataset_name",
+            "time_to_compute_embedding",
+        ]
+    else:
+        grouped_columns = [
+            "algorithm",
+            "embedding_model",
+            "dataset_name",
+            "time_to_compute_embedding",
+        ]
 
     binary, multiclass, regression = separate_by_task_type(df)
 
@@ -331,13 +382,7 @@ def create_tabarena_plots(
 
     # Boxplot for binary classification
     binary_agg_result = binary.group_by(
-        [
-            "algorithm",
-            "embedding_model",
-            "algorithm_metric",
-            "dataset_name",
-            "time_to_compute_embedding",
-        ]
+        grouped_columns
     ).agg(
         pl.col("auc_score").max().alias("auc_score"),
     )
@@ -362,13 +407,7 @@ def create_tabarena_plots(
 
     # Boxplot for multiclass classification
     multiclass_agg_result = multiclass.group_by(
-        [
-            "algorithm",
-            "embedding_model",
-            "algorithm_metric",
-            "dataset_name",
-            "time_to_compute_embedding",
-        ]
+        grouped_columns
     ).agg(
         pl.col("auc_score").max().alias("auc_score"),
     )
@@ -393,13 +432,7 @@ def create_tabarena_plots(
 
     # Boxplot for regression
     regression_agg_result = regression.group_by(
-        [
-            "algorithm",
-            "embedding_model",
-            "algorithm_metric",
-            "dataset_name",
-            "time_to_compute_embedding",
-        ]
+        grouped_columns
     ).agg(
         pl.col("mape_score").max().alias("mape_score"),
     )
