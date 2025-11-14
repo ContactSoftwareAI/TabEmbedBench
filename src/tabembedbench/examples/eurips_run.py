@@ -244,8 +244,8 @@ def run_main(
 
 @click.command()
 @click.option("--debug", is_flag=True, help="Run in debug mode ")
-@click.option("--max-samples", default=15000, help="Upper bound for dataset size")
-@click.option("--max-features", default=500, help="Upper bound for number of features")
+@click.option("--max-samples", default=10000, help="Upper bound for dataset size")
+@click.option("--max-features", default=200, help="Upper bound for number of features")
 @click.option(
     "--run-outlier/--no-run-outlier", default=True, help="Run outlier detection"
 )

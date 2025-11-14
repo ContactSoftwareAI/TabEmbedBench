@@ -70,11 +70,11 @@ class OutlierBenchmark(AbstractBenchmark):
         # Handle dataset paths
         if dataset_paths is None:
             dataset_paths = Path("data/adbench_tabular_datasets")
-            if not dataset_paths.exists():
-                self.logger.warning("Downloading ADBench tabular datasets...")
-                download_adbench_tabular_datasets(dataset_paths)
         else:
             dataset_paths = Path(dataset_paths)
+        if not dataset_paths.exists():
+            self.logger.warning("Downloading ADBench tabular datasets...")
+            download_adbench_tabular_datasets(dataset_paths)
 
         self.dataset_paths = dataset_paths
 
