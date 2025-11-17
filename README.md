@@ -11,6 +11,12 @@ TabEmbedBench is a benchmarking framework for evaluating tabular data embedding 
 - Includes KNN/MLP evaluators for supervised tasks and LOF/Isolation Forest/DeepSVDD for outlier detection
 - Scriptable via a Click-based CLI and a Python API
 
+
+## Citations
+
+If you use this code, please cite:
+
+
 ## Tech stack
 
 - Language: Python
@@ -139,17 +145,6 @@ Refer to `src/tabembedbench/examples/eurips_run.py` for the complete evaluator g
 - Results and plots are written under the chosen `--data-dir` (default `data/`).
 - Example outputs in this repository show CSV and plots under timestamped `data/tabembedbench_*/` directories.
 
-## Environment variables
-
-- No required environment variables are enforced by the code in this repo as of 2025-11-17.
-- OpenML is used for TabArena datasets; if you rely on authenticated API access, document your setup here.
-- TODO: Add any dataset paths, API keys, or credentials needed in specific environments.
-
-## Testing
-
-- No project-local tests were found in this repository at the time of writing.
-- TODO: Add tests (e.g., smoke tests for the example run and unit tests for evaluators/embeddings) and document how to run them, e.g. `uv run pytest`.
-
 ## Development
 
 - Lint/format with Ruff (configured in `pyproject.toml`):
@@ -190,17 +185,3 @@ TabEmbedBench/
             └── eurips_run.py
 ```
 
-## Scripts and entry points
-
-- No console entry points are defined in `pyproject.toml`.
-- Primary script: `src/tabembedbench/examples/eurips_run.py` (Click CLI)
-- Programmatic entry point: functions in `src/tabembedbench/benchmark/run_benchmark.py`
-
-## License
-
-- TODO: Add a `LICENSE` file and state the project’s license here.
-
-## Authors
-
-- Lars Kleinemeier
-- Frederik Hoppe
