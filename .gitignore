@@ -1,0 +1,12 @@
+data
+data/
+/src/tabiclexpierments.egg-info/
+/src/tabembedbench.egg-info/
+
+.idea/
+
+/.coverage_reports/
+/.coverage/
+.aiignore
+
+*.env
