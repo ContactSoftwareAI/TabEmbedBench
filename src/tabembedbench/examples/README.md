@@ -22,8 +22,8 @@ A comprehensive example script that demonstrates a full benchmarking pipeline us
 Configures and returns a list of embedding models for benchmarking.
 
 **Models Included:**
-- **TabPFNEmbedding**: TabPFN model
-- **TabICLEmbedding**: TabICL model with preprocessing enabled
+- **TabPFNEmbedding**: TabPFN model with 5 estimators
+- **TabICLEmbedding**: TabICL model (row embedder)
 - **TableVectorizerEmbedding**: Table vectorization approach
 
 **Debug Mode**: When `debug=True`, returns a reduced set of models for faster testing.
@@ -35,9 +35,12 @@ Configures and returns a comprehensive set of evaluators for different tasks.
 
 **Evaluator Types:**
 - **KNNRegressorEvaluator**: For regression tasks
-- **KNNClassifierEvaluator**: For classification tasks  
+- **KNNClassifierEvaluator**: For classification tasks
+- **MLPRegressorEvaluator**: Neural network regressor with HPO
+- **MLPClassifierEvaluator**: Neural network classifier with HPO
 - **LocalOutlierFactorEvaluator**: For outlier detection
 - **IsolationForestEvaluator**: Alternative outlier detection
+- **DeepSVDDEvaluator**: Deep learning-based outlier detection (including dynamic variant)
 
 **Parameter Sweeps:**
 - **Neighbor counts**: 5-45 neighbors (step size 5)
@@ -45,35 +48,41 @@ Configures and returns a comprehensive set of evaluators for different tasks.
 - **Weighting schemes**: distance-based
 - **Ensemble sizes**: 50-250 estimators for Isolation Forest
 
-**Debug Mode**: When `debug=True`, returns minimal evaluators for quick testing.
+**Debug Mode**: When `debug=True`, returns minimal evaluators (KNN with 5 neighbors and LOF) for quick testing.
 
 **Returns**: List of configured evaluator instances
 
-##### `run_main(debug, max_samples, max_features, run_outlier, run_supervised)`
+##### `run_main(debug, max_samples, max_features, run_outlier, run_supervised, adbench_dataset_path, data_dir, bin_edges)`
 Orchestrates the complete benchmarking process.
 
 **Parameters:**
 - `debug`: Enable debug mode for faster execution
-- `max_samples`: Upper bound on dataset size
-- `max_features`: Upper bound on number of features
+- `max_samples`: Upper bound on dataset size (default: 10,000)
+- `max_features`: Upper bound on number of features (default: 200)
 - `run_outlier`: Whether to run outlier detection benchmarks
 - `run_supervised`: Whether to run TabArena supervised benchmarks
+- `adbench_dataset_path`: Path to ADBench dataset directory
+- `data_dir`: Directory for storing results
+- `bin_edges`: Bin edges for outlier visualization plots
 
 **Workflow:**
 1. Configure embedding models and evaluators
-2. Set up logging and constraints
+2. Set up dataset and benchmark configurations
 3. Execute benchmark with specified parameters
-4. Handle results and logging
+4. Create visualization plots for results (outlier and TabArena)
+5. Save results to specified directory
 
 ##### `main()` - CLI Interface
 Command-line interface using Click framework for easy execution.
 
 **CLI Options:**
 - `--debug`: Run in debug mode with reduced datasets
-- `--max-samples`: Set maximum dataset size (default: 100,001)
-- `--max-features`: Set maximum feature count (default: 500)
+- `--max-samples`: Set maximum dataset size (default: 10,000)
+- `--max-features`: Set maximum feature count (default: 200)
 - `--run-outlier/--no-run-outlier`: Toggle outlier detection (default: True)
-- `--run-supervised/--no-run-supervised`: Toggle TabArena tasks (default: True)
+- `--run-supervised/--no-run-supervised`: Toggle TabArena supervised tasks (default: True)
+- `--adbench-data`: Path to ADBench datasets (default: "data/adbench_tabular_datasets")
+- `--data-dir`: Directory for storing results (default: "data")
 
 ## Usage Examples
 
@@ -90,6 +99,9 @@ python eurips_run.py --no-run-supervised
 
 # Limit dataset size and features
 python eurips_run.py --max-samples 1000 --max-features 50
+
+# Specify custom data paths
+python eurips_run.py --adbench-data path/to/adbench --data-dir path/to/results
 ```
 
 ### Programmatic Usage
@@ -106,7 +118,10 @@ run_main(
     max_samples=10000,
     max_features=100,
     run_outlier=True,
-    run_supervised=True
+    run_supervised=True,
+    adbench_dataset_path="data/adbench_tabular_datasets",
+    data_dir="data",
+    bin_edges=[0.05, 0.1]
 )
 ```
 
