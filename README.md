@@ -4,11 +4,12 @@ TabEmbedBench is a comprehensive benchmarking framework designed for evaluating 
 
 ## Key Features
 
-- **Comprehensive Benchmarking**: Evaluate embedding models on outlier detection (ADBench) and task-specific benchmarks (TabArena)
-- **Multiple Embedding Models**: Support for TabICL, TabPFN, SphereBasedEmbedding, and TabVectorizer
-- **Flexible Evaluation**: Configurable evaluators with parameter sweeps for thorough assessment
+- **Comprehensive Benchmarking**: Evaluate embedding models on outlier detection (ADBench) and supervised learning tasks (TabArena)
+- **Multiple Embedding Models**: Support for TabICL, TabPFN, and TableVectorizer with both neural and traditional approaches
+- **Flexible Evaluation**: Multiple evaluators including KNN, MLP with hyperparameter optimization, LOF, Isolation Forest, and DeepSVDD
 - **Unified Results**: Consolidated result collection with automatic timing and performance tracking
 - **Extensible Architecture**: Easy integration of new embedding models and evaluation methods
+- **Advanced Features**: GPU acceleration, memory management with logging, and configurable dataset exclusion
 
 ## Prerequisites
 
@@ -68,12 +69,12 @@ Alternatively, you can run commands directly with UV without activating:
 ### Basic Usage
 ```python
 from tabembedbench.benchmark.run_benchmark import run_benchmark
-from tabembedbench.embedding_models import TabICLEmbedding, SphereBasedEmbedding
+from tabembedbench.embedding_models import TabICLEmbedding, TableVectorizerEmbedding
 
 # Create embedding model instances
 models = [
     TabICLEmbedding(preprocess_tabicl_data=True),
-    SphereBasedEmbedding(embed_dim=64)
+    TableVectorizerEmbedding()
 ]
 
 # Run comprehensive benchmark
@@ -143,18 +144,19 @@ tabembedbench/
 │       │   ├── outlier_benchmark.py  # ADBench outlier detection
 │       │   └── tabarena_benchmark.py # TabArena task evaluation
 │       ├── embedding_models/    # Embedding model implementations
-│       │   ├── readme.md             # Embedding models documentation
+│       │   ├── README.md             # Embedding models documentation
 │       │   ├── abstractembedding.py  # AbstractEmbeddingGenerator base class
 │       │   ├── tabicl_embedding.py   # TabICL neural embedding
 │       │   ├── tabpfn_embedding.py   # TabPFN prior-fitted networks
-│       │   ├── spherebased_embedding.py # Geometric embeddings
-│       │   └── tabvectorizer_embedding.py # Traditional vectorization
+│       │   └── tablevectorizer_embedding.py # Traditional vectorization
 │       ├── evaluators/          # Evaluation algorithms
 │       │   ├── README.md             # Evaluators documentation
 │       │   ├── abstractevaluator.py  # AbstractEvaluator base class
-│       │   ├── classifier.py         # KNN classification evaluator
-│       │   ├── regression.py         # KNN regression evaluator
-│       │   └── outlier.py            # LOF and Isolation Forest evaluators
+│       │   ├── knn_classifier.py     # KNN classification evaluator
+│       │   ├── knn_regressor.py      # KNN regression evaluator
+│       │   ├── mlp_classifier.py     # MLP classification evaluator
+│       │   ├── mlp_regressor.py      # MLP regression evaluator
+│       │   └── outlier.py            # LOF, Isolation Forest, and DeepSVDD evaluators
 │       ├── examples/            # Usage examples and demonstrations
 │       │   ├── README.md             # Examples documentation
 │       │   └── eurips_run.py         # Comprehensive example script
@@ -179,21 +181,27 @@ All models implement the `AbstractEmbeddingGenerator` interface:
 
 ### Neural Models
 - **TabICLEmbedding**: Neural embedding based on Tabular In-Context Learning architecture
-- **UniversalTabPFNEmbedding**: Prior-fitted networks with pre-trained knowledge transfer
+- **TabPFNEmbedding**: Prior-fitted networks with pre-trained knowledge transfer
 
 ### Traditional Models  
-- **SphereBasedEmbedding**: Geometric embedding using spherical projections
-- **TabVectorizerEmbedding**: Traditional vectorization approach with optimization support
+- **TableVectorizerEmbedding**: Classical feature engineering baseline using table vectorization techniques
 
-For detailed documentation on each model, see [`src/tabembedbench/embedding_models/readme.md`](src/tabembedbench/embedding_models/readme.md).
+For detailed documentation on each model, see [`src/tabembedbench/embedding_models/README.md`](src/tabembedbench/embedding_models/README.md).
 
 ## Evaluation Framework
 
 ### Available Evaluators
-- **KNNClassifierEvaluator**: K-nearest neighbors classification
-- **KNNRegressorEvaluator**: K-nearest neighbors regression  
-- **LocalOutlierFactorEvaluator**: Density-based outlier detection
-- **IsolationForestEvaluator**: Tree-based outlier detection
+
+#### Supervised Learning Evaluators
+- **KNNClassifierEvaluator**: K-nearest neighbors classification with configurable distance metrics
+- **KNNRegressorEvaluator**: K-nearest neighbors regression with configurable distance metrics
+- **MLPClassifierEvaluator**: Multi-layer perceptron neural network classifier with Optuna-based hyperparameter optimization
+- **MLPRegressorEvaluator**: Multi-layer perceptron neural network regressor with Optuna-based hyperparameter optimization
+
+#### Outlier Detection Evaluators
+- **LocalOutlierFactorEvaluator**: Density-based outlier detection using LOF algorithm
+- **IsolationForestEvaluator**: Tree-based outlier detection using ensemble methods
+- **DeepSVDDEvaluator**: Deep learning-based outlier detection using Support Vector Data Description
 
 For detailed documentation on evaluators, see [`src/tabembedbench/evaluators/README.md`](src/tabembedbench/evaluators/README.md).
 
@@ -208,8 +216,9 @@ For detailed documentation on evaluators, see [`src/tabembedbench/evaluators/REA
 #### Task-specific Benchmark (TabArena)
 - Uses OpenML's TabArena suite
 - Classification and regression tasks
-- KNN-based evaluation with parameter sweeps
+- KNN and MLP-based evaluation with parameter sweeps
 - Supports both full and lite modes for development
+- Configurable dataset exclusion for focused benchmarking
 
 For comprehensive benchmark documentation, see [`src/tabembedbench/benchmark/README.md`](src/tabembedbench/benchmark/README.md).
 
@@ -218,7 +227,7 @@ For comprehensive benchmark documentation, see [`src/tabembedbench/benchmark/REA
 Each module includes comprehensive documentation:
 
 - **[Benchmark Module](src/tabembedbench/benchmark/README.md)**: Complete benchmarking framework documentation
-- **[Embedding Models](src/tabembedbench/embedding_models/readme.md)**: All embedding model implementations and usage
+- **[Embedding Models](src/tabembedbench/embedding_models/README.md)**: All embedding model implementations and usage
 - **[Evaluators](src/tabembedbench/evaluators/README.md)**: Evaluation algorithms and interfaces
 - **[Examples](src/tabembedbench/examples/README.md)**: Usage examples and configuration patterns
 - **[Utils](src/tabembedbench/utils/README.md)**: Utility functions and helper classes
@@ -260,9 +269,10 @@ For detailed contribution guidelines, see the respective module documentation.
 ## Performance Considerations
 
 - **GPU Support**: Neural models (TabICL, TabPFN) support GPU acceleration
-- **Memory Management**: Automatic GPU cache clearing between datasets
-- **Scalability**: Configurable dataset size and feature limits
+- **Memory Management**: Automatic GPU cache clearing between datasets with memory logging
+- **Scalability**: Configurable dataset size and feature limits via command-line arguments
 - **Parallel Processing**: Multi-threaded evaluation where possible
+- **Hyperparameter Optimization**: Automated tuning for MLP-based evaluators using Optuna
 
 ## Results and Analysis
 
