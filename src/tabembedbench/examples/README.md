@@ -24,7 +24,8 @@ Configures and returns a list of embedding models for benchmarking.
 **Models Included:**
 - **TabPFNEmbedding**: TabPFN model with 5 estimators
 - **TabICLEmbedding**: TabICL model (row embedder)
-- **TableVectorizerEmbedding**: Table vectorization approach
+- **TableVectorizerEmbedding**: Baseline which should represent the 
+  classical feature engineering approach for numerical representation.
 
 **Debug Mode**: When `debug=True`, returns a reduced set of models for faster testing.
 
