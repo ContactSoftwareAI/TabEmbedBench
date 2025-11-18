@@ -280,8 +280,3 @@ Results are automatically saved in structured formats:
 - **Parquet files**: Efficient columnar storage in `data/results/`
 - **Comprehensive metrics**: Performance scores, timing, and metadata
 - **Visualization support**: Built-in plotting utilities for analysis
-
-## Authors
-
-- Lars Kleinemeier
-- Frederik Hoppe
