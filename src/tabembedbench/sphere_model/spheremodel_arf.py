@@ -151,7 +151,7 @@ class SphereModelARF(TransformerMixin):
         col_max = self.column_properties[col_idx][2]
         col_range = col_max - col_min
 
-        return (0.5 + (column_data[:,np.newaxis] - col_min)/col_range) * sphere_point[np.newaxis,:]
+        return (0.5 + (column_data.reshape(-1,1) - col_min)/col_range) * sphere_point.reshape(1,-1)
 
     def _embed_categorical_column(
         self, column_data: np.ndarray, col_idx: int
