@@ -31,7 +31,7 @@ The `AbstractEvaluator` class defines the common interface that all evaluation a
 
 ## Available Evaluators
 
-### 1. KNNClassifierEvaluator (`classifier.py`)
+### 1. KNNClassifierEvaluator (`knn_classifier.py`)
 
 Implements k-nearest neighbors classification for evaluating embeddings on classification tasks.
 
@@ -50,7 +50,7 @@ Implements k-nearest neighbors classification for evaluating embeddings on class
 - Used in TabArena benchmark for classification datasets
 - Evaluates embedding quality through downstream classification performance
 
-### 2. KNNRegressorEvaluator (`regression.py`)
+### 2. KNNRegressorEvaluator (`knn_regressor.py`)
 
 Implements k-nearest neighbors regression for evaluating embeddings on regression tasks.
 
@@ -69,7 +69,75 @@ Implements k-nearest neighbors regression for evaluating embeddings on regressio
 - Used in TabArena benchmark for regression datasets
 - Evaluates embedding quality through downstream regression performance
 
-### 3. LocalOutlierFactorEvaluator (`outlier.py`)
+### 3. MLPClassifierEvaluator (`mlp_classifier.py`)
+
+Implements Multi-Layer Perceptron (MLP) neural network classifier with automatic hyperparameter optimization using Optuna.
+
+**Key Features:**
+- Hyperparameter optimization via Optuna
+- Cross-validation for robust model selection
+- Sklearn-based MLP implementation with custom wrapper
+- Early stopping and validation monitoring
+- Standard scaling of input features
+
+**Inherits From:**
+- `AbstractHPOEvaluator`: Provides Optuna-based hyperparameter optimization framework
+
+**Parameters:**
+- `n_trials`: Number of Optuna optimization trials (default: 10)
+- `cv_folds`: Number of cross-validation folds (default: 5)
+- `random_state`: Random seed for reproducibility (default: 42)
+- `verbose`: Whether to print optimization progress (default: False)
+
+**Optimized Hyperparameters:**
+- `n_layers`: Number of hidden layers (1-5)
+- `hidden_layer_sizes`: Tuple of hidden layer dimensions (32-512 per layer)
+- `alpha`: L2 regularization strength (1e-5 to 1e-1)
+- `learning_rate_init`: Initial learning rate (1e-4 to 1e-2)
+- `batch_size`: Training batch size (16, 32, 64, 128)
+- `max_iter`: Maximum training iterations (50-200)
+- `activation`: Activation function ('relu', 'tanh', 'logistic')
+
+**Usage in Benchmarks:**
+- Provides neural network-based evaluation for classification tasks
+- Alternative to KNN-based classification evaluation
+- Automatic hyperparameter tuning for optimal performance
+
+### 4. MLPRegressorEvaluator (`mlp_regressor.py`)
+
+Implements Multi-Layer Perceptron (MLP) neural network regressor with automatic hyperparameter optimization using Optuna.
+
+**Key Features:**
+- Hyperparameter optimization via Optuna
+- Cross-validation for robust model selection
+- Sklearn-based MLP implementation with custom wrapper
+- Early stopping and validation monitoring
+- Standard scaling of input features
+
+**Inherits From:**
+- `AbstractHPOEvaluator`: Provides Optuna-based hyperparameter optimization framework
+
+**Parameters:**
+- `n_trials`: Number of Optuna optimization trials (default: 10)
+- `cv_folds`: Number of cross-validation folds (default: 5)
+- `random_state`: Random seed for reproducibility (default: 42)
+- `verbose`: Whether to print optimization progress (default: False)
+
+**Optimized Hyperparameters:**
+- `n_layers`: Number of hidden layers (1-3)
+- `hidden_layer_sizes`: Tuple of hidden layer dimensions (32-512 per layer)
+- `alpha`: L2 regularization strength (1e-5 to 1e-1)
+- `learning_rate_init`: Initial learning rate (1e-4 to 1e-2)
+- `batch_size`: Training batch size (16, 32, 64, 128, 256)
+- `max_iter`: Maximum training iterations (50-200)
+- `activation`: Activation function ('relu', 'tanh', 'identity')
+
+**Usage in Benchmarks:**
+- Provides neural network-based evaluation for regression tasks
+- Alternative to KNN-based regression evaluation
+- Automatic hyperparameter tuning for optimal performance
+
+### 5. LocalOutlierFactorEvaluator (`outlier.py`)
 
 Implements Local Outlier Factor algorithm for outlier detection using embeddings.
 
@@ -88,7 +156,7 @@ Implements Local Outlier Factor algorithm for outlier detection using embeddings
 - Primary evaluator for ADBench outlier detection benchmark
 - Assesses how well embeddings preserve outlier patterns
 
-### 4. IsolationForestEvaluator (`outlier.py`)
+### 6. IsolationForestEvaluator (`outlier.py`)
 
 Implements Isolation Forest algorithm for outlier detection using embeddings.
 
@@ -105,6 +173,41 @@ Implements Isolation Forest algorithm for outlier detection using embeddings.
 **Usage in Benchmarks:**
 - Alternative outlier detection method in benchmarks
 - Provides comparison with LOF-based evaluation
+
+### 7. DeepSVDDEvaluator (`outlier.py`)
+
+Implements Deep Support Vector Data Description algorithm for outlier detection using neural networks.
+
+**Key Features:**
+- Neural network-based outlier detection
+- Deep learning approach to anomaly detection
+- Dynamic hidden layer size computation based on input dimensionality
+- Configurable architecture and training parameters
+- PyOD-based implementation
+
+**Parameters:**
+- `dynamic_hidden_neurons`: Whether to automatically compute hidden layer sizes (default: False)
+- `use_ae`: Whether to use autoencoder for pretraining (default: False)
+- `hidden_neurons`: List of hidden layer sizes (default: [64, 32])
+- `hidden_activation`: Activation function for hidden layers (default: "relu")
+- `output_activation`: Activation function for output layer (default: "sigmoid")
+- `optimizer`: Optimizer to use (default: "adam")
+- `epochs`: Number of training epochs (default: 250)
+- `batch_size`: Training batch size (default: 32)
+- `dropout_rate`: Dropout rate for regularization (default: 0.2)
+- `l2_regularizer`: L2 regularization strength (default: 0.1)
+- `validation_size`: Proportion of data for validation (default: 0.1)
+- `preprocessing`: Whether to apply preprocessing (default: True)
+- `contamination`: Expected proportion of outliers (default: 0.1)
+- `random_seed`: Random seed for reproducibility (default: 42)
+
+**Dynamic Hidden Neurons:**
+When `dynamic_hidden_neurons=True`, the evaluator automatically computes hidden layer sizes based on the number of input features, creating a decreasing sequence from approximately half the feature count down to 32.
+
+**Usage in Benchmarks:**
+- Neural network-based alternative to traditional outlier detection
+- Particularly effective for complex, high-dimensional data
+- Can capture non-linear patterns in embeddings
 
 ## Integration with Benchmarking Framework
 

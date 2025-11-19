@@ -122,7 +122,7 @@ model.name = "tabicl-preprocessed"
 embeddings = model.generate_embeddings(X_train, X_test)
 ```
 
-### 2. UniversalTabPFNEmbedding (`tabpfn_embedding.py`)
+### 2. TabPFNEmbedding (`tabpfn_embedding.py`)
 
 Embedding model based on TabPFN (Tabular Prior-Fitted Networks) architecture.
 
@@ -133,21 +133,24 @@ Embedding model based on TabPFN (Tabular Prior-Fitted Networks) architecture.
 - **Task-Specific Optimization**: Optimized for specific downstream tasks
 
 #### Core Methods:
-- `_compute_embeddings_per_column()`: Column-wise embedding computation
-- `_multiclass_codebook_reduction()`: Reduces embedding dimensionality for multiclass tasks
-- `_generate_codebook()`: Creates codebook for embedding compression
-- `preprocess_data()`: TabPFN-specific preprocessing
+- `_compute_internal_embeddings()`: Implements column-wise embedding strategy
+- `_preprocess_data()`: Converts data to float64
+- `_fit_model()`: Identifies categorical features
+- `_compute_embeddings()`: Computes embeddings for train/test data
 
 #### Parameters:
-- Model architecture parameters
-- Codebook configuration
-- Task-specific settings
+- `num_estimators`: Number of estimators for ensemble predictions (default: 1)
+- `estimator_agg`: Method for aggregating estimator outputs ('mean', 'first_element')
+- `emb_agg`: Method for aggregating embeddings across columns ('mean', 'concat')
+
+#### Column-wise Embedding Strategy:
+The model treats each column alternately as a target variable while using other columns as features, fitting appropriate TabPFN models (classifier for categorical, regressor for numerical) and extracting embeddings.
 
 #### Usage:
 
 ```python
-model = UniversalTabPFNEmbedding()
-model.name = "tabpfn-universal"
+model = TabPFNEmbedding(num_estimators=1, emb_agg='mean')
+model.name = "tabpfn"
 embeddings = model.generate_embeddings(X_train, X_test)
 ```
 
