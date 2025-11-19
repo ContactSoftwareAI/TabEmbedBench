@@ -394,8 +394,10 @@ def filter_params_for_class(cls, params_dict):
     return {k: v for k, v in params_dict.items() if k in valid_params}
 
 
-# The code is taken from the original TabICL repo, only the
+# The code is taken from the original TabICL repo (https://github.com/soda-inria/tabicl), only the
 # OutlierRemover is removed. The rest is similar to the original code.
+# Copyright (c) 2025, Soda team @ Inria
+# Licensed under BSD 3-Clause License
 class OutlierPreprocessingPipeline(TransformerMixin, BaseEstimator):
     """Preprocessing pipeline for outlier detection tasks.
 
