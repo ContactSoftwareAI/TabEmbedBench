@@ -1,7 +1,6 @@
 from typing import Union
 
 import numpy as np
-import pandas as pd
 import torch
 
 
@@ -14,11 +13,10 @@ def infer_categorical_features(
     Features are identified as categorical if any of these conditions are met:
     1. The feature index is in the provided categorical_features list AND has few unique values
     2. The feature has few unique values compared to the dataset size
-    3. The feature has string/object/category data type (pandas DataFrame)
-    4. The feature contains string values (numpy array)
+    3. The feature contains string values
 
     Parameters:
-        data (np.ndarray or pandas.DataFrame): The input data.
+        data : The input data.
         categorical_features (list[int], optional): Initial list of categorical feature indices.
             If None, will start with an empty list.
 
@@ -33,35 +31,17 @@ def infer_categorical_features(
 
     _categorical_features: list[int] = []
 
-    # First detect based on data type (string/object features)
-    is_pandas = hasattr(data, "dtypes")
-
-    if is_pandas:
-        # Handle pandas DataFrame - use pandas' own type detection
-        import pandas as pd
-
-        for i, col_name in enumerate(data.columns):
-            col = data[col_name]
-            # Use pandas' built-in type checks for categorical features
-            if (
-                pd.api.types.is_categorical_dtype(col)
-                or pd.api.types.is_object_dtype(col)
-                or pd.api.types.is_string_dtype(col)
-            ):
-                _categorical_features.append(i)
-    else:
-        # Handle numpy array - check if any columns contain strings
-        for i in range(data.shape[1]):
-            if data.dtype == object:  # Check entire array dtype
-                # Try to access first non-nan value to check its type
-                col = data[:, i]
-                for val in col:
-                    if val is not None and not (
-                        isinstance(val, float) and np.isnan(val)
-                    ):
-                        if isinstance(val, str):
-                            _categorical_features.append(i)
-                            break
+    for i in range(data.shape[1]):
+        if data.dtype == object:  # Check entire array dtype
+            # Try to access first non-nan value to check its type
+            col = data[:, i]
+            for val in col:
+                if val is not None and not (
+                    isinstance(val, float) and np.isnan(val)
+                ):
+                    if isinstance(val, str):
+                        _categorical_features.append(i)
+                        break
 
     # Then detect based on unique values
     for i in range(data.shape[-1]):
@@ -69,10 +49,8 @@ def infer_categorical_features(
         if i in _categorical_features:
             continue
 
-        # Get unique values - handle differently for pandas and numpy
-        n_unique = (
-            data.iloc[:, i].nunique() if is_pandas else len(np.unique(data[:, i]))
-        )
+        # Get unique values
+        n_unique = len(np.unique(data[:, i]))
 
         # Filter categorical features, with too many unique values
         if (
@@ -89,7 +67,7 @@ def infer_categorical_features(
 
 
 def infer_categorical_columns(
-    data: np.ndarray | torch.Tensor | pd.DataFrame,
+    data: np.ndarray | torch.Tensor,
     max_unique_ratio: float = 0.1,
     max_unique_count: int = 200,
     return_split: bool = False,
@@ -102,9 +80,6 @@ def infer_categorical_columns(
     elif isinstance(data, np.ndarray):
         is_tensor = False
         data_np = data
-    elif isinstance(data, pd.DataFrame):
-        is_tensor = False
-        data_np = data.to_numpy()
     else:
         raise ValueError("Input must be numpy array or torch tensor")
 

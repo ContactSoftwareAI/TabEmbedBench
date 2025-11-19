@@ -4,7 +4,6 @@ from typing import Iterator, List
 
 import numpy as np
 import openml
-import pandas as pd
 import polars as pl
 from sklearn.metrics import log_loss, mean_absolute_percentage_error, roc_auc_score
 from sklearn.preprocessing import LabelEncoder
@@ -393,10 +392,10 @@ class TabArenaBenchmark(AbstractBenchmark):
 
     def _remove_columns_with_one_unique_value(
         self,
-        X: pd.DataFrame,
+        X: pl.DataFrame,
         categorical_indices: List[bool],
         dataset_name: str = "",
-    ) -> tuple[pd.DataFrame, List[bool]]:
+    ) -> tuple[pl.DataFrame, List[bool]]:
         """
         Removes columns with only one unique value from a DataFrame and updates
         the categorical indices accordingly.
