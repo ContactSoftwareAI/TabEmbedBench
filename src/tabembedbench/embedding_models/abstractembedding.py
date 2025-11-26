@@ -192,7 +192,7 @@ class AbstractEmbeddingGenerator(ABC):
 
     def generate_embeddings(
         self,
-        X_train: np.ndarray,
+        X_train: np.ndarray | pl.DataFrame | pd.DataFrame,
         X_test: np.ndarray | None = None,
         outlier: bool = False,
         **kwargs,
