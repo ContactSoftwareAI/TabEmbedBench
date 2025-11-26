@@ -10,6 +10,7 @@ from tabstar.tabstar_verbalizer import TabSTARVerbalizer
 from tabstar.arch.interaction import InteractionEncoder
 from tabstar.training.dataloader import get_dataloader
 import torch
+import gc
 from pandas import DataFrame, Series
 from sklearn.model_selection import train_test_split
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
@@ -26,9 +27,7 @@ class TabStarModel(PreTrainedModel):
         self.tokenizer = AutoTokenizer.from_pretrained(E5_SMALL)
         self.numerical_fusion = NumericalFusion()
         self.tabular_encoder = InteractionEncoder()
-#        self.cls_head = PredictionHead()
-#        self.reg_head = PredictionHead()
-#        self.post_init()
+
 
     def forward(self, x_txt: np.ndarray, x_num: np.ndarray, d_output: int) -> Tensor:
         textual_embeddings = self.get_textual_embedding(x_txt)
@@ -37,14 +36,6 @@ class TabStarModel(PreTrainedModel):
         embeddings = self.numerical_fusion(textual_embeddings=textual_embeddings, x_num=x_num)
         encoded = self.tabular_encoder(embeddings)
         target_tokens = encoded[:, :d_output]
-        print("shape target_tokens", target_tokens.shape)
-        # if d_output == 1:
-        #     target_scores = self.reg_head(target_tokens)
-        # else:
-        #     target_scores = self.cls_head(target_tokens)
-        # target_scores = target_scores.squeeze(dim=-1)
-        # assert tuple(target_scores.shape) == (x_txt.shape[0], d_output)
-        # return target_scores
         return target_tokens
 
     def get_textual_embedding(self, x_txt: np.array) -> Tensor:
@@ -80,15 +71,12 @@ class TabStarModel(PreTrainedModel):
         return embeddings
 
 
-
-
 class TabStarEmbedding(AbstractEmbeddingGenerator):
     def __init__(self, device: str | None = None):
         super().__init__(name="TabStar")
         self.preprocess_pipeline = None
         self.device = device if device is not None else get_device()
         self.use_amp = bool(self.device.type == "cuda")
-
         self.tabstar_row_embedder = self._get_model().to(self.device)
 
     def _get_model(self):
@@ -99,6 +87,7 @@ class TabStarEmbedding(AbstractEmbeddingGenerator):
         config_class = TabStarConfig()
         tabstar_embedding_model = TabStarModel(config=config_class)
         weights = safetensors.torch.load_file(model_ckpt_path)
+        # TODO: use model weights
         return tabstar_embedding_model
 
     def _preprocess_data(self, X: np.ndarray, train: bool = True, outlier: bool = False,
@@ -107,13 +96,13 @@ class TabStarEmbedding(AbstractEmbeddingGenerator):
         y = Series(np.zeros(X.shape[0]))
         if train:
             self.preprocess_pipeline = TabSTARVerbalizer(is_cls=False)
-            X_preprocessed = self.preprocess_pipeline.fit(X,y)
+            self.preprocess_pipeline.fit(X,y)
             X_preprocessed = self.preprocess_pipeline.transform(X,y=None)
         else:
             if self.preprocess_pipeline is None:
                 raise ValueError("Preprocessing pipeline is not fitted")
             else:
-                X_preprocessed = self.preprocess_pipeline.transform(X,y)
+                X_preprocessed = self.preprocess_pipeline.transform(X,y=None)
 
         return X_preprocessed
 
@@ -131,7 +120,6 @@ class TabStarEmbedding(AbstractEmbeddingGenerator):
     ) -> Tuple[np.ndarray, np.ndarray | None]:
 
         self.tabstar_row_embedder.eval()
-        #data = self.preprocessor_.transform(X, y=None)
         dataloader = get_dataloader(X_train_preprocessed, is_train=False, batch_size=128)
         embeddings_list = []
         for data in dataloader:
@@ -141,13 +129,40 @@ class TabStarEmbedding(AbstractEmbeddingGenerator):
                 embeddings_list.append(batch_predictions_numpy)
 
         #        if outlier:
-#            embeddings = self.tabstar_row_embedder.forward(x_txt=X_train_preprocessed.x_txt, x_num=X_train_preprocessed.x_num, d_output=128)
         embeddings = np.concatenate(embeddings_list, axis=0)
 
         return embeddings, None
 
     def _reset_embedding_model(self, *args, **kwargs):
-        pass
+        """Reset the embedding model to its initial state.
+
+                Reinitializes all preprocessing pipelines to clear fitted state
+                and moves model back to CPU to free GPU memory.
+                """
+        # Move model to CPU before deleting references
+        if self.tabstar_row_embedder is not None:
+            self.tabstar_row_embedder.cpu()
+
+        # Clear preprocessing pipeline
+        self.preprocess_pipeline = None
+        #self._is_fitted = False
+
+        # Force garbage collection
+        gc.collect()
+
+        # Clear GPU cache
+        if self.device == "cuda":
+            import torch
+
+            torch.cuda.empty_cache()
+        elif self.device == "mps":
+            import torch
+
+            torch.mps.empty_cache()
+
+        # Move model back to the device for next use
+        if self.tabstar_row_embedder is not None:
+            self.tabstar_row_embedder.to(self.device)
 
 
 
@@ -166,24 +181,18 @@ if __name__ == "__main__":
 
     x_train = DataFrame(X)
     x_train.columns = [f'feature_{i}' for i in range(x_train.shape[1])]
-    y_train = Series(y)
+    y_train = y #Series(y)
 
-    is_cls = True  # ALOI is a classification dataset (object recognition)
     x_test = None
     y_test = None
 
-    # Sanity checks
-    assert isinstance(x_train, DataFrame), "x should be a pandas DataFrame"
-    assert isinstance(y_train, Series), "y should be a pandas Series"
-    assert isinstance(is_cls, bool), "is_cls should be a boolean indicating classification or regression"
+    # # Sanity checks
+    # assert isinstance(x_train, DataFrame), "x should be a pandas DataFrame"
+    # assert isinstance(y_train, Series), "y should be a pandas Series"
 
     if x_test is None:
         assert y_test is None, "If x_test is None, y_test must also be None"
         x_train, x_test, y_train, y_test = train_test_split(x_train, y_train, test_size=0.1)
-
-    assert isinstance(x_test, DataFrame), "x_test should be a pandas DataFrame"
-    assert isinstance(y_test, Series), "y_test should be a pandas Series"
-
 
     tabstar_model = TabStarEmbedding()
     embeddings, _, _ = tabstar_model.generate_embeddings(x_train, x_test, outlier=True)
@@ -194,5 +203,4 @@ if __name__ == "__main__":
     #tabstar.fit(x_train, y_train)
     #y_pred = tabstar.predict(x_test)
     #metric = tabstar.score(X=x_test, y=y_test)
-
     #print(f"Accuracy: {metric:.4f}")
