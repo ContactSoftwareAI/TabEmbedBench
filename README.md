@@ -5,9 +5,9 @@ TabEmbedBench is a benchmarking framework for evaluating tabular data embedding 
 ## Overview
 
 - Benchmarks two families of tasks:
-  - Outlier detection (ADBench-style datasets)
+  - Outlier detection (ADBench datasets)
   - Supervised tasks from TabArena (classification and regression)
-- Provides several embedding generators (neural and traditional)
+- Provides several embedding generators
 - Includes KNN/MLP evaluators for supervised tasks and LOF/Isolation Forest/DeepSVDD for outlier detection
 - Scriptable via a Click-based CLI and a Python API
 

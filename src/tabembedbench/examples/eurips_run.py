@@ -163,7 +163,7 @@ def run_main(
     run_supervised,
     adbench_dataset_path,
     data_dir,
-    bin_edges
+    bin_edges,
 ):
     """
     Runs the main execution flow for the benchmark process, including data configuration,
@@ -195,11 +195,25 @@ def run_main(
     models_to_keep = [embedding_model._name for embedding_model in embedding_models]
 
     evaluators = get_evaluators(debug=debug)
-    order_evaluators_regression = [evaluator._name for evaluator in evaluators if evaluator.task_type=="Supervised Regression"]
+    order_evaluators_regression = [
+        evaluator._name
+        for evaluator in evaluators
+        if evaluator.task_type == "Supervised Regression"
+    ]
     order_evaluators_regression = list(dict.fromkeys(order_evaluators_regression))
-    order_evaluators_classification = [evaluator._name for evaluator in evaluators if evaluator.task_type=="Supervised Classification"]
-    order_evaluators_classification = list(dict.fromkeys(order_evaluators_classification))
-    order_evaluators_outlier = [evaluator._name for evaluator in evaluators if evaluator.task_type=="Outlier Detection"]
+    order_evaluators_classification = [
+        evaluator._name
+        for evaluator in evaluators
+        if evaluator.task_type == "Supervised Classification"
+    ]
+    order_evaluators_classification = list(
+        dict.fromkeys(order_evaluators_classification)
+    )
+    order_evaluators_outlier = [
+        evaluator._name
+        for evaluator in evaluators
+        if evaluator.task_type == "Outlier Detection"
+    ]
     order_evaluators_outlier = list(dict.fromkeys(order_evaluators_outlier))
 
     logger.info(f"Using {len(embedding_models)} embedding model(s)")
@@ -295,7 +309,7 @@ def main(
         run_supervised=run_supervised,
         adbench_dataset_path=adbench_data,
         data_dir=data_dir,
-        bin_edges=[0.05,0.1]
+        bin_edges=[0.05, 0.1],
     )
 
 
