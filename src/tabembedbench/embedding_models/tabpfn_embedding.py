@@ -90,7 +90,7 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         X: np.ndarray | pd.DataFrame,
         train: bool = True,
         outlier: bool = False,
-        **kwargs
+        **kwargs,
     ) -> pl.DataFrame:
         """Preprocess input data by converting to float64.
 

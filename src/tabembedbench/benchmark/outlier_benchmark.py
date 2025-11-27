@@ -130,9 +130,13 @@ class OutlierBenchmark(AbstractBenchmark):
         else:
             dataset_paths = Path(dataset_paths)
 
-        if not dataset_paths.exists() or len(list(dataset_paths.glob("*.npz"))) < EXPECTED_DATASET_COUNT:
+        if (
+            not dataset_paths.exists()
+            or len(list(dataset_paths.glob("*.npz"))) < EXPECTED_DATASET_COUNT
+        ):
             found_files = [
-                file_path.stem for file_path in list(dataset_paths.glob("*.npz"))
+                file_path.stem
+                for file_path in list(dataset_paths.glob("*.npz"))
                 if file_path.stem in ADBENCH_CLASSICAL_DATASETS
             ]
             if len(found_files) == 0:
@@ -145,7 +149,7 @@ class OutlierBenchmark(AbstractBenchmark):
                 f"Downloading ADBench tabular datasets (expecting {EXPECTED_DATASET_COUNT} files)..."
             )
             self.download_adbench_tabular_datasets(
-                save_path = dataset_paths,
+                save_path=dataset_paths,
                 files_to_download=missing_files,
             )
 
@@ -402,6 +406,7 @@ def run_outlier_benchmark(
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
+
 
 if __name__ == "__main__":
     OutlierBenchmark()

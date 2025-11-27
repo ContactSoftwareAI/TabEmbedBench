@@ -229,20 +229,21 @@ class TabArenaBenchmark(AbstractBenchmark):
                     repeat=repeat,
                 )
 
-                X, categorical_indicator = (
-                    self._remove_columns_with_one_unique_value(
+                X, categorical_indicator = self._remove_columns_with_one_unique_value(
                     X,
                     categorical_indicator,
                     dataset.name,
-                ))
+                )
 
                 categorical_column_names = [
-                    col for col, is_categorical in zip(X.columns,
-                                                       categorical_indicator)
+                    col
+                    for col, is_categorical in zip(X.columns, categorical_indicator)
                     if is_categorical
                 ]
                 categorical_indices = [
-                    i for i, is_categorical in enumerate(categorical_indicator) if is_categorical
+                    i
+                    for i, is_categorical in enumerate(categorical_indicator)
+                    if is_categorical
                 ]
 
                 X_train = X.iloc[train_indices]

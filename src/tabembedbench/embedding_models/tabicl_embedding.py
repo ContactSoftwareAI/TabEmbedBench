@@ -215,7 +215,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         X: np.ndarray | pd.DataFrame,
         train: bool = True,
         outlier: bool = False,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Preprocesses the input data for training or inference by optionally transforming
