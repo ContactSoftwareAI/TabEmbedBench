@@ -4,6 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import polars as pl
 import seaborn as sns
+from itertools import cycle
 
 logger = logging.getLogger("Results processing ")
 
@@ -48,11 +49,11 @@ def separate_by_task_type(df: pl.DataFrame):
 
 
 def create_color_mapping(models_to_keep: list[str]):
-    colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
-    color_mapping = {
-        model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
-        for model, (r, g, b) in zip(models_to_keep, colors)
-    }
+    colors = ["#0080C5","#FCB900","#92C108","#E3075A",
+              "#36AEE7","#F29100","#DBDC2E","#EE5CA1",
+              "#005E9E","#EA5A02","#639C2E","#A90E4E",
+              "#003254"]
+    color_mapping = dict(zip(models_to_keep,cycle(colors)))
     return color_mapping
 
 
@@ -268,12 +269,8 @@ def create_outlier_plots(
         models_to_keep = df.get_column("embedding_model").unique().to_list()
 
     if color_mapping is None:
-        colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
-        color_mapping = {
-            model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
-            for model, (r, g, b) in zip(models_to_keep, colors)
-        }
-
+        color_mapping = create_color_mapping(models_to_keep)
+        
     setup_publication_style()
 
     if "algorithm_metric" in df.columns:
@@ -386,11 +383,7 @@ def create_tabarena_plots(
         models_to_keep = df.get_column("embedding_model").unique().to_list()
 
     if color_mapping is None:
-        colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
-        color_mapping = {
-            model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
-            for model, (r, g, b) in zip(models_to_keep, colors)
-        }
+        color_mapping = create_color_mapping(models_to_keep)
 
     # Filter "euclidean" metric and "distance" weight
     if "algorithm_metric" in df.columns and "algorithm_weights" in df.columns:
