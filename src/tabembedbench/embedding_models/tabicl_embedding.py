@@ -6,6 +6,7 @@ import gc
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
+import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
@@ -22,6 +23,7 @@ from tabicl.sklearn.preprocessing import (
     CustomStandardScaler,
     PreprocessingPipeline,
     RTDLQuantileTransformer,
+    TransformToNumerical,
 )
 from torch import nn
 
@@ -209,7 +211,11 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         return row_embedding_model
 
     def _preprocess_data(
-        self, X: np.ndarray, train: bool = True, outlier: bool = False, **kwargs
+        self,
+        X: np.ndarray | pd.DataFrame,
+        train: bool = True,
+        outlier: bool = False,
+        **kwargs
     ) -> np.ndarray:
         """Preprocess input data using TabICL-specific pipelines.
 
@@ -228,6 +234,9 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
             np.ndarray: Preprocessed data ready for embedding computation.
         """
         if train:
+            if isinstance(X, pd.DataFrame):
+                self.transform_to_numerical = TransformToNumerical()
+                X = self.transform_to_numerical.fit_transform(X)
             if outlier:
                 self.preprocess_pipeline = OutlierPreprocessingPipeline()
                 X_preprocessed = self.preprocess_pipeline.fit_transform(X)
@@ -235,6 +244,8 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
                 self.preprocess_pipeline = PreprocessingPipeline()
                 X_preprocessed = self.preprocess_pipeline.fit_transform(X)
         else:
+            if isinstance(X, pd.DataFrame):
+                X = self.transform_to_numerical.transform(X)
             if self.preprocess_pipeline is None:
                 raise ValueError("Preprocessing pipeline is not fitted")
             else:

@@ -8,7 +8,7 @@ import pandas as pd
 import polars as pl
 from sklearn.metrics import log_loss, mean_absolute_percentage_error, roc_auc_score
 from sklearn.preprocessing import LabelEncoder
-from tabicl.sklearn.preprocessing import TransformToNumerical
+
 
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
 from tabembedbench.embedding_models.abstractembedding import (
@@ -199,12 +199,12 @@ class TabArenaBenchmark(AbstractBenchmark):
             Iterator[dict]: An iterator that generates dictionaries, each containing
                 processed data, metadata, and train-test splits for a specific fold/repeat.
                 - "X_train", "X_test" (DataFrame): Transformed training and test input data.
-                - "y_train", "y_test" (ndarray or Series): Encoded training and test target labels.
+                - "y_train", "y_test" (Series): Encoded training and test target labels.
                 - "dataset_name" (str): The name of the dataset.
                 - "dataset_size" (int): Total number of records in the dataset.
                 - "num_features" (int): Number of features in the dataset.
                 - "metadata" (dict): Additional information about the task and processing,
-                  such as task type, categorical indices, fold, and repeat.
+                  such as task type, categorical columns, fold, and repeat.
 
         Raises:
             Any exception raised during data retrieval, preprocessing, or train-test splitting
@@ -224,29 +224,30 @@ class TabArenaBenchmark(AbstractBenchmark):
                     target=task.target_name, dataset_format="dataframe"
                 )
 
-                # Remove the columns with only one unique value
-                X, categorical_indicator = self._remove_columns_with_one_unique_value(
-                    X, categorical_indicator, dataset.name
-                )
-
-                # Get categorical indices
-                categorical_indices = np.nonzero(categorical_indicator)[0].tolist()
-
                 # Get train/test split
                 train_indices, test_indices = task.get_train_test_split_indices(
                     fold=fold,
                     repeat=repeat,
                 )
 
+                categorical_indicator = (
+                    self._remove_columns_with_one_unique_value(
+                    X,
+                    categorical_indicator,
+                    dataset.name,
+                ))
+
+                categorical_indices = np.nonzero(categorical_indicator)[0].tolist()
+
+                categorical_columns = [
+                    col for col, is_cat in zip(X.columns,
+                                               categorical_indicator) if is_cat
+                ]
+
                 X_train = X.iloc[train_indices]
                 X_test = X.iloc[test_indices]
                 y_train = y.iloc[train_indices]
                 y_test = y.iloc[test_indices]
-
-                numerical_transformer = TransformToNumerical()
-
-                X_train = numerical_transformer.fit_transform(X_train)
-                X_test = numerical_transformer.transform(X_test)
 
                 # Encode labels for classification
                 if task.task_type == "Supervised Classification":
@@ -267,6 +268,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                     "metadata": {
                         "task_type": task.task_type,
                         "categorical_indices": categorical_indices,
+                        "categorical_column_names": categorical_columns,
                         "fold": fold,
                         "repeat": repeat,
                     },
@@ -394,7 +396,7 @@ class TabArenaBenchmark(AbstractBenchmark):
     def _remove_columns_with_one_unique_value(
         self,
         X: pd.DataFrame,
-        categorical_indices: List[bool],
+        categorical_indicator: List[bool],
         dataset_name: str = "",
     ) -> tuple[pd.DataFrame, List[bool]]:
         """
@@ -407,7 +409,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         Args:
             X (pd.DataFrame): The input DataFrame containing data.
-            categorical_indices (List[bool]): A list of boolean values where each entry
+            categorical_indicator (List[bool]): A list of boolean values where each entry
                 indicates whether the corresponding column in X is categorical.
             dataset_name (str): An optional name for the dataset, used for logging
                 purposes. Defaults to an empty string.
@@ -420,10 +422,10 @@ class TabArenaBenchmark(AbstractBenchmark):
         X_copy = X.copy()
 
         num_features_before = X_copy.shape[1]
-        categorical_indices_updated = categorical_indices.copy()
+        categorical_indices_updated = categorical_indicator.copy()
 
         # Get column names
-        cols = [col for col, is_cat in zip(X.columns, categorical_indices)]
+        cols = [col for col, is_cat in zip(X.columns, categorical_indicator)]
 
         # Track columns to drop
         cols_to_drop = []
@@ -450,7 +452,7 @@ class TabArenaBenchmark(AbstractBenchmark):
             drop_indices = [X.columns.get_loc(col) for col in cols_to_drop]
             categorical_indices_updated = [
                 cat_ind
-                for i, cat_ind in enumerate(categorical_indices)
+                for i, cat_ind in enumerate(categorical_indicator)
                 if i not in drop_indices
             ]
             self.logger.info(f"Number of features after: {X_copy.shape[1]}")

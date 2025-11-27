@@ -60,13 +60,14 @@ class TableVectorizerEmbedding(AbstractEmbeddingGenerator):
         Returns:
             np.ndarray: The input data unchanged.
         """
-        X = pl.from_numpy(X)
-
+        if isinstance(X, np.ndarray):
+            X = pl.from_numpy(X)
         return X
 
     def _fit_model(
         self,
-        X_preprocessed: np.ndarray,
+        X_preprocessed: pl.DataFrame,
+        train: bool = True,
         **kwargs,
     ) -> None:
         """Fit the TableVectorizer to the input data.
@@ -78,13 +79,14 @@ class TableVectorizerEmbedding(AbstractEmbeddingGenerator):
             X_preprocessed (np.ndarray): Preprocessed input data.
             **kwargs: Additional keyword arguments (unused).
         """
-        self.tablevectorizer.fit(X_preprocessed)
-        self._is_fitted = True
+        if train:
+            self.tablevectorizer.fit(X_preprocessed)
+            self._is_fitted = True
 
     def _compute_embeddings(
         self,
-        X_train_preprocessed: np.ndarray,
-        X_test_preprocessed: np.ndarray | None = None,
+        X_train_preprocessed: pl.DataFrame,
+        X_test_preprocessed: pl.DataFrame | None = None,
         outlier: bool = False,
         **kwargs,
     ) -> tuple[np.ndarray, np.ndarray | None]:

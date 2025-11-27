@@ -8,6 +8,7 @@ ADBENCH_URL = "https://github.com/Minqi824/ADBench/archive/refs/heads/main.zip"
 
 def download_adbench_tabular_datasets(
     save_path: str | Path | None = None,
+    missing_files: list[str] = None
 ) -> None:
     """Downloads tabular datasets for ADBench from the specified GitHub repository and saves them to the
     specified path. If no path is provided, it defaults to './data/adbench_tabular_datasets'. If the

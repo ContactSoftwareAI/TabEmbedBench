@@ -2,8 +2,11 @@ import warnings
 import gc
 
 import numpy as np
+import pandas as pd
+import polars as pl
 from tabpfn import TabPFNClassifier, TabPFNRegressor
 from tabpfn_extensions.utils import infer_categorical_features
+from tabicl.sklearn.preprocessing import TransformToNumerical
 
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.utils.torch_utils import get_device
@@ -78,11 +81,17 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         self.tabpfn_clf = TabPFNClassifier(**self._init_tabpfn_configs)
         self.tabpfn_reg = TabPFNRegressor(**self._init_tabpfn_configs)
 
+        self.transform_to_numerical = None
+
         self._is_fitted = False
 
     def _preprocess_data(
-        self, X: np.ndarray, train: bool = True, outlier: bool = False, **kwargs
-    ) -> np.ndarray:
+        self,
+        X: np.ndarray | pd.DataFrame,
+        train: bool = True,
+        outlier: bool = False,
+        **kwargs
+    ) -> pl.DataFrame:
         """Preprocess input data by converting to float64.
 
         Args:
@@ -94,7 +103,14 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         Returns:
             np.ndarray: Data converted to float64 dtype.
         """
-        return X.astype(np.float64)
+        if train:
+            if isinstance(X, pd.DataFrame):
+                self.transform_to_numerical = TransformToNumerical()
+                X = self.transform_to_numerical.fit_transform(X)
+        else:
+            if isinstance(X, pd.DataFrame):
+                X = self.transform_to_numerical.transform(X)
+        return X
 
     def _fit_model(
         self,
@@ -303,3 +319,4 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         self.num_features = None
         self.categorical_indices = None
         self._is_fitted = False
+        self.transform_to_numerical = None
