@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, List
 
 import polars as pl
 
@@ -157,6 +157,57 @@ class AbstractBenchmark(ABC):
         raise NotImplementedError
 
     # ========== Concrete Methods (Implemented in base class) ==========
+    def _process_embedding_model(
+            self,
+            embedding_model: AbstractEmbeddingGenerator,
+            evaluators: List[AbstractEvaluator],
+            data_split: dict,
+    ) -> None:
+        """
+        Processes an embedding model over a given dataset with a set of evaluators. Generates
+        embeddings for the provided dataset using the embedding model, evaluates the generated
+        embeddings with compatible evaluators, and saves the results.
+
+        Args:
+            embedding_model: Embedding model to be processed.
+            evaluators: List of evaluators to assess the generated embeddings.
+            data_split: A subset of the dataset to be processed with the embedding model.
+
+        """
+        log_gpu_memory(self.logger)
+        self.logger.info(
+            f"Processing {embedding_model.name} on {data_split['dataset_name']}..."
+        )
+
+        # Generate embeddings
+        try:
+            embeddings = self._generate_embeddings(embedding_model, data_split)
+        except Exception as e:
+            self.logger.exception(
+                f"Error generating embeddings with {embedding_model.name}: {e}"
+            )
+            raise
+
+        # Evaluate with each compatible evaluator
+        for evaluator in evaluators:
+            if not self._is_compatible(evaluator, data_split):
+                continue
+
+            try:
+                results = self._evaluate(embeddings, evaluator, data_split)
+                # Add embedding model name to results
+                results["embedding_model"] = [embedding_model.name]
+                self._add_result(results)
+            except Exception as e:
+                self.logger.exception(f"Error evaluating with {evaluator._name}: {e}")
+
+            # Reset evaluator for next use
+            evaluator.reset_evaluator()
+            self._cleanup_gpu_cache()
+
+        # Save intermediate results after each model
+        self._save_results()
+        self._cleanup_gpu_cache()
 
     def run_benchmark(
         self,
@@ -198,44 +249,12 @@ class AbstractBenchmark(ABC):
             for data_split in data_splits:
                 # Process each embedding model
                 for embedding_model in embedding_models:
-                    log_gpu_memory(self.logger)
-                    self.logger.info(
-                        f"Processing {embedding_model.name} on {data_split['dataset_name']}..."
-                    )
-
-                    # Generate embeddings
                     try:
-                        embeddings = self._generate_embeddings(
-                            embedding_model, data_split
+                        self._process_embedding_model(
+                            embedding_model, evaluators, data_split
                         )
                     except Exception as e:
-                        self.logger.exception(
-                            f"Error generating embeddings with {embedding_model.name}: {e}"
-                        )
                         continue
-
-                    # Evaluate with each compatible evaluator
-                    for evaluator in evaluators:
-                        if not self._is_compatible(evaluator, data_split):
-                            continue
-
-                        try:
-                            results = self._evaluate(embeddings, evaluator, data_split)
-                            # Add embedding model name to results
-                            results["embedding_model"] = [embedding_model.name]
-                            self._add_result(results)
-                        except Exception as e:
-                            self.logger.exception(
-                                f"Error evaluating with {evaluator._name}: {e}"
-                            )
-
-                        # Reset evaluator for next use
-                        evaluator.reset_evaluator()
-                        self._cleanup_gpu_cache()
-
-                    # Save intermediate results after each model
-                    self._save_results()
-                    self._cleanup_gpu_cache()
 
         self.logger.info(f"{self._get_benchmark_name()} benchmark completed.")
         return self.result_df
