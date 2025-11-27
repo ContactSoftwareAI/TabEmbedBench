@@ -4,6 +4,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
+import zipfile
+
+import requests
+
 import numpy as np
 import polars as pl
 from sklearn.metrics import roc_auc_score
@@ -11,9 +15,60 @@ from sklearn.metrics import roc_auc_score
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
-from tabembedbench.utils.dataset_utils import download_adbench_tabular_datasets
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+ADBENCH_CLASSICAL_DATASETS = [
+    "10_cover.npz",
+    "11_donors.npz",
+    "12_fault.npz",
+    "13_fraud.npz",
+    "14_glass.npz",
+    "15_Hepatitis.npz",
+    "16_http.npz",
+    "17_InternetAds.npz",
+    "18_Ionosphere.npz",
+    "19_landsat.npz",
+    "1_ALOI.npz",
+    "20_letter.npz",
+    "21_Lymphography.npz",
+    "22_magic.gamma.npz",
+    "23_mammography.npz",
+    "24_mnist.npz",
+    "25_musk.npz",
+    "26_optdigits.npz",
+    "27_PageBlocks.npz",
+    "28_pendigits.npz",
+    "29_Pima.npz",
+    "2_annthyroid.npz",
+    "30_satellite.npz",
+    "31_satimage-2.npz",
+    "32_shuttle.npz",
+    "33_skin.npz",
+    "34_smtp.npz",
+    "35_SpamBase.npz",
+    "36_speech.npz",
+    "37_Stamps.npz",
+    "38_thyroid.npz",
+    "39_vertebral.npz",
+    "3_backdoor.npz",
+    "40_vowels.npz",
+    "41_Waveform.npz",
+    "42_WBC.npz",
+    "43_WDBC.npz",
+    "44_Wilt.npz",
+    "45_wine.npz",
+    "46_WPBC.npz",
+    "47_yeast.npz",
+    "4_breastw.npz",
+    "5_campaign.npz",
+    "6_cardio.npz",
+    "7_Cardiotocography.npz",
+    "8_celeba.npz",
+    "9_census.npz",
+]
+
+EXPECTED_DATASET_COUNT = len(ADBENCH_CLASSICAL_DATASETS)
 
 IMAGE_CATEGORY = [
     "1_ALOI.npz",
@@ -25,6 +80,8 @@ IMAGE_CATEGORY = [
     "28_pendigits.npz",
     "33_skin.npz",
 ]
+
+ADBENCH_URL = "https://github.com/Minqi824/ADBench/archive/refs/heads/main.zip"
 
 
 class OutlierBenchmark(AbstractBenchmark):
@@ -72,9 +129,25 @@ class OutlierBenchmark(AbstractBenchmark):
             dataset_paths = Path("data/adbench_tabular_datasets")
         else:
             dataset_paths = Path(dataset_paths)
-        if not dataset_paths.exists():
-            self.logger.warning("Downloading ADBench tabular datasets...")
-            download_adbench_tabular_datasets(dataset_paths)
+
+        if not dataset_paths.exists() or len(list(dataset_paths.glob("*.npz"))) < EXPECTED_DATASET_COUNT:
+            found_files = [
+                file_path.stem for file_path in list(dataset_paths.glob("*.npz"))
+                if file_path.stem in ADBENCH_CLASSICAL_DATASETS
+            ]
+            if len(found_files) == 0:
+                missing_files = ADBENCH_CLASSICAL_DATASETS
+            else:
+                missing_files = set(ADBENCH_CLASSICAL_DATASETS) - set(found_files)
+
+            self.logger.warning(
+                f"Dataset directory is missing or incomplete. "
+                f"Downloading ADBench tabular datasets (expecting {EXPECTED_DATASET_COUNT} files)..."
+            )
+            self.download_adbench_tabular_datasets(
+                save_path = dataset_paths,
+                files_to_download=missing_files,
+            )
 
         self.dataset_paths = dataset_paths
 
@@ -217,6 +290,68 @@ class OutlierBenchmark(AbstractBenchmark):
         """
         return "ADBench_Tabular"
 
+    def download_adbench_tabular_datasets(
+        self,
+        save_path: str | Path | None = None,
+        files_to_download: list[str] = None,
+    ) -> None:
+        """Downloads tabular datasets for ADBench from the specified GitHub repository and saves them to the
+        specified path. If no path is provided, it defaults to './data/adbench_tabular_datasets'. If the
+        directory does not exist, it is created.
+
+        Args:
+            save_path (Optional[str]): The directory where the ADBench tabular datasets should be saved. If
+                None, the default path './data/adbench_tabular_datasets' will be used.
+            missing_files (Optional[list[str]]): List of filenames that should be downloaded. If None, all datasets should be loaded.
+        """
+        save_path = save_path or "./data/adbench_tabular_datasets"
+        save_path = Path(save_path)
+
+        save_path.mkdir(parents=True, exist_ok=True)
+
+        # Download the repository as a zip file
+        self.logger.info("Downloading ADBench repository...")
+        response = requests.get(ADBENCH_URL, stream=True)
+        response.raise_for_status()
+
+        # Save zip file temporarily
+        zip_path = save_path / "adbench_temp.zip"
+        with open(zip_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        # Extract only the Classical datasets
+        self.logger.info("Extracting datasets...")
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            # Get all files in the Classical datasets directory
+            classical_files = [
+                f
+                for f in zip_ref.namelist()
+                if f.startswith("ADBench-main/adbench/datasets/Classical/")
+                and f.endswith(".npz")
+            ]
+            for file_path in classical_files:
+                if Path(file_path).name not in files_to_download:
+                    continue
+
+                # Extract relative path after Classical/
+                relative_path = file_path.split("Classical/", 1)[1]
+                target_path = save_path / relative_path
+
+                # Create directory if needed
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Extract file
+                with (
+                    zip_ref.open(file_path) as source,
+                    open(target_path, "wb") as target,
+                ):
+                    target.write(source.read())
+
+        # Clean up temporary zip file
+        zip_path.unlink()
+        print(f"ADBench tabular datasets downloaded to: {save_path}")
+
 
 def run_outlier_benchmark(
     embedding_models: list[AbstractEmbeddingGenerator],
@@ -267,3 +402,6 @@ def run_outlier_benchmark(
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
+
+if __name__ == "__main__":
+    OutlierBenchmark()
