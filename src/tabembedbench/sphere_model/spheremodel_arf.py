@@ -1,7 +1,6 @@
 import numpy as np
 from sklearn.base import TransformerMixin
-
-from tabembedbench.utils.preprocess_utils import infer_categorical_columns
+from scipy.stats import qmc
 
 
 class SphereModelARF(TransformerMixin):
@@ -29,6 +28,7 @@ class SphereModelARF(TransformerMixin):
         """
         super()
         self.embed_dim = embed_dim
+        #self.point_generator = SobolPointGenerator(d_internal=self.embed_dim-1)
         self.categorical_indices = None
         self.column_properties = []
         self.n_cols = None
@@ -45,7 +45,7 @@ class SphereModelARF(TransformerMixin):
         for categorical features and min/max ranges for numerical features.
 
         Args:
-            data np.ndarray: Input data to fit.
+            data (np.ndarray): Input data to fit.
             y: Unused parameter, kept for sklearn compatibility. Defaults to None.
             categorical_indices (list[int] | None, optional): Indices of categorical
                 columns. If None, will be inferred. Defaults to None.
@@ -54,25 +54,28 @@ class SphereModelARF(TransformerMixin):
 
         _, self.n_cols = data.shape
 
-        center_points = random_points_on_unit_sphere(self.n_cols, self.embed_dim)
-
         for col_idx in range(self.n_cols):
             column_data = data[:, col_idx]
+            #column_data = np.array(data[list(data)[col_idx]])
 
             if col_idx in self.categorical_indices:
                 unique_categories = np.unique(column_data)
                 category_embeddings = {}
 
-                random_offsets = random_points_on_unit_sphere(len(unique_categories), self.embed_dim)
+                for category in unique_categories:
+                    category_embeddings[category] = new_point_on_unit_sphere(self.embed_dim)
 
-                for category in range(len(unique_categories)):
-                    category_embeddings[unique_categories[category]] = center_points[col_idx] + 0.1 * random_offsets[category]
-
-                self.column_properties.append([center_points[col_idx], category_embeddings])
+                self.column_properties.append(category_embeddings)
             else:
+                point = new_point_on_unit_sphere(self.embed_dim)
+                vec = np.zeros(self.embed_dim)
+                for j in range(int(np.floor(self.embed_dim / 2))):
+                    vec[2*j] = point[2*j+1]
+                    vec[2*j+1] = -point[2*j]
+                vec /= np.linalg.norm(vec)
                 col_min = np.min(column_data)
                 col_max = np.max(column_data)
-                self.column_properties.append([center_points[col_idx],col_min, col_max])
+                self.column_properties.append([point,vec,col_min, col_max])
 
     def transform(self, data: np.ndarray) -> np.ndarray:
         """Transforms input data into embeddings using appropriate methods for categorical and
@@ -111,25 +114,10 @@ class SphereModelARF(TransformerMixin):
 
             column_embeddings.append(col_embedding)
 
-        # Erstelle Zeileneinbettungen durch Mittelung
-        row_embeddings = np.zeros((n_rows, self.embed_dim))
-        for row_idx in range(n_rows):
-            row_embedding = np.zeros(self.embed_dim)
-            for col_idx in range(n_cols):
-                row_embedding += column_embeddings[col_idx][row_idx]
-            row_embeddings[row_idx] = row_embedding / n_cols
+        row_embeddings = np.mean(np.stack(column_embeddings,axis=0),axis=0)
+        #row_embeddings = np.concatenate(column_embeddings,axis=1)
 
         return row_embeddings
-
-    def _generate_random_sphere_point(self) -> np.ndarray:
-        """Generate a random point on the unit sphere.
-
-        Returns:
-            np.ndarray: Random point on the unit sphere of dimension embed_dim.
-        """
-        point = np.random.randn(self.embed_dim)
-
-        return point / np.linalg.norm(point)
 
     def _embed_numerical_column(
         self, column_data: np.ndarray, col_idx: int
@@ -146,19 +134,33 @@ class SphereModelARF(TransformerMixin):
         Returns:
             np.ndarray: Embedded values of shape (len(column_data), embed_dim).
         """
-        sphere_point = self.column_properties[col_idx][0]
-        col_min = self.column_properties[col_idx][1]
-        col_max = self.column_properties[col_idx][2]
+        point = self.column_properties[col_idx][0].reshape([1,self.embed_dim])
+        vec = self.column_properties[col_idx][1].reshape([1,self.embed_dim])
+        col_min = self.column_properties[col_idx][2]
+        col_max = self.column_properties[col_idx][3]
         col_range = col_max - col_min
 
-        return (0.5 + (column_data.reshape(-1,1) - col_min)/col_range) * sphere_point.reshape(1,-1)
+        embeddings = np.empty((len(column_data), self.embed_dim),dtype=float)
+#        for i, value in enumerate(column_data):
+#            if value < col_min:
+#                alpha = 0.2*np.pi*sig(16*(value-col_min)/col_range)
+#            elif value > col_max:
+#                alpha = 0.2*np.pi*(sig(16*(value-col_max)/col_range)+4)
+#            else:
+#                alpha = 0.1*np.pi*(8*value+col_max-9*col_min)/col_range
+#            embeddings[i, :] = np.sin(alpha) * point + np.cos(alpha) * vec
+        alpha = (np.pi * (0.8 * (column_data - col_min) / col_range + 0.1)).reshape([len(column_data),1])
+        embeddings = np.sin(alpha) * point + np.cos(alpha) * vec
+
+        return embeddings
 
     def _embed_categorical_column(
         self, column_data: np.ndarray, col_idx: int
     ) -> np.ndarray:
-        """Embed a categorical column into the embedding space.
+        """
+        Embed a categorical column into the embedding space.
 
-        Maps each category to a point in a small region around a random center point.
+        Maps each category to a point on the unit sphere.
         Unknown categories encountered during transform are assigned new points
         dynamically.
 
@@ -172,38 +174,49 @@ class SphereModelARF(TransformerMixin):
         Raises:
             ValueError: If unique_category_embeddings is not a dictionary.
         """
-        center_point = self.column_properties[col_idx][0]
-        unique_category_embeddings = self.column_properties[col_idx][1]
+        unique_category_embeddings = self.column_properties[col_idx]
 
         if not isinstance(unique_category_embeddings, dict):
             raise ValueError(f"The unique category embedding is not an dictionary.")
 
-        n_values = len(column_data)
-        embeddings = np.zeros((n_values, self.embed_dim))
+        unique_categories = np.unique(column_data)
+        for value in unique_categories:
+            if value not in unique_category_embeddings.keys():
+                unique_category_embeddings[value] = new_point_on_unit_sphere(self.embed_dim)
 
+        embeddings = np.empty((len(column_data), self.embed_dim),dtype=float)
         for i, value in enumerate(column_data):
-            if value in unique_category_embeddings.keys():
-                embeddings[i] = unique_category_embeddings[value]
-            else:
-                random_offset = random_points_on_unit_sphere(1, self.embed_dim,list(unique_category_embeddings.values()))[0]
-
-                unique_category_embeddings[value] = center_point + 0.1 * random_offset
-                embeddings[i] = unique_category_embeddings[value]
+            embeddings[i, :] = unique_category_embeddings[value]
 
         return embeddings
 
 
-def create_random_unit_vector(dimension):
+def new_point_on_unit_sphere(d: int):
+    """
+    Generation of a random point on a d-dimensional unit sphere.
+
+    Args:
+        d (int): dimension of the sphere
+    """
     norm = 1e-15
     while norm < 1e-10:
-        candidate_point = np.float32(np.random.randn(dimension))
+        candidate_point = np.float32(np.random.randn(d))
         norm = np.linalg.norm(candidate_point)
     return candidate_point/norm
 
 
-def random_points_on_unit_sphere(num_points,
-                                 dimension,
+def random_points_on_unit_sphere(num_points: int,
+                                 d: int,
                                  previous_points=[]):
+    """
+    Generation of num_points on a d-dimensional unit sphere which are separated from each other and from
+    all given previous_points.
+
+    Args:
+        num_points (int): number of points to be generated
+        d (int): dimension of the sphere
+        previous points: optional list of previous points
+    """
     num_previous_points = len(previous_points)
     points = [previous_points[i] for i in range(num_previous_points)]
     initial_separation_goal = 1
@@ -218,7 +231,7 @@ def random_points_on_unit_sphere(num_points,
         attempts_at_current_goal = 0
 
         while not found_point:
-            candidate_point = create_random_unit_vector(dimension)
+            candidate_point = new_point_on_unit_sphere(d)
             is_separated = True
 
             for existing_point in points:
@@ -239,3 +252,62 @@ def random_points_on_unit_sphere(num_points,
                     attempts_at_current_goal = 0
 
     return points[num_previous_points:]
+
+
+class SobolPointGenerator:
+    """
+    Iterative generation of Sobol points in a d_internal-dimensional unit cube
+    """
+    def __init__(self, d_internal: int, scramble: bool = True):
+        """
+        Initialisation of the Sobol generator.
+
+        Args:
+            d_internal (int): dimension of the unit cube
+            scramble (bool): if a random offset should be added
+        """
+        if d_internal < 1:
+            raise ValueError("d_internal must be at least 1.")
+        if d_internal > qmc.Sobol.MAXDIM:
+            print(f"Warning: d_internal ({d_internal}) exceeds the maximal dimension für Sobol "
+                  f"({qmc.Sobol.MAXDIM}). This can lead to bad quality.")
+        self.d_internal = d_internal
+        self.sampler = qmc.Sobol(d=d_internal, scramble=scramble, seed = 42)
+
+    def get_point(self) -> np.ndarray:
+        """
+        Generates the next Sobol point.
+
+        Returns:
+            numpy array of coordinates
+        """
+        point = self.sampler.random(1)[0]
+        return point
+
+
+def new_point_on_unit_sphere_sobol(generator: SobolPointGenerator,
+                                   d: int):
+    """
+    Generation of a new Sobol point on the d-dimensional unit sphere by generating a Sobol point
+    in a (d-1)-dimensional unit cube and transfering these angular coordinates to cartesian ones.
+
+    Args:
+        generator (SobolPointGenerator)
+        d (int): dimension of the sphere
+    """
+    p = generator.get_point()
+    angles = [2 * np.pi * p[0]]
+    for j in range(1, d-1):
+        angles.append(np.acos(2 * p[j] - 1))
+    cartesian_coords = np.zeros(d)
+    cartesian_coords[0] = np.cos(angles[0])
+    prod_sin = np.sin(angles[0])
+    for i in range(1, d-1):
+        cartesian_coords[i] = prod_sin * np.cos(angles[i])
+        prod_sin *= np.sin(angles[i])
+    cartesian_coords[d-1] = prod_sin
+    return cartesian_coords
+
+
+def sig(x):
+    return 1/(1 + np.exp(-x))

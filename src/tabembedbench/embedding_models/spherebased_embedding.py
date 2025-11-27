@@ -4,7 +4,6 @@ from sklearn.base import TransformerMixin
 from tabembedbench.sphere_model import SphereModelARF as SphereModel
 
 from tabembedbench.embedding_models.abstractembedding import AbstractEmbeddingGenerator
-from tabembedbench.utils.preprocess_utils import infer_categorical_columns
 
 
 class SphereBasedEmbedding(AbstractEmbeddingGenerator):
@@ -68,7 +67,8 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
             **kwargs: Additional keyword arguments (unused).
         """
         if categorical_indices is None:
-            categorical_indices = infer_categorical_columns(data)
+            categorical_indices = []
+            #categorical_indices = infer_categorical_columns(data)
         self.model.fit(data, categorical_indices=categorical_indices)
 
     def _compute_embeddings(

@@ -59,7 +59,11 @@ def get_embedding_models(debug=False):
     #    num_estimators=5,
     #)
 
-    sphere_model_8 = SphereBasedEmbedding(embed_dim=8)
+    #sphere_model_2 = SphereBasedEmbedding(embed_dim=2)
+    #sphere_model_4 = SphereBasedEmbedding(embed_dim=4)
+    #sphere_model_8 = SphereBasedEmbedding(embed_dim=8)
+    #sphere_model_16 = SphereBasedEmbedding(embed_dim=16)
+    #sphere_model_32 = SphereBasedEmbedding(embed_dim=32)
     sphere_model_64 = SphereBasedEmbedding(embed_dim=64)
     sphere_model_192 = SphereBasedEmbedding(embed_dim=192)
     sphere_model_512 = SphereBasedEmbedding(embed_dim=512)
@@ -68,7 +72,11 @@ def get_embedding_models(debug=False):
         #tabicl_row_embedder,
         #tabpfn_embedder,
         tablevector,
+        #sphere_model_2,
+        #sphere_model_4,
         #sphere_model_8,
+        #sphere_model_16,
+        #sphere_model_32,
         sphere_model_64,
         sphere_model_192,
         sphere_model_512
@@ -252,6 +260,7 @@ def run_main(
         )
 
 
+
 @click.command()
 @click.option("--debug", is_flag=True, help="Run in debug mode ")
 @click.option("--max-samples", default=10000, help="Upper bound for dataset size")
@@ -298,7 +307,7 @@ def main(
         max_samples=max_samples,
         max_features=max_features,
         run_outlier=run_outlier,
-        run_supervised=False,
+        run_supervised=run_supervised,
         adbench_dataset_path=adbench_data,
         data_dir=data_dir,
         bin_edges=[0.05,0.1]
