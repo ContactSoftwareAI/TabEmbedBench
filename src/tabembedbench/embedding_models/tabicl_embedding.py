@@ -217,21 +217,32 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         outlier: bool = False,
         **kwargs
     ) -> np.ndarray:
-        """Preprocess input data using TabICL-specific pipelines.
+        """
+        Preprocesses the input data for training or inference by optionally transforming
+        it to numerical features and applying a preprocessing pipeline.
 
-        Applies optional TableVectorizer preprocessing followed by either standard
-        or outlier-specific preprocessing pipelines based on the data type.
+        If the `train` parameter is set to True, the method initializes and fits
+        the necessary preprocessing and transformation pipelines. If it's set to False,
+        the method checks if the preprocessing pipeline is already fitted before
+        applying it to the data.
 
         Args:
-            X (np.ndarray): Input data to preprocess.
-            train (bool, optional): Whether to fit the preprocessing pipelines.
-                Defaults to True.
-            outlier (bool, optional): Whether to use outlier-specific preprocessing.
-                Defaults to False.
-            **kwargs: Additional keyword arguments (unused).
+            X (np.ndarray | pd.DataFrame): The input data to preprocess, either
+                as a NumPy array or a Pandas DataFrame.
+            train (bool): Specifies whether the data is for training (default is True).
+                If True, the method initializes and fits necessary transformation
+                pipelines.
+            outlier (bool): Specifies whether to apply an outlier preprocessing pipeline
+                instead of a standard preprocessing pipeline when training
+                (default is False).
+            **kwargs: Additional keyword arguments for preprocessing steps.
 
         Returns:
-            np.ndarray: Preprocessed data ready for embedding computation.
+            np.ndarray: The preprocessed input data ready for further analysis or modeling.
+
+        Raises:
+            ValueError: If the preprocessing pipeline is not fitted and the `train`
+                parameter is set to False.
         """
         if train:
             if isinstance(X, pd.DataFrame):
@@ -357,10 +368,16 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
             raise ValueError("Model is not fitted")
 
     def _reset_embedding_model(self):
-        """Reset the embedding model to its initial state.
+        """
+        Resets the embedding model and clears associated resources.
 
-        Reinitializes all preprocessing pipelines to clear fitted state
-        and moves model back to CPU to free GPU memory.
+        This method performs several cleanup and reset operations for the
+        embedding model and its associated resources. It ensures that
+        resources such as the pre-processing pipeline, GPU memory, and
+        references to the embedding model are cleared or reset appropriately.
+
+        Raises:
+            None
         """
         # Move model to CPU before deleting references
         if self.tabicl_row_embedder is not None:
