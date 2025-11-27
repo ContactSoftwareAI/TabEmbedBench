@@ -224,25 +224,24 @@ class TabArenaBenchmark(AbstractBenchmark):
                     target=task.target_name, dataset_format="dataframe"
                 )
 
+                self.logger.info(f"X shape: {X.shape}")
+
                 # Get train/test split
                 train_indices, test_indices = task.get_train_test_split_indices(
                     fold=fold,
                     repeat=repeat,
                 )
 
-                categorical_indicator = (
+                X, categorical_columns = (
                     self._remove_columns_with_one_unique_value(
                     X,
                     categorical_indicator,
                     dataset.name,
                 ))
 
-                categorical_indices = np.nonzero(categorical_indicator)[0].tolist()
+                self.logger.info(f"X_shape: {X.shape}")
 
-                categorical_columns = [
-                    col for col, is_cat in zip(X.columns,
-                                               categorical_indicator) if is_cat
-                ]
+                self.logger.info(f"Categorical columns: {categorical_columns}")
 
                 X_train = X.iloc[train_indices]
                 X_test = X.iloc[test_indices]
