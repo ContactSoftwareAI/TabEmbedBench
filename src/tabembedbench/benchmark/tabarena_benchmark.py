@@ -2,7 +2,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator, List
 
-import numpy as np
 import openml
 import pandas as pd
 import polars as pl
