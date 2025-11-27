@@ -6,7 +6,7 @@ from torch import Tensor
 from transformers import AutoTokenizer, AutoModel, PreTrainedModel
 from tabstar.arch.config import TabStarConfig, E5_SMALL
 from tabstar.arch.fusion import NumericalFusion
-from tabstar.tabstar_verbalizer import TabSTARVerbalizer
+from tabstar.tabstar_verbalizer import TabSTARVerbalizer, TabSTARData
 from tabstar.arch.interaction import InteractionEncoder
 from tabstar.training.dataloader import get_dataloader
 import torch
@@ -91,8 +91,9 @@ class TabStarEmbedding(AbstractEmbeddingGenerator):
         return tabstar_embedding_model
 
     def _preprocess_data(self, X: np.ndarray, train: bool = True, outlier: bool = False,
-                         **kwargs) -> np.ndarray:
+                         **kwargs) -> TabSTARData:
         X = DataFrame(X)
+        X.columns = [str(col) for col in X.columns]
         y = Series(np.zeros(X.shape[0]))
         if train:
             self.preprocess_pipeline = TabSTARVerbalizer(is_cls=False)
@@ -120,15 +121,18 @@ class TabStarEmbedding(AbstractEmbeddingGenerator):
     ) -> Tuple[np.ndarray, np.ndarray | None]:
 
         self.tabstar_row_embedder.eval()
-        dataloader = get_dataloader(X_train_preprocessed, is_train=False, batch_size=128)
         embeddings_list = []
-        for data in dataloader:
-            with torch.no_grad(), torch.autocast(device_type=self.device.type, enabled=self.use_amp):
-                batch_predictions = self.tabstar_row_embedder(x_txt=data.x_txt, x_num=data.x_num, d_output=data.d_output)
-                batch_predictions_numpy = batch_predictions.detach().cpu().squeeze().numpy()
-                embeddings_list.append(batch_predictions_numpy)
 
-        #        if outlier:
+        if outlier:
+            dataloader = get_dataloader(X_train_preprocessed, is_train=False, batch_size=128)
+            for data in dataloader:
+                with torch.no_grad(), torch.autocast(device_type=self.device.type, enabled=self.use_amp):
+                    batch_predictions = self.tabstar_row_embedder(x_txt=data.x_txt, x_num=data.x_num, d_output=data.d_output)
+                    batch_predictions_numpy = batch_predictions.detach().cpu().squeeze().numpy()
+                    embeddings_list.append(batch_predictions_numpy)
+        else:
+            raise NotImplementedError("Tabarena is not yet implemented for TabStarEmbedding")
+
         embeddings = np.concatenate(embeddings_list, axis=0)
 
         return embeddings, None
@@ -166,41 +170,41 @@ class TabStarEmbedding(AbstractEmbeddingGenerator):
 
 
 
-if __name__ == "__main__":
-    PATH = r'/home/frederik_hoppe_contact_software_/projects/tabembedbench/data/adbench_tabular_datasets/1_ALOI.npz'
-
-    data = np.load(PATH)
-
-    try:
-        X = data['X']  # Features
-        y = data['y']  # Target labels
-    except KeyError:
-        print("Available keys in the dataset:", list(data.files))
-        X = data[data.files[0]]
-        y = data[data.files[1]]
-
-    x_train = DataFrame(X)
-    x_train.columns = [f'feature_{i}' for i in range(x_train.shape[1])]
-    y_train = y #Series(y)
-
-    x_test = None
-    y_test = None
-
-    # # Sanity checks
-    # assert isinstance(x_train, DataFrame), "x should be a pandas DataFrame"
-    # assert isinstance(y_train, Series), "y should be a pandas Series"
-
-    if x_test is None:
-        assert y_test is None, "If x_test is None, y_test must also be None"
-        x_train, x_test, y_train, y_test = train_test_split(x_train, y_train, test_size=0.1)
-
-    tabstar_model = TabStarEmbedding()
-    embeddings, _, _ = tabstar_model.generate_embeddings(x_train, x_test, outlier=True)
-    print(embeddings.shape)
-
-    #tabstar_cls = TabSTARClassifier if is_cls else TabSTARRegressor
-    #tabstar = tabstar_cls()
-    #tabstar.fit(x_train, y_train)
-    #y_pred = tabstar.predict(x_test)
-    #metric = tabstar.score(X=x_test, y=y_test)
-    #print(f"Accuracy: {metric:.4f}")
+# if __name__ == "__main__":
+#     PATH = r'/home/frederik_hoppe_contact_software_/projects/tabembedbench/data/adbench_tabular_datasets/1_ALOI.npz'
+#
+#     data = np.load(PATH)
+#
+#     try:
+#         X = data['X']  # Features
+#         y = data['y']  # Target labels
+#     except KeyError:
+#         print("Available keys in the dataset:", list(data.files))
+#         X = data[data.files[0]]
+#         y = data[data.files[1]]
+#
+#     x_train = DataFrame(X)
+#     x_train.columns = [f'feature_{i}' for i in range(x_train.shape[1])]
+#     y_train = y #Series(y)
+#
+#     x_test = None
+#     y_test = None
+#
+#     # # Sanity checks
+#     # assert isinstance(x_train, DataFrame), "x should be a pandas DataFrame"
+#     # assert isinstance(y_train, Series), "y should be a pandas Series"
+#
+#     if x_test is None:
+#         assert y_test is None, "If x_test is None, y_test must also be None"
+#         x_train, x_test, y_train, y_test = train_test_split(x_train, y_train, test_size=0.1)
+#
+#     tabstar_model = TabStarEmbedding()
+#     embeddings, _, _ = tabstar_model.generate_embeddings(x_train, x_test, outlier=True)
+#     #print(embeddings.shape)
+#
+#     #tabstar_cls = TabSTARClassifier if is_cls else TabSTARRegressor
+#     #tabstar = tabstar_cls()
+#     #tabstar.fit(x_train, y_train)
+#     #y_pred = tabstar.predict(x_test)
+#     #metric = tabstar.score(X=x_test, y=y_test)
+#     #print(f"Accuracy: {metric:.4f}")
