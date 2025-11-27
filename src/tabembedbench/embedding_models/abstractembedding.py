@@ -220,9 +220,7 @@ class AbstractEmbeddingGenerator(ABC):
                 - X_test_embed (np.ndarray, optional): The embeddings for the testing
                   data if provided.
                 - compute_embeddings_time (float): Time taken to compute embeddings
-                  for the training data.
-                - compute_test_embeddings_time (float, optional): Time taken to compute
-                  embeddings for the testing data if provided.
+                  for the training and test data.
 
         Raises:
             Exception: If the embeddings generated for training and testing data
@@ -241,11 +239,11 @@ class AbstractEmbeddingGenerator(ABC):
 
         self._fit_model(X_train_preprocessed, outlier=outlier, **kwargs)
 
-        start_time = time.time()
+        start_time = time.perf_counter()
         train_embeddings, test_embeddings = self._compute_embeddings(
             X_train_preprocessed, X_test_preprocessed, outlier=outlier, **kwargs
         )
-        compute_embeddings_time = time.time() - start_time
+        compute_embeddings_time = time.perf_counter() - start_time
 
         if not self._validate_embeddings(train_embeddings):
             raise ValueError("Train Embeddings contain NaN values.")
