@@ -224,24 +224,27 @@ class TabArenaBenchmark(AbstractBenchmark):
                     target=task.target_name, dataset_format="dataframe"
                 )
 
-                self.logger.info(f"X shape: {X.shape}")
-
                 # Get train/test split
                 train_indices, test_indices = task.get_train_test_split_indices(
                     fold=fold,
                     repeat=repeat,
                 )
 
-                X, categorical_columns = (
+                X, categorical_indicator = (
                     self._remove_columns_with_one_unique_value(
                     X,
                     categorical_indicator,
                     dataset.name,
                 ))
 
-                self.logger.info(f"X_shape: {X.shape}")
-
-                self.logger.info(f"Categorical columns: {categorical_columns}")
+                categorical_column_names = [
+                    col for col, is_categorical in zip(X.columns,
+                                                       categorical_indicator)
+                    if is_categorical
+                ]
+                categorical_indices = [
+                    i for i, is_categorical in enumerate(categorical_indicator) if is_categorical
+                ]
 
                 X_train = X.iloc[train_indices]
                 X_test = X.iloc[test_indices]
@@ -267,7 +270,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                     "metadata": {
                         "task_type": task.task_type,
                         "categorical_indices": categorical_indices,
-                        "categorical_column_names": categorical_columns,
+                        "categorical_column_names": categorical_column_names,
                         "fold": fold,
                         "repeat": repeat,
                     },
