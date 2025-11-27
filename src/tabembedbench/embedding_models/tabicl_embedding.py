@@ -6,6 +6,7 @@ import gc
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
+import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
@@ -22,6 +23,7 @@ from tabicl.sklearn.preprocessing import (
     CustomStandardScaler,
     PreprocessingPipeline,
     RTDLQuantileTransformer,
+    TransformToNumerical,
 )
 from torch import nn
 
@@ -209,25 +211,43 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         return row_embedding_model
 
     def _preprocess_data(
-        self, X: np.ndarray, train: bool = True, outlier: bool = False, **kwargs
+        self,
+        X: np.ndarray | pd.DataFrame,
+        train: bool = True,
+        outlier: bool = False,
+        **kwargs,
     ) -> np.ndarray:
-        """Preprocess input data using TabICL-specific pipelines.
+        """
+        Preprocesses the input data for training or inference by optionally transforming
+        it to numerical features and applying a preprocessing pipeline.
 
-        Applies optional TableVectorizer preprocessing followed by either standard
-        or outlier-specific preprocessing pipelines based on the data type.
+        If the `train` parameter is set to True, the method initializes and fits
+        the necessary preprocessing and transformation pipelines. If it's set to False,
+        the method checks if the preprocessing pipeline is already fitted before
+        applying it to the data.
 
         Args:
-            X (np.ndarray): Input data to preprocess.
-            train (bool, optional): Whether to fit the preprocessing pipelines.
-                Defaults to True.
-            outlier (bool, optional): Whether to use outlier-specific preprocessing.
-                Defaults to False.
-            **kwargs: Additional keyword arguments (unused).
+            X (np.ndarray | pd.DataFrame): The input data to preprocess, either
+                as a NumPy array or a Pandas DataFrame.
+            train (bool): Specifies whether the data is for training (default is True).
+                If True, the method initializes and fits necessary transformation
+                pipelines.
+            outlier (bool): Specifies whether to apply an outlier preprocessing pipeline
+                instead of a standard preprocessing pipeline when training
+                (default is False).
+            **kwargs: Additional keyword arguments for preprocessing steps.
 
         Returns:
-            np.ndarray: Preprocessed data ready for embedding computation.
+            np.ndarray: The preprocessed input data ready for further analysis or modeling.
+
+        Raises:
+            ValueError: If the preprocessing pipeline is not fitted and the `train`
+                parameter is set to False.
         """
         if train:
+            if isinstance(X, pd.DataFrame):
+                self.transform_to_numerical = TransformToNumerical()
+                X = self.transform_to_numerical.fit_transform(X)
             if outlier:
                 self.preprocess_pipeline = OutlierPreprocessingPipeline()
                 X_preprocessed = self.preprocess_pipeline.fit_transform(X)
@@ -235,6 +255,8 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
                 self.preprocess_pipeline = PreprocessingPipeline()
                 X_preprocessed = self.preprocess_pipeline.fit_transform(X)
         else:
+            if isinstance(X, pd.DataFrame):
+                X = self.transform_to_numerical.transform(X)
             if self.preprocess_pipeline is None:
                 raise ValueError("Preprocessing pipeline is not fitted")
             else:
@@ -346,10 +368,16 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
             raise ValueError("Model is not fitted")
 
     def _reset_embedding_model(self):
-        """Reset the embedding model to its initial state.
+        """
+        Resets the embedding model and clears associated resources.
 
-        Reinitializes all preprocessing pipelines to clear fitted state
-        and moves model back to CPU to free GPU memory.
+        This method performs several cleanup and reset operations for the
+        embedding model and its associated resources. It ensures that
+        resources such as the pre-processing pipeline, GPU memory, and
+        references to the embedding model are cleared or reset appropriately.
+
+        Raises:
+            None
         """
         # Move model to CPU before deleting references
         if self.tabicl_row_embedder is not None:
@@ -394,8 +422,10 @@ def filter_params_for_class(cls, params_dict):
     return {k: v for k, v in params_dict.items() if k in valid_params}
 
 
-# The code is taken from the original TabICL repo, only the
+# The code is taken from the original TabICL repo (https://github.com/soda-inria/tabicl), only the
 # OutlierRemover is removed. The rest is similar to the original code.
+# Copyright (c) 2025, Soda team @ Inria
+# Licensed under BSD 3-Clause License
 class OutlierPreprocessingPipeline(TransformerMixin, BaseEstimator):
     """Preprocessing pipeline for outlier detection tasks.
 

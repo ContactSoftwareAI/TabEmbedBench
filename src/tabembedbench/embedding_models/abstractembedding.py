@@ -3,6 +3,8 @@ import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
+import polars as pl
+import pandas as pd
 
 
 class AbstractEmbeddingGenerator(ABC):
@@ -192,7 +194,7 @@ class AbstractEmbeddingGenerator(ABC):
 
     def generate_embeddings(
         self,
-        X_train: np.ndarray,
+        X_train: np.ndarray | pl.DataFrame | pd.DataFrame,
         X_test: np.ndarray | None = None,
         outlier: bool = False,
         **kwargs,
