@@ -299,15 +299,20 @@ class OutlierBenchmark(AbstractBenchmark):
         save_path: str | Path | None = None,
         files_to_download: list[str] = None,
     ) -> None:
-        """Downloads tabular datasets for ADBench from the specified GitHub repository and saves them to the
-        specified path. If no path is provided, it defaults to './data/adbench_tabular_datasets'. If the
-        directory does not exist, it is created.
+        """
+        Downloads and extracts tabular datasets from the ADBench repository.
+
+        This function downloads a zip file containing the datasets from the ADBench
+        repository, extracts only the required Classical datasets, and saves them
+        to the specified directory.
 
         Args:
-            save_path (Optional[str]): The directory where the ADBench tabular datasets should be saved. If
-                None, the default path './data/adbench_tabular_datasets' will be used.
-            missing_files (Optional[list[str]]): List of filenames that should be downloaded. If None, all datasets should be loaded.
+            save_path (str | Path | None): The directory where the datasets will
+                be saved. If not provided, defaults to "./data/adbench_tabular_datasets".
+            files_to_download (list[str] | None): List of filenames to be downloaded.
+                Only files specified in this list are extracted from the zip.
         """
+
         save_path = save_path or "./data/adbench_tabular_datasets"
         save_path = Path(save_path)
 
