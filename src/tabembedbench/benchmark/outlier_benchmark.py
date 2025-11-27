@@ -406,7 +406,3 @@ def run_outlier_benchmark(
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
-
-
-if __name__ == "__main__":
-    OutlierBenchmark()
