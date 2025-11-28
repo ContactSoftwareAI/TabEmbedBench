@@ -25,7 +25,7 @@ class AbstractEmbeddingGenerator(ABC):
     def __init__(
         self,
         name: str,
-        is_self_contained: bool = False,
+        is_end_to_end_model: bool = False,
     ):
         """
         Initializes the object with the provided name and a flag indicating whether it is
@@ -38,7 +38,7 @@ class AbstractEmbeddingGenerator(ABC):
         """
         self._name = name
         self._is_fitted = False
-        self._is_self_contained = is_self_contained
+        self._is_end_to_end_model = is_end_to_end_model
         self._logger = logging.getLogger(__name__)
 
     @property
@@ -54,13 +54,13 @@ class AbstractEmbeddingGenerator(ABC):
         return self._name
 
     @property
-    def is_self_contained(self) -> bool:
+    def is_end_to_end_model(self) -> bool:
         """Gets whether this model is self-contained.
 
         Returns:
             bool: True if the model solves tasks directly without evaluators, False otherwise.
         """
-        return self._is_self_contained
+        return self._is_end_to_end_model
 
     @name.setter
     def name(self, value: str) -> None:
@@ -208,6 +208,44 @@ class AbstractEmbeddingGenerator(ABC):
 
         return shape_check and nan_check
 
+    def preprocess_data(
+        self,
+        X_train: np.ndarray | pl.DataFrame | pd.DataFrame,
+        X_test: np.ndarray | None = None,
+        outlier: bool = False,
+        **kwargs,
+    ):
+        """
+        Preprocesses the training and optional test datasets, applies transformations, and fits
+        a model. Handles optional outlier handling and additional preprocessing options.
+
+        Args:
+            X_train (np.ndarray | pl.DataFrame | pd.DataFrame): The training dataset to be
+                preprocessed.
+            X_test (np.ndarray | None): The optional test dataset to be preprocessed. Defaults
+                to None.
+            outlier (bool): Flag to enable or disable outlier processing. Defaults to False.
+            **kwargs: Additional keyword arguments for preprocessing or model configuration.
+
+        Returns:
+            Tuple[np.ndarray | pl.DataFrame | pd.DataFrame, np.ndarray | pl.DataFrame | pd.DataFrame | None]:
+                A tuple containing the preprocessed training and (if provided) test datasets.
+        """
+        X_train_preprocessed = self._preprocess_data(
+            X_train, train=True, outlier=outlier, **kwargs
+        )
+
+        if X_test is not None:
+            X_test_preprocessed = self._preprocess_data(
+                X_test, train=False, outlier=outlier, **kwargs
+            )
+        else:
+            X_test_preprocessed = None
+
+        self._fit_model(X_train_preprocessed, outlier=outlier, **kwargs)
+
+        return X_train_preprocessed, X_test_preprocessed
+
     def generate_embeddings(
         self,
         X_train: np.ndarray | pl.DataFrame | pd.DataFrame,
@@ -242,18 +280,9 @@ class AbstractEmbeddingGenerator(ABC):
             Exception: If the embeddings generated for training and testing data
                 contain NaN values.
         """
-        X_train_preprocessed = self._preprocess_data(
-            X_train, train=True, outlier=outlier, **kwargs
+        X_train_preprocessed, X_test_preprocessed = self.preprocess_data(
+            X_train, X_test, outlier=outlier, **kwargs
         )
-
-        if X_test is not None:
-            X_test_preprocessed = self._preprocess_data(
-                X_test, train=False, outlier=outlier, **kwargs
-            )
-        else:
-            X_test_preprocessed = None
-
-        self._fit_model(X_train_preprocessed, outlier=outlier, **kwargs)
 
         start_time = time.perf_counter()
         train_embeddings, test_embeddings = self._compute_embeddings(
@@ -277,11 +306,9 @@ class AbstractEmbeddingGenerator(ABC):
 
     def get_prediction(
         self,
-        X_train: np.ndarray | pl.DataFrame | pd.DataFrame,
-        y_train: np.ndarray,
-        X_test: np.ndarray,
+        X: np.ndarray,
     ) -> np.ndarray:
-        if not self._is_self_contained:
+        if not self._is_end_to_end_model:
             raise NotImplementedError(
                 "get_predictions() is only available for self-sufficient models."
             )
