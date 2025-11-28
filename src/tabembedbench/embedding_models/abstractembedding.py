@@ -152,6 +152,9 @@ class AbstractEmbeddingGenerator(ABC):
         """
         raise NotImplementedError
 
+    def _get_prediction(self, X: np.ndarray):
+        raise NotImplementedError
+
     @staticmethod
     def _check_emb_shape(embeddings: np.ndarray) -> bool:
         """Checks whether the provided embedded data has the correct shape.
@@ -212,6 +215,7 @@ class AbstractEmbeddingGenerator(ABC):
         self,
         X_train: np.ndarray | pl.DataFrame | pd.DataFrame,
         X_test: np.ndarray | None = None,
+        y_train: np.ndarray | None = None,
         outlier: bool = False,
         **kwargs,
     ):
@@ -224,6 +228,7 @@ class AbstractEmbeddingGenerator(ABC):
                 preprocessed.
             X_test (np.ndarray | None): The optional test dataset to be preprocessed. Defaults
                 to None.
+            y_train:
             outlier (bool): Flag to enable or disable outlier processing. Defaults to False.
             **kwargs: Additional keyword arguments for preprocessing or model configuration.
 
@@ -242,7 +247,8 @@ class AbstractEmbeddingGenerator(ABC):
         else:
             X_test_preprocessed = None
 
-        self._fit_model(X_train_preprocessed, outlier=outlier, **kwargs)
+        self._fit_model(X_train_preprocessed, y_train=y_train, outlier=outlier,
+                        **kwargs)
 
         return X_train_preprocessed, X_test_preprocessed
 
@@ -306,10 +312,15 @@ class AbstractEmbeddingGenerator(ABC):
 
     def get_prediction(
         self,
-        X: np.ndarray,
+        X_train: np.ndarray | pl.DataFrame | pd.DataFrame,
+        y_train: np.ndarray,
+        X_test: np.ndarray | None = None,
     ) -> np.ndarray:
         if not self._is_end_to_end_model:
             raise NotImplementedError(
-                "get_predictions() is only available for self-sufficient models."
+                "get_predictions() is only available for end-to-end models."
             )
-        raise NotImplementedError
+
+        _, X_test_preprocessed = self.preprocess_data(X_train, X_test=X_test,
+                                         y_train=y_train)
+        return self._get_prediction(X_test_preprocessed)

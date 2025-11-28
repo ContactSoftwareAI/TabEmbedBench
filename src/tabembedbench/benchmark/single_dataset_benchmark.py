@@ -118,7 +118,7 @@ class DatasetBenchmark(AbstractBenchmark):
     def _get_benchmark_name(self) -> str:
         return f"Run_Dataset_{self.dataset_name}"
 
-    def _evaluate(
+    def _process_evaluator(
         self,
         embeddings: tuple,
         evaluator: AbstractEvaluator,

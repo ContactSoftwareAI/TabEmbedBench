@@ -1,12 +1,12 @@
-import warnings
 import gc
+import warnings
 
 import numpy as np
 import pandas as pd
 import polars as pl
+from tabicl.sklearn.preprocessing import TransformToNumerical
 from tabpfn import TabPFNClassifier, TabPFNRegressor
 from tabpfn_extensions.utils import infer_categorical_features
-from tabicl.sklearn.preprocessing import TransformToNumerical
 
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.utils.torch_utils import get_device
@@ -61,7 +61,7 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
             emb_agg (str, optional): Method for aggregating embeddings across columns.
                 Options: 'mean', 'concat'. Defaults to "mean".
         """
-        super().__init__(name="TabPFN")
+        super().__init__(name="TabPFN Embedding")
         self.num_estimators = num_estimators
 
         self.device = get_device()
@@ -170,18 +170,17 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
             X_embeddings = self._compute_internal_embeddings(X_train_preprocessed)
 
             return X_embeddings, None
-        else:
-            X_train_embeddings = self._compute_internal_embeddings(X_train_preprocessed)
+        X_train_embeddings = self._compute_internal_embeddings(X_train_preprocessed)
 
-            size_X_train = X_train_preprocessed.shape[0]
+        size_X_train = X_train_preprocessed.shape[0]
 
-            X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
+        X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
 
-            X_embeddings = self._compute_internal_embeddings(X_train_test_stack)
+        X_embeddings = self._compute_internal_embeddings(X_train_test_stack)
 
-            X_test_embeddings = X_embeddings[size_X_train:]
+        X_test_embeddings = X_embeddings[size_X_train:]
 
-            return X_train_embeddings, X_test_embeddings
+        return X_train_embeddings, X_test_embeddings
 
     def _compute_internal_embeddings(self, X: np.ndarray) -> np.ndarray:
         """Compute embeddings by treating each column as a prediction target.
@@ -233,24 +232,15 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
                 except ValueError as e:
                     # If a column is marked as categorical but has continuous values,
                     # fall back to using the regression model
-                    if "Unknown label type: continuous" in str(e):
+                    if "Unknown label type: continuous" in str(e) or "Number of classes" in str(e) and (
+                        "exceeds the maximal number" in str(e)
+                    ):
                         self._logger.warning(
                             f"Using regression model for column {column_idx} due "
                             f"to the error: "
                             f"{str(e)}."
                         )
                         model = self.tabpfn_reg
-                        model.fit(features, target)
-                    elif "Number of classes" in str(e) and (
-                        "exceeds the maximal number" in str(e)
-                    ):
-                        self._logger.warning(
-                            f"Using regression model for column {column_idx} "
-                            f"due to the error: "
-                            f"{str(e)}."
-                        )
-                        model = self.tabpfn_reg
-
                         model.fit(features, target)
                     else:
                         raise ValueError("Can't fit TabPFN model.")
@@ -275,15 +265,14 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
 
         if self.emb_agg == "concat":
             return concat_embeddings
-        elif self.emb_agg == "mean":
+        if self.emb_agg == "mean":
             reshaped_embeddings = concat_embeddings.reshape(
                 *concat_embeddings.shape[:-1], self.num_features, self.tabpfn_dim
             )
             embeddings = np.mean(reshaped_embeddings, axis=-2)
 
             return embeddings
-        else:
-            raise NotImplementedError
+        raise NotImplementedError
 
     def _reset_embedding_model(self):
         """Reset the embedding model to its initial state.
@@ -320,3 +309,44 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         self.categorical_indices = None
         self._is_fitted = False
         self.transform_to_numerical = None
+
+
+class TabPFNWrapper(TabPFNEmbedding):
+    def __init__(
+        self,
+        num_estimators: int = 1,
+    ) -> None:
+        """Initialize the TabPFN generator.
+
+        Args:
+            num_estimators (int, optional): Number of estimators for ensemble predictions.
+                Defaults to 1.
+        """
+        super().__init__(num_estimators=num_estimators)
+        self._is_end_to_end_model = True
+        self._name = "TabPFN"
+        self.task_model = None
+
+    def _fit_model(
+        self,
+        X_preprocessed: np.ndarray,
+        y_preprocessed: np.ndarray | None = None,
+        task_type="Supervised Classification",
+        **kwargs
+    ):
+        self.task_model = self.tabpfn_clf if task_type == "Supervised Classification" else self.tabpfn_reg
+        self.task_model.fit(X_preprocessed, y_preprocessed)
+        self._is_fitted = True
+
+    def _get_prediction(
+        self,
+        X: np.ndarray,
+    ) -> np.ndarray:
+        if not self.task_model:
+            raise ValueError("Something went wrong.")
+        return self.task_model.predict(X)
+
+    def _reset_embedding_model(self):
+        super()._reset_embedding_model()
+        self.task_model = None
+
