@@ -12,6 +12,7 @@ from tabembedbench.evaluators import AbstractEvaluator
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+
 class DatasetBenchmark(AbstractBenchmark):
     """
     Handles dataset benchmarking operations.
@@ -35,6 +36,7 @@ class DatasetBenchmark(AbstractBenchmark):
         test_size (float): Proportion of the dataset to include in the test split.
         random_state (int): Random state for reproducibility of train-test splits.
     """
+
     def __init__(
         self,
         dataset_path: str,
@@ -110,7 +112,7 @@ class DatasetBenchmark(AbstractBenchmark):
                 "task_type": self.task_type,
                 "categorical_column_names": self.categorical_columns,
                 "numerical_columns": self.numerical_columns,
-            }
+            },
         }
 
     def _get_benchmark_name(self) -> str:
@@ -186,6 +188,7 @@ class DatasetBenchmark(AbstractBenchmark):
             result_dict[f"algorithm_{key}"] = [value]
 
         return result_dict
+
 
 if __name__ == "__main__":
     from tabembedbench.examples.eurips_run import get_evaluators, get_embedding_models
