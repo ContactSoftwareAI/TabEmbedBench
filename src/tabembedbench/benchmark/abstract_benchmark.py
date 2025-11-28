@@ -129,7 +129,7 @@ class AbstractBenchmark(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _evaluate(
+    def _process_evaluator(
         self,
         embeddings: tuple,
         evaluator: AbstractEvaluator,
@@ -192,9 +192,8 @@ class AbstractBenchmark(ABC):
         for evaluator in evaluators:
             if not self._is_compatible(evaluator, data_split):
                 continue
-
             try:
-                results = self._evaluate(embeddings, evaluator, data_split)
+                results = self._process_evaluator(embeddings, evaluator, data_split)
                 # Add embedding model name to results
                 results["embedding_model"] = [embedding_model.name]
                 self._add_result(results)
@@ -208,6 +207,33 @@ class AbstractBenchmark(ABC):
         # Save intermediate results after each model
         self._save_results()
         self._cleanup_gpu_cache()
+
+    def _process_end_to_end_model_pipeline(
+            self,
+            embedding_model: AbstractEmbeddingGenerator,
+            data_split: dict,
+    ) -> None:
+        """
+        Processes the pipeline for an end-to-end model.
+
+        This function is intended to handle the processing related to end-to-end
+        models but is not implemented. It raises a NotImplementedError when called
+        to indicate that the functionality is not supported by the class.
+
+        Args:
+            embedding_model: Instance of AbstractEmbeddingGenerator responsible for
+                generating embeddings for the data.
+            data_split: Dictionary containing data split information, typically with
+                keys that specify different parts of the dataset (e.g., 'train',
+                'validation', 'test') and their associated data.
+
+        Raises:
+            NotImplementedError: Indicates that this functionality is not supported
+                by the class.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support end-to-end models"
+        )
 
     def run_benchmark(
         self,
@@ -250,9 +276,14 @@ class AbstractBenchmark(ABC):
                 # Process each embedding model
                 for embedding_model in embedding_models:
                     try:
-                        self._process_embedding_model(
-                            embedding_model, evaluators, data_split
-                        )
+                        if embedding_model.is_end_to_end_model:
+                            self._process_end_to_end_model_pipeline(
+                                embedding_model, data_split
+                            )
+                        else:
+                            self._process_embedding_model(
+                                embedding_model, evaluators, data_split
+                            )
                     except Exception as e:
                         continue
 

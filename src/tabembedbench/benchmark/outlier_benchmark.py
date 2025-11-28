@@ -240,7 +240,7 @@ class OutlierBenchmark(AbstractBenchmark):
             },
         }
 
-    def _evaluate(
+    def _process_evaluator(
         self,
         embeddings: tuple,
         evaluator: AbstractEvaluator,

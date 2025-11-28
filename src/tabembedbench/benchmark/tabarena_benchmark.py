@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator, List
+from typing import Iterator, List, Optional
 
 import openml
 import pandas as pd
@@ -276,7 +276,42 @@ class TabArenaBenchmark(AbstractBenchmark):
                     },
                 }
 
-    def _evaluate(
+    @staticmethod
+    def _compute_metrics(
+            result_dict,
+            y_test,
+            test_prediction,
+            task_type,
+            evaluator: Optional[AbstractEvaluator] = None,
+    ) -> dict:
+        if task_type == "Supervised Regression":
+            mape_score = mean_absolute_percentage_error(y_test, test_prediction)
+            result_dict["task"] = ["regression"]
+            result_dict["mape_score"] = [mape_score]
+
+        elif task_type == "Supervised Classification":
+            n_classes = test_prediction.shape[1]
+            if n_classes == 2:
+                auc_score = roc_auc_score(y_test, test_prediction[:, 1])
+                result_dict["task"] = ["classification"]
+                result_dict["classification_type"] = ["binary"]
+            else:
+                auc_score = roc_auc_score(y_test, test_prediction, multi_class="ovr")
+                log_loss_score = log_loss(y_test, test_prediction)
+                result_dict["task"] = ["classification"]
+                result_dict["classification_type"] = ["multiclass"]
+                result_dict["log_loss_score"] = [log_loss_score]
+            result_dict["auc_score"] = [auc_score]
+
+        if evaluator:
+            # Add evaluator parameters
+            evaluator_params = evaluator.get_parameters()
+            for key, value in evaluator_params.items():
+                result_dict[f"algorithm_{key}"] = [value]
+
+        return result_dict
+
+    def _process_evaluator(
         self,
         embeddings: tuple,
         evaluator: AbstractEvaluator,
@@ -322,88 +357,55 @@ class TabArenaBenchmark(AbstractBenchmark):
             "repeat": [data_split["metadata"]["repeat"]],
         }
 
-        # Compute task-specific metrics
-        if task_type == "Supervised Regression":
-            mape_score = mean_absolute_percentage_error(y_test, test_prediction)
-            result_dict["task"] = ["regression"]
-            result_dict["mape_score"] = [mape_score]
-
-        elif task_type == "Supervised Classification":
-            n_classes = test_prediction.shape[1]
-            if n_classes == 2:
-                auc_score = roc_auc_score(y_test, test_prediction[:, 1])
-                result_dict["task"] = ["classification"]
-                result_dict["classification_type"] = ["binary"]
-            else:
-                auc_score = roc_auc_score(y_test, test_prediction, multi_class="ovr")
-                log_loss_score = log_loss(y_test, test_prediction)
-                result_dict["task"] = ["classification"]
-                result_dict["classification_type"] = ["multiclass"]
-                result_dict["log_loss_score"] = [log_loss_score]
-            result_dict["auc_score"] = [auc_score]
-
-        # Add evaluator parameters
-        evaluator_params = evaluator.get_parameters()
-        for key, value in evaluator_params.items():
-            result_dict[f"algorithm_{key}"] = [value]
+        result_dict = self._compute_metrics(
+            result_dict,
+            y_test,
+            test_prediction,
+            task_type,
+            evaluator,
+        )
 
         return result_dict
 
-    def _process_embedding_model(
+    def _process_end_to_end_model_pipeline(
             self,
             embedding_model: AbstractEmbeddingGenerator,
-            evaluators: List[AbstractEvaluator],
             data_split: dict,
-    ) -> None:
-        if embedding_model.is_self_contained:
-            X_train = data_split.get("X_train")
-            X_test = data_split.get("X_test")
-            y_train = data_split.get("y_train")
-            y_test = data_split.get("y_test")
-            task_type = data_split.get("metadata").get("task_type")
+    ) -> dict:
+        X_train = data_split.get("X_train")
+        y_train = data_split.get("y_train")
+        X_test = data_split.get("X_test")
+        y_test = data_split.get("y_test")
+        metadata = data_split.get("metadata")
+        task_type = metadata.get("task_type")
 
-            # Get Prediction
-            prediction = embedding_model.get_prediction(
-                X_train=X_train,
-                y_train=y_train,
-                X_test=X_test,
-            )
+        X_train_preprocessed, X_test_preprocessed = embedding_model.preprocess_data(
+            X_train=X_train, X_test=X_test, y_train=y_train, outlier=False,
+            **metadata
+        )
 
-            # Build result dictionary
-            result_dict = {
-                "dataset_name": [data_split["dataset_name"]],
-                "dataset_size": [data_split["dataset_size"]],
-                "num_features": [data_split["num_features"]],
-                "embed_dim": [None],
-                "time_to_compute_embedding": [None],
-                "algorithm": [None],
-                "fold": [data_split["metadata"]["fold"]],
-                "repeat": [data_split["metadata"]["repeat"]],
-            }
+        test_prediction = embedding_model.get_prediction(
+            X=X_test_preprocessed,
+        )
 
-            # Compute task-specific metrics
-            if task_type == "Supervised Regression":
-                mape_score = mean_absolute_percentage_error(y_test, prediction)
-                result_dict["task"] = ["regression"]
-                result_dict["mape_score"] = [mape_score]
+        # Build result dictionary
+        result_dict = {
+            "dataset_name": [data_split["dataset_name"]],
+            "dataset_size": [data_split["dataset_size"]],
+            "num_features": [data_split["num_features"]],
+            "algorithm": [embedding_model.name],
+            "fold": [data_split["metadata"]["fold"]],
+            "repeat": [data_split["metadata"]["repeat"]],
+        }
 
-            elif task_type == "Supervised Classification":
-                n_classes = prediction.shape[1]
-                if n_classes == 2:
-                    auc_score = roc_auc_score(y_test, prediction[:, 1])
-                    result_dict["task"] = ["classification"]
-                    result_dict["classification_type"] = ["binary"]
-                else:
-                    auc_score = roc_auc_score(
-                        y_test, prediction, multi_class="ovr"
-                    )
-                    log_loss_score = log_loss(y_test, prediction)
-                    result_dict["task"] = ["classification"]
-                    result_dict["classification_type"] = ["multiclass"]
-                    result_dict["log_loss_score"] = [log_loss_score]
-                result_dict["auc_score"] = [auc_score]
-        else:
-            super()._process_embedding_model(embedding_model, evaluators, data_split)
+        result_dict = self._compute_metrics(
+            result_dict,
+            y_test,
+            test_prediction,
+            task_type,
+        )
+
+        return result_dict
 
     def _get_benchmark_name(self) -> str:
         """Get the benchmark name for result saving.
