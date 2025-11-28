@@ -109,8 +109,8 @@ class TabStarEmbedding(AbstractEmbeddingGenerator):
 
     def _fit_model(self, X_preprocessed: np.ndarray,
                    y_preprocessed: np.ndarray | None = None, train: bool = True,
-                   **kwargs):
-        pass
+                   **kwargs) -> None:
+        self._is_fitted = True
 
     def _compute_embeddings(
             self,
@@ -130,12 +130,37 @@ class TabStarEmbedding(AbstractEmbeddingGenerator):
                     batch_predictions = self.tabstar_row_embedder(x_txt=data.x_txt, x_num=data.x_num, d_output=data.d_output)
                     batch_predictions_numpy = batch_predictions.detach().cpu().squeeze().numpy()
                     embeddings_list.append(batch_predictions_numpy)
+
+            embeddings = np.concatenate(embeddings_list, axis=0)
+
+            return embeddings, None
+
+        if self._is_fitted:
+            dataloader_train = get_dataloader(X_train_preprocessed, is_train=False, batch_size=128)
+            for data in dataloader_train:
+                with torch.no_grad(), torch.autocast(device_type=self.device.type, enabled=self.use_amp):
+                    batch_predictions = self.tabstar_row_embedder(x_txt=data.x_txt, x_num=data.x_num,
+                                                                  d_output=data.d_output)
+                    batch_predictions_numpy = batch_predictions.detach().cpu().squeeze().numpy()
+                    embeddings_list.append(batch_predictions_numpy)
+
+            embeddings_train = np.concatenate(embeddings_list, axis=0)
+
+            embeddings_list = []
+            dataloader_test = get_dataloader(X_test_preprocessed, is_train=False, batch_size=128)
+            for data in dataloader_test:
+                with torch.no_grad(), torch.autocast(device_type=self.device.type, enabled=self.use_amp):
+                    batch_predictions = self.tabstar_row_embedder(x_txt=data.x_txt, x_num=data.x_num,
+                                                                  d_output=data.d_output)
+                    batch_predictions_numpy = batch_predictions.detach().cpu().squeeze().numpy()
+                    embeddings_list.append(batch_predictions_numpy)
+
+            embeddings_test = np.concatenate(embeddings_list, axis=0)
+
+            return embeddings_train, embeddings_test
         else:
-            raise NotImplementedError("Tabarena is not yet implemented for TabStarEmbedding")
+            raise ValueError("Model is not fitted")
 
-        embeddings = np.concatenate(embeddings_list, axis=0)
-
-        return embeddings, None
 
     def _reset_embedding_model(self, *args, **kwargs):
         """Reset the embedding model to its initial state.
@@ -190,17 +215,12 @@ class TabStarEmbedding(AbstractEmbeddingGenerator):
 #     x_test = None
 #     y_test = None
 #
-#     # # Sanity checks
-#     # assert isinstance(x_train, DataFrame), "x should be a pandas DataFrame"
-#     # assert isinstance(y_train, Series), "y should be a pandas Series"
-#
 #     if x_test is None:
 #         assert y_test is None, "If x_test is None, y_test must also be None"
 #         x_train, x_test, y_train, y_test = train_test_split(x_train, y_train, test_size=0.1)
 #
 #     tabstar_model = TabStarEmbedding()
 #     embeddings, _, _ = tabstar_model.generate_embeddings(x_train, x_test, outlier=True)
-#     #print(embeddings.shape)
 #
 #     #tabstar_cls = TabSTARClassifier if is_cls else TabSTARRegressor
 #     #tabstar = tabstar_cls()

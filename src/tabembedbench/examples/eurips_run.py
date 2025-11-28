@@ -265,11 +265,11 @@ def run_main(
 @click.option("--max-samples", default=10000, help="Upper bound for dataset size")
 @click.option("--max-features", default=200, help="Upper bound for number of features")
 @click.option(
-    "--run-outlier/--no-run-outlier", default=True, help="Run outlier detection"
+    "--run-outlier/--no-run-outlier", default=False, help="Run outlier detection"
 )
 @click.option(
     "--run-supervised/--no-run-supervised",
-    default=False,
+    default=True,
     help="Run supervised evaluations",
 )
 @click.option(
