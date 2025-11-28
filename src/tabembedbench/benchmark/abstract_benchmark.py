@@ -284,7 +284,10 @@ class AbstractBenchmark(ABC):
                             self._process_embedding_model(
                                 embedding_model, evaluators, data_split
                             )
+                    except NotImplementedError:
+                        continue
                     except Exception as e:
+                        self.logger.exception(f"Error running embedding model {embedding_model.name} on {data_split['dataset_name']} dataset: {e}")
                         continue
 
         self.logger.info(f"{self._get_benchmark_name()} benchmark completed.")
