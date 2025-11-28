@@ -349,6 +349,62 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         return result_dict
 
+    def _process_embedding_model(
+            self,
+            embedding_model: AbstractEmbeddingGenerator,
+            evaluators: List[AbstractEvaluator],
+            data_split: dict,
+    ) -> None:
+        if embedding_model.is_self_contained:
+            X_train = data_split.get("X_train")
+            X_test = data_split.get("X_test")
+            y_train = data_split.get("y_train")
+            y_test = data_split.get("y_test")
+            task_type = data_split.get("metadata").get("task_type")
+
+            # Get Prediction
+            prediction = embedding_model.get_prediction(
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+            )
+
+            # Build result dictionary
+            result_dict = {
+                "dataset_name": [data_split["dataset_name"]],
+                "dataset_size": [data_split["dataset_size"]],
+                "num_features": [data_split["num_features"]],
+                "embed_dim": [None],
+                "time_to_compute_embedding": [None],
+                "algorithm": [None],
+                "fold": [data_split["metadata"]["fold"]],
+                "repeat": [data_split["metadata"]["repeat"]],
+            }
+
+            # Compute task-specific metrics
+            if task_type == "Supervised Regression":
+                mape_score = mean_absolute_percentage_error(y_test, prediction)
+                result_dict["task"] = ["regression"]
+                result_dict["mape_score"] = [mape_score]
+
+            elif task_type == "Supervised Classification":
+                n_classes = prediction.shape[1]
+                if n_classes == 2:
+                    auc_score = roc_auc_score(y_test, prediction[:, 1])
+                    result_dict["task"] = ["classification"]
+                    result_dict["classification_type"] = ["binary"]
+                else:
+                    auc_score = roc_auc_score(
+                        y_test, prediction, multi_class="ovr"
+                    )
+                    log_loss_score = log_loss(y_test, prediction)
+                    result_dict["task"] = ["classification"]
+                    result_dict["classification_type"] = ["multiclass"]
+                    result_dict["log_loss_score"] = [log_loss_score]
+                result_dict["auc_score"] = [auc_score]
+        else:
+            super()._process_embedding_model(embedding_model, evaluators, data_split)
+
     def _get_benchmark_name(self) -> str:
         """Get the benchmark name for result saving.
 

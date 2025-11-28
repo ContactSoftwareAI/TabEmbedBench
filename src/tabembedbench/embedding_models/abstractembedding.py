@@ -8,30 +8,37 @@ import pandas as pd
 
 
 class AbstractEmbeddingGenerator(ABC):
-    """Abstract base class for generating embeddings from input data.
+    """
+    An abstract base class for embedding generators.
 
-    This abstract class defines the structure required for subclasses to generate
-    embeddings from input data. It provides methods for preprocessing, validating,
-    and computing embeddings, which must be implemented in any concrete subclass.
-    Additionally, the class includes methods for checking embedding data validity
-    and resetting the embedding model. This serves as a framework for various
-    embedding generation techniques and ensures consistency in their implementation.
+    This class defines a blueprint for embedding generation logic for data preprocessing,
+    model training, and embedding computation. It includes abstract methods that subclasses
+    must implement to specify their behavior and functionality. Utility methods are also
+    provided to help with embedding validation and handling.
 
     Attributes:
-        name (str): The name associated with the instance.
+        name (str): The name assigned to the embedding generator instance.
+        is_self_contained (bool): Indicates whether the generator is self-contained,
+            managing its own resources independently.
     """
 
     def __init__(
         self,
         name: str,
+        is_self_contained: bool = False,
     ):
-        """Initializes an instance of the AbstractEmbeddingGenerator class.
+        """
+        Initializes the object with the provided name and a flag indicating whether it is
+        self-contained.
 
         Args:
-            name (str): The name associated with the instance.
+            name (str): The name assigned to the object.
+            is_self_contained (bool): A flag indicating whether the object is self-contained.
+                Defaults to False.
         """
         self._name = name
         self._is_fitted = False
+        self._is_self_contained = is_self_contained
         self._logger = logging.getLogger(__name__)
 
     @property
@@ -45,6 +52,15 @@ class AbstractEmbeddingGenerator(ABC):
             str: The name associated with the instance.
         """
         return self._name
+
+    @property
+    def is_self_contained(self) -> bool:
+        """Gets whether this model is self-contained.
+
+        Returns:
+            bool: True if the model solves tasks directly without evaluators, False otherwise.
+        """
+        return self._is_self_contained
 
     @name.setter
     def name(self, value: str) -> None:
@@ -258,3 +274,15 @@ class AbstractEmbeddingGenerator(ABC):
             test_embeddings,
             compute_embeddings_time,
         )
+
+    def get_prediction(
+        self,
+        X_train: np.ndarray | pl.DataFrame | pd.DataFrame,
+        y_train: np.ndarray,
+        X_test: np.ndarray,
+    ) -> np.ndarray:
+        if not self._is_self_contained:
+            raise NotImplementedError(
+                "get_predictions() is only available for self-sufficient models."
+            )
+        raise NotImplementedError
