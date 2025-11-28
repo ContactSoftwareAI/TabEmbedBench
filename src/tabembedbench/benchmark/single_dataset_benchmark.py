@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -13,13 +13,35 @@ from tabembedbench.evaluators import AbstractEvaluator
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 class DatasetBenchmark(AbstractBenchmark):
+    """
+    Handles dataset benchmarking operations.
+
+    This class is responsible for managing datasets, preparing them, and evaluating
+    embeddings using an evaluator. It supports operations like loading datasets,
+    splitting into train and test datasets, and applying task-specific transformations
+    (such as encoding for classification). The primary aim of this class is to provide
+    a benchmarking framework for datasets in supervised learning tasks, including
+    classification and regression.
+
+    Attributes:
+        dataset_name (str): Name of the dataset.
+        dataset_path (str): Path to the dataset file.
+        target_column (str): Name of the target variable column.
+        feature_columns (list[str] or None): List of feature column names. If None, all
+            columns except the target column will be used.
+        categorical_columns (list[str] or None): List of categorical feature column names.
+        numerical_columns (list[str] or None): List of numerical feature column names.
+        target_column (str): Name of the target variable column.
+        test_size (float): Proportion of the dataset to include in the test split.
+        random_state (int): Random state for reproducibility of train-test splits.
+    """
     def __init__(
         self,
         dataset_path: str,
-        target_column,
-        feature_columns = None,
-        categorical_columns = None,
-        numerical_columns = None,
+        target_column: str,
+        feature_columns: Optional[list[str]] = None,
+        categorical_columns: Optional[list[str]] = None,
+        numerical_columns: Optional[list[str]] = None,
         test_size: float = 0.2,
         random_state: int = 42,
         dataset_name: str = None,
@@ -174,10 +196,12 @@ if __name__ == "__main__":
     csv_path = ""
     target_column = ""
     task_type = "Supervised Classification"
+    feature_columns = []
 
     dataset_benchmark = DatasetBenchmark(
         dataset_path=csv_path,
         target_column=target_column,
+        feature_columns=feature_columns if len(feature_columns) > 0 else None,
         task_type=task_type,
     )
 
