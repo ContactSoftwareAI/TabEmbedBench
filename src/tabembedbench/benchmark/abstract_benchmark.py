@@ -12,6 +12,14 @@ from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device, log_gpu
 from tabembedbench.utils.tracking_utils import save_result_df
 
 
+class NotEndToEndCompatibleError(Exception):
+    """Raised when data processing fails."""
+    def __init__(self, benchmark):
+        self.benchmark = benchmark
+        self.message = f"The benchmark {self.benchmark} is not compatible for end to end models."
+        super().__init__(self.message)
+
+
 class AbstractBenchmark(ABC):
     """Abstract base class for benchmark implementations.
 
@@ -231,8 +239,8 @@ class AbstractBenchmark(ABC):
             NotImplementedError: Indicates that this functionality is not supported
                 by the class.
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support end-to-end models"
+        raise NotEndToEndCompatibleError(
+            benchmark=self._get_benchmark_name()
         )
 
     def run_benchmark(
@@ -284,7 +292,8 @@ class AbstractBenchmark(ABC):
                             self._process_embedding_model(
                                 embedding_model, evaluators, data_split
                             )
-                    except NotImplementedError:
+                    except NotEndToEndCompatibleError as e:
+                        self.logger.info(str(e))
                         continue
                     except Exception as e:
                         self.logger.exception(f"Error running embedding model {embedding_model.name} on {data_split['dataset_name']} dataset: {e}")
