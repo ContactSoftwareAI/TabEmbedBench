@@ -337,5 +337,5 @@ class AbstractEmbeddingGenerator(ABC):
             raise ValueError()
 
         _, X_test_preprocessed = self.preprocess_data(X_train, X_test=X_test,
-                                         y_train=y_train)
+                                         y_train=y_train, **kwargs)
         return self._get_prediction(X_test_preprocessed)

@@ -220,6 +220,8 @@ class TabArenaBenchmark(AbstractBenchmark):
         # Iterate through all folds and repeats
         for repeat in range(repeats):
             for fold in range(folds):
+                n_classes = None
+
                 # Get data from dataset
                 X, y, categorical_indicator, attribute_names = dataset.get_data(
                     target=task.target_name, dataset_format="dataframe"
@@ -271,6 +273,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                     "dataset_name": dataset.name,
                     "dataset_size": X.shape[0],
                     "num_features": X_train.shape[1],
+                    "num_classes": n_classes if n_classes else None,
                     "metadata": {
                         "task_type": task_type,
                         "categorical_indices": categorical_indices,
@@ -293,12 +296,12 @@ class TabArenaBenchmark(AbstractBenchmark):
             result_dict["task"] = [task_type]
             result_dict["mape_score"] = [mape_score]
 
-        elif task_type == "Supervised Classification":
+        elif task_type == "Supervised Binary Classification":
             auc_score = roc_auc_score(y_test, test_prediction[:, 1])
             result_dict["task"] = ["classification"]
             result_dict["classification_type"] = [task_type]
             result_dict["auc_score"] = [auc_score]
-        elif task_type == "Supervised Multiclassification":
+        elif task_type == "Supervised Multiclass Classification":
             auc_score = roc_auc_score(y_test, test_prediction, multi_class="ovr")
             log_loss_score = log_loss(y_test, test_prediction)
             result_dict["task"] = ["classification"]
