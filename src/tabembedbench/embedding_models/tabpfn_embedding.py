@@ -343,7 +343,7 @@ class TabPFNWrapper(TabPFNEmbedding):
         task_type="Supervised Classification",
         **kwargs
     ):
-        self.task_model = self.tabpfn_clf if task_type == "Supervised Classification" else self.tabpfn_reg
+        self.task_model = self.tabpfn_clf if task_type in ("Supervised Binary Classification", "Supervised Multiclass Classification") else self.tabpfn_reg
         self.task_model.fit(X_preprocessed, y_preprocessed)
         self._is_fitted = True
 
