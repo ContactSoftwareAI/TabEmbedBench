@@ -39,9 +39,9 @@ def separate_by_task_type(df: pl.DataFrame):
             - multiclass_results_df: Results for multiclass classification tasks
             - regression_results_df: Results for regression tasks
     """
-    binary_results_df = df.filter(pl.col("classification_type") == "binary")
+    binary_results_df = df.filter(pl.col("task") == "Supervised Binary Classification")
 
-    multiclass_results_df = df.filter(pl.col("classification_type") == "multiclass")
+    multiclass_results_df = df.filter(pl.col("task") == "Supervised Multi-Class Classification")
 
     regression_results_df = df.filter(pl.col("task") == "regression")
 

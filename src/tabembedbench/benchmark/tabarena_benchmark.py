@@ -215,6 +215,8 @@ class TabArenaBenchmark(AbstractBenchmark):
         folds = dataset_info["folds"]
         repeats = dataset_info["repeats"]
 
+        task_type = task.task_type
+
         # Iterate through all folds and repeats
         for repeat in range(repeats):
             for fold in range(folds):
@@ -252,10 +254,12 @@ class TabArenaBenchmark(AbstractBenchmark):
                 y_test = y.iloc[test_indices]
 
                 # Encode labels for classification
-                if task.task_type == "Supervised Classification":
+                if task_type == "Supervised Classification":
                     label_encoder = LabelEncoder()
                     y_train = label_encoder.fit_transform(y_train)
                     y_test = label_encoder.transform(y_test)
+                    n_classes = len(label_encoder.classes_)
+                    task_type = "Supervised Multi-Class Classification" if (n_classes> 2) else "Supervised Binary Classification"
 
                 yield {
                     "X": None,
@@ -268,7 +272,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                     "dataset_size": X.shape[0],
                     "num_features": X_train.shape[1],
                     "metadata": {
-                        "task_type": task.task_type,
+                        "task_type": task_type,
                         "categorical_indices": categorical_indices,
                         "categorical_column_names": categorical_column_names,
                         "fold": fold,
@@ -290,17 +294,16 @@ class TabArenaBenchmark(AbstractBenchmark):
             result_dict["mape_score"] = [mape_score]
 
         elif task_type == "Supervised Classification":
-            n_classes = test_prediction.shape[1]
-            if n_classes == 2:
-                auc_score = roc_auc_score(y_test, test_prediction[:, 1])
-                result_dict["task"] = ["classification"]
-                result_dict["classification_type"] = ["binary"]
-            else:
-                auc_score = roc_auc_score(y_test, test_prediction, multi_class="ovr")
-                log_loss_score = log_loss(y_test, test_prediction)
-                result_dict["task"] = ["classification"]
-                result_dict["classification_type"] = ["multiclass"]
-                result_dict["log_loss_score"] = [log_loss_score]
+            auc_score = roc_auc_score(y_test, test_prediction[:, 1])
+            result_dict["task"] = ["classification"]
+            result_dict["classification_type"] = ["binary"]
+            result_dict["auc_score"] = [auc_score]
+        elif task_type == "Supervised Multiclassification":
+            auc_score = roc_auc_score(y_test, test_prediction, multi_class="ovr")
+            log_loss_score = log_loss(y_test, test_prediction)
+            result_dict["task"] = ["classification"]
+            result_dict["classification_type"] = ["multiclass"]
+            result_dict["log_loss_score"] = [log_loss_score]
             result_dict["auc_score"] = [auc_score]
 
         if evaluator:
@@ -571,3 +574,5 @@ def run_tabarena_benchmark(
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
+
+
