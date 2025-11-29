@@ -312,19 +312,28 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
 
 
 class TabPFNWrapper(TabPFNEmbedding):
+    """
+    Wrapper class to handle TabPFN for predictive modeling.
+
+    This class extends the functionality provided by TabPFNEmbedding, allowing
+    the use of supervised classification or regression tasks with TabPFN as the
+    underlying model. The wrapper offers the ability to fit a model to data,
+    generate predictions, and reset the state of the embedding model. Instances
+    of this class are designed to interface seamlessly with TabPFN models.
+
+    Attributes:
+        task_model (object | None): The specific TabPFN model instance being used
+            for the current task (classification or regression). None if the model
+            has not been initialized.
+    """
     def __init__(
         self,
         num_estimators: int = 1,
     ) -> None:
-        """Initialize the TabPFN generator.
-
-        Args:
-            num_estimators (int, optional): Number of estimators for ensemble predictions.
-                Defaults to 1.
-        """
         super().__init__(num_estimators=num_estimators)
         self._is_end_to_end_model = True
-        self._name = "TabPFN"
+        self.name = "TabPFN"
+        self.compatible_tasks_for_end_to_end = ["Supervised Classification", "Supervised Regression"]
         self.task_model = None
 
     def _fit_model(

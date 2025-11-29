@@ -26,6 +26,7 @@ class AbstractEmbeddingGenerator(ABC):
         self,
         name: str,
         is_end_to_end_model: bool = False,
+        end_to_end_compatible_tasks: list[str] | None = None,
     ):
         """
         Initializes the object with the provided name and a flag indicating whether it is
@@ -35,11 +36,13 @@ class AbstractEmbeddingGenerator(ABC):
             name (str): The name assigned to the object.
             is_self_contained (bool): A flag indicating whether the object is self-contained.
                 Defaults to False.
+            compatible_tasks_for_end_to_end (list[str] | None): A list of task types supported by the model.
         """
         self._name = name
         self._is_fitted = False
         self._is_end_to_end_model = is_end_to_end_model
         self._logger = logging.getLogger(__name__)
+        self._end_to_end_compatible_tasks = end_to_end_compatible_tasks
 
     @property
     def name(self) -> str:
@@ -53,6 +56,10 @@ class AbstractEmbeddingGenerator(ABC):
         """
         return self._name
 
+    @name.setter
+    def name(self, new_name: str):
+        self._name = new_name
+
     @property
     def is_end_to_end_model(self) -> bool:
         """Gets whether this model is self-contained.
@@ -62,14 +69,17 @@ class AbstractEmbeddingGenerator(ABC):
         """
         return self._is_end_to_end_model
 
-    @name.setter
-    def name(self, value: str) -> None:
-        """Sets the name property.
+    @is_end_to_end_model.setter
+    def is_end_to_end_model(self, value: bool):
+        self._is_end_to_end_model = value
 
-        Args:
-            value (str): The value to assign to the name property.
-        """
-        self._name = value
+    @property
+    def end_to_end_compatible_tasks(self):
+        return self._end_to_end_compatible_tasks
+
+    @end_to_end_compatible_tasks.setter
+    def end_to_end_compatible_tasks(self, tasks: list[str]):
+        self._end_to_end_compatible_tasks = tasks
 
     @abstractmethod
     def _preprocess_data(
@@ -315,11 +325,16 @@ class AbstractEmbeddingGenerator(ABC):
         X_train: np.ndarray | pl.DataFrame | pd.DataFrame,
         y_train: np.ndarray,
         X_test: np.ndarray | None = None,
+        task_type: str = "Supervised Classification",
+        **kwargs
     ) -> np.ndarray:
         if not self._is_end_to_end_model:
             raise NotImplementedError(
                 "get_predictions() is only available for end-to-end models."
             )
+        if (self.end_to_end_compatible_tasks and task_type not in
+                self.end_to_end_compatible_tasks):
+            raise ValueError()
 
         _, X_test_preprocessed = self.preprocess_data(X_train, X_test=X_test,
                                          y_train=y_train)
