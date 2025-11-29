@@ -259,7 +259,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                     y_train = label_encoder.fit_transform(y_train)
                     y_test = label_encoder.transform(y_test)
                     n_classes = len(label_encoder.classes_)
-                    task_type = "Supervised Multi-Class Classification" if (n_classes> 2) else "Supervised Binary Classification"
+                    task_type = "Supervised Multiclass Classification" if (n_classes> 2) else "Supervised Binary Classification"
 
                 yield {
                     "X": None,
@@ -290,19 +290,19 @@ class TabArenaBenchmark(AbstractBenchmark):
     ) -> dict:
         if task_type == "Supervised Regression":
             mape_score = mean_absolute_percentage_error(y_test, test_prediction)
-            result_dict["task"] = ["regression"]
+            result_dict["task"] = [task_type]
             result_dict["mape_score"] = [mape_score]
 
         elif task_type == "Supervised Classification":
             auc_score = roc_auc_score(y_test, test_prediction[:, 1])
             result_dict["task"] = ["classification"]
-            result_dict["classification_type"] = ["binary"]
+            result_dict["classification_type"] = [task_type]
             result_dict["auc_score"] = [auc_score]
         elif task_type == "Supervised Multiclassification":
             auc_score = roc_auc_score(y_test, test_prediction, multi_class="ovr")
             log_loss_score = log_loss(y_test, test_prediction)
             result_dict["task"] = ["classification"]
-            result_dict["classification_type"] = ["multiclass"]
+            result_dict["classification_type"] = [task_type]
             result_dict["log_loss_score"] = [log_loss_score]
             result_dict["auc_score"] = [auc_score]
 
