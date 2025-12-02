@@ -1,6 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator, List, Optional
+from functools import partial
 
 import openml
 import pandas as pd
@@ -78,6 +79,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         upper_bound_num_features: int = 500,
         run_tabpfn_subset: bool = True,
         skip_missing_values: bool = True,
+        benchmark_metrics: dict | None = None,
     ):
         """Initialize the TabArena benchmark.
 
@@ -112,6 +114,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         self.len_tabpfn_subset = len(TABARENA_TABPFN_SUBSET)
         self.exclude_datasets = exclude_datasets or []
         self.skip_missing_values = skip_missing_values
+        self.benchmark_metrics = benchmark_metrics or self._get_default_metrics()
 
     def _load_datasets(self, **kwargs) -> list:
         """Load TabArena tasks from OpenML.
@@ -164,7 +167,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         X, _, _, _ = dataset.get_data(dataset_format="dataframe")
 
-        if self._check_missing_value(X):
+        if self._check_missing_value(X) and self.skip_missing_values:
             self.logger.warning(f"Dataset {dataset.name} contains missing values.")
             reason = "Dataset contains missing values."
             should_skip = True and self.skip_missing_values
@@ -305,37 +308,66 @@ class TabArenaBenchmark(AbstractBenchmark):
                     },
                 }
 
-    @staticmethod
+    def _get_default_metrics(self):
+        """
+        Generates a dictionary containing default metric functions for various supervised
+        learning tasks.
+
+        The method provides default performance metrics specific to the type of supervised
+        learning problem, such as regression, binary classification, and multiclass classification.
+
+        Returns:
+            dict: A dictionary where the keys are the supervised learning task types
+            (e.g., 'Supervised Regression', 'Supervised Binary Classification', and 'Supervised
+            Multiclass Classification'), and the values are dictionaries containing the
+            respective metric names and their corresponding functions.
+
+        Raises:
+            TypeError: If arguments are provided with incorrect types during invocation.
+        """
+        return {
+            "Supervised Regression": {
+                "mape_score": mean_absolute_percentage_error,
+            },
+            "Supervised Binary Classification": {
+                "auc_score": roc_auc_score,
+            },
+            "Supervised Multiclass Classification": {
+                "auc_score": partial(roc_auc_score, multi_class="ovr"),
+                "log_loss_score": log_loss,
+            }
+        }
+
     def _compute_metrics(
+            self,
             result_dict,
             y_test,
             test_prediction,
             task_type,
-            evaluator: Optional[AbstractEvaluator] = None,
     ) -> dict:
-        if task_type == "Supervised Regression":
-            mape_score = mean_absolute_percentage_error(y_test, test_prediction)
-            result_dict["task"] = [task_type]
-            result_dict["mape_score"] = [mape_score]
+        """
+        Computes and updates the metrics for a given task type and test prediction.
 
-        elif task_type == "Supervised Binary Classification":
-            auc_score = roc_auc_score(y_test, test_prediction[:, 1])
-            result_dict["task"] = ["classification"]
-            result_dict["classification_type"] = [task_type]
-            result_dict["auc_score"] = [auc_score]
-        elif task_type == "Supervised Multiclass Classification":
-            auc_score = roc_auc_score(y_test, test_prediction, multi_class="ovr")
-            log_loss_score = log_loss(y_test, test_prediction)
-            result_dict["task"] = ["classification"]
-            result_dict["classification_type"] = [task_type]
-            result_dict["log_loss_score"] = [log_loss_score]
-            result_dict["auc_score"] = [auc_score]
+        This function evaluates the performance of a model by computing various
+        metrics specified for the task type (e.g., classification, regression) using
+        the provided test labels and predicted values. The computed metrics are added
+        to the result dictionary to keep track of evaluation results.
 
-        if evaluator:
-            # Add evaluator parameters
-            evaluator_params = evaluator.get_parameters()
-            for key, value in evaluator_params.items():
-                result_dict[f"algorithm_{key}"] = [value]
+        Args:
+            result_dict (dict): A dictionary to store and update the evaluation metrics for the task.
+            y_test: Ground truth labels of the test set.
+            test_prediction: Predicted values for the test set.
+            task_type: The type of the task (e.g., classification, regression)
+                for which metrics need to be computed.
+
+        Returns:
+            dict: Updated dictionary with computed metrics for the specified task type.
+        """
+        result_dict["task"] = [task_type]
+
+        for metric in self.benchmark_metrics[task_type]:
+            metric_func = self.benchmark_metrics[task_type][metric]
+            result_dict[metric] = [metric_func(y_test, test_prediction)]
 
         return result_dict
 
@@ -392,6 +424,12 @@ class TabArenaBenchmark(AbstractBenchmark):
             task_type,
             evaluator,
         )
+
+        if evaluator:
+            # Add evaluator parameters
+            evaluator_params = evaluator.get_parameters()
+            for key, value in evaluator_params.items():
+                result_dict[f"algorithm_{key}"] = [value]
 
         return result_dict
 
