@@ -177,7 +177,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
         """
         super().__init__(
             name="MLPClassifier",
-            task_type="Supervised Classification",
+            task_type=["Supervised Binary Classification", "Supervised Multiclass Classification"],
             n_trials=n_trials,
             cv_folds=cv_folds,
             random_state=random_state,

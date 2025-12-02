@@ -16,7 +16,7 @@ class AbstractEvaluator(ABC):
         task_type (str): Type of task (e.g., 'classification', 'regression').
     """
 
-    def __init__(self, name: str, task_type: str):
+    def __init__(self, name: str, task_type: str | list[str]):
         """Initialize the AbstractEvaluator.
 
         Args:
@@ -24,7 +24,7 @@ class AbstractEvaluator(ABC):
             task_type (str): Type of task for this evaluator.
         """
         self._name = name or self.__class__.__name__
-        self.task_type = task_type
+        self.task_type = task_type if isinstance(task_type, list) else [task_type]
 
     @abstractmethod
     def get_prediction(
@@ -71,6 +71,9 @@ class AbstractEvaluator(ABC):
         """
         return self.task_type
 
+    def check_task_type(self, task: str):
+        return task in self.task_type
+
 
 class AbstractHPOEvaluator(AbstractEvaluator):
     """Abstract base class for evaluators with Optuna hyperparameter optimization.
@@ -95,7 +98,7 @@ class AbstractHPOEvaluator(AbstractEvaluator):
     def __init__(
         self,
         name: str,
-        task_type: str,
+        task_type: str | list[str],
         n_trials: int = 50,
         cv_folds: int = 5,
         random_state: int = 42,
