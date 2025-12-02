@@ -182,11 +182,11 @@ class AbstractBenchmark(ABC):
 
     def _compute_metrics(self, result_dict: dict, y_true, y_pred, task_type: str) -> dict:
         """Process metrics using the provided evaluator."""
-        result_dict["task"] = [task_type]
+        result_dict["task"] = task_type
 
         for metric in self.benchmark_metrics[task_type]:
             metric_func = self.benchmark_metrics[task_type][metric]
-            result_dict[metric] = [metric_func(y_true, y_pred)]
+            result_dict[metric] = metric_func(y_true, y_pred)
 
         return result_dict
 
@@ -229,7 +229,7 @@ class AbstractBenchmark(ABC):
             self,
             embedding_model: AbstractEmbeddingGenerator,
             evaluators: List[AbstractEvaluator],
-            data_split: dict,
+            data_configuration: dict,
     ) -> None:
         """
         Processes an embedding model over a given dataset with a set of evaluators. Generates
@@ -239,19 +239,26 @@ class AbstractBenchmark(ABC):
         Args:
             embedding_model: Embedding model to be processed.
             evaluators: List of evaluators to assess the generated embeddings.
-            data_split: A subset of the dataset to be processed with the embedding model.
+            data_configuration: A subset of the dataset to be processed with the embedding model.
 
         """
         log_gpu_memory(self.logger)
         self.logger.info(
-            f"Processing {embedding_model.name} on {data_split['dataset_name']}..."
+            f"Processing {embedding_model.name} on {data_configuration['dataset_name']}..."
         )
 
-        result_row_dict = {"dataset_name": [data_split["dataset_name"]]}
+        result_row_dict = {
+            "dataset_name": data_configuration["dataset_name"],
+            "dataset_size": data_configuration["dataset_size"],
+            "num_features": data_configuration["num_features"],
+            "fold": data_configuration["metadata"]["fold"],
+            "repeat": data_configuration["metadata"]["repeat"],
+            "embedding_model": embedding_model.name,
+        }
 
         # Generate embeddings
         try:
-            embeddings = self._generate_embeddings(embedding_model, data_split)
+            embeddings = self._generate_embeddings(embedding_model, data_configuration)
         except Exception as e:
             self.logger.exception(
                 f"Error generating embeddings with {embedding_model.name}: {e}"
@@ -260,13 +267,13 @@ class AbstractBenchmark(ABC):
 
         # Evaluate with each compatible evaluator
         for evaluator in evaluators:
-            if not self._is_compatible(evaluator, data_split):
+            if not self._is_compatible(evaluator, data_configuration):
                 self.logger.debug(f"The evaluator {evaluator.name} is not compatible with {self.task_type}. Skipping...")
                 continue
             try:
                 # prediction = self._process_evaluator(embeddings, evaluator, data_split)
                 # metrics = self._compute_metrics(prediction, data_split["y"], embeddings[1], self.task_type)
-                results = self._process_evaluator(embeddings, evaluator, data_split)
+                results = self._process_evaluator(embeddings, evaluator, data_configuration)
                 # Add embedding model name to results
                 results["embedding_model"] = [embedding_model.name]
                 self._add_result(results)
@@ -308,9 +315,9 @@ class AbstractBenchmark(ABC):
             benchmark=self.name
         )
 
-    def _process_data_split(
+    def _process_data_configuration(
         self,
-        data_split: dict,
+        data_configuration: dict,
         embedding_models: list[AbstractEmbeddingGenerator],
         evaluators: list[AbstractEvaluator],
     ) -> None:
@@ -319,18 +326,18 @@ class AbstractBenchmark(ABC):
             try:
                 if embedding_model.is_end_to_end_model:
                     self._process_end_to_end_model_pipeline(
-                        embedding_model, data_split
+                        embedding_model, data_configuration
                     )
                 else:
                     self._process_embedding_model(
-                        embedding_model, evaluators, data_split
+                        embedding_model, evaluators, data_configuration
                     )
             except NotEndToEndCompatibleError as e:
                 self.logger.info(str(e))
                 continue
             except Exception as e:
                 self.logger.exception(
-                    f"Error running embedding model {embedding_model.name} on {data_split['dataset_name']} dataset: {e}"
+                    f"Error running embedding model {embedding_model.name} on {data_configuration['dataset_name']} dataset: {e}"
                 )
                 continue
 
@@ -350,14 +357,14 @@ class AbstractBenchmark(ABC):
 
         # Prepare dataset (may yield multiple splits for cross-validation)
         try:
-            data_splits = self._prepare_dataset(dataset, **kwargs)
+            data_configurations = self._prepare_dataset(dataset, **kwargs)
         except Exception as e:
             self.logger.exception(f"Error preparing dataset: {e}")
             return
 
         # Process each data split
-        for data_split in data_splits:
-            self._process_data_split(data_split, embedding_models, evaluators)
+        for data_configuration in data_configurations:
+            self._process_data_configuration(data_configuration, embedding_models, evaluators)
 
     def run_benchmark(
         self,
