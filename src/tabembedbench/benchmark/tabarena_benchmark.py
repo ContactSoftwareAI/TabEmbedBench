@@ -54,6 +54,10 @@ TABARENA_TABPFN_SUBSET = [
     363679,
 ]
 
+TASK_IDS_WITH_MISSING_VALUES = [
+    363671, 363679, 363684, 363694, 363711, 363712
+]
+
 
 class TabArenaBenchmark(AbstractBenchmark):
     """Simplified benchmark for TabArena classification and regression tasks.
@@ -73,6 +77,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         upper_bound_num_samples: int = 100000,
         upper_bound_num_features: int = 500,
         run_tabpfn_subset: bool = True,
+        skip_missing_values: bool = True,
     ):
         """Initialize the TabArena benchmark.
 
@@ -106,6 +111,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         self.task_ids = None
         self.len_tabpfn_subset = len(TABARENA_TABPFN_SUBSET)
         self.exclude_datasets = exclude_datasets or []
+        self.skip_missing_values = skip_missing_values
 
     def _load_datasets(self, **kwargs) -> list:
         """Load TabArena tasks from OpenML.
@@ -156,9 +162,16 @@ class TabArenaBenchmark(AbstractBenchmark):
             num_samples, num_features, dataset.name
         )
 
+        X, _, _, _ = dataset.get_data(dataset_format="dataframe")
+
+        if self._check_missing_value(X):
+            self.logger.warning(f"Dataset {dataset.name} contains missing values.")
+            reason = "Dataset contains missing values."
+            should_skip = True and self.skip_missing_values
+
         if not should_skip:
             if self.run_tabpfn_subset and task_id not in TABARENA_TABPFN_SUBSET:
-                should_skip, reason = True, f"Not in TabPFN subset"
+                should_skip, reason = True, "Not in TabPFN subset"
             elif dataset.name in self.exclude_datasets:
                 should_skip, reason = (
                     True,
@@ -174,6 +187,13 @@ class TabArenaBenchmark(AbstractBenchmark):
                 )
 
         return should_skip, reason
+
+    def _check_missing_value(
+            self,
+            data: pd.DataFrame,
+    ) -> bool:
+        """Check if dataset contains missing values."""
+        return data.isnull().values.any() or data.isna().values.any()
 
     def _prepare_dataset(self, dataset_info: dict, **kwargs) -> Iterator[dict]:
         """
@@ -217,26 +237,25 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         task_type = task.task_type
 
+        X, y, categorical_indicator, _ = dataset.get_data(
+            target=task.target_name, dataset_format="dataframe"
+        )
+
+        X, categorical_indicator = self._remove_columns_with_one_unique_value(
+            X,
+            categorical_indicator,
+            dataset.name,
+        )
+
         # Iterate through all folds and repeats
         for repeat in range(repeats):
             for fold in range(folds):
                 n_classes = None
 
-                # Get data from dataset
-                X, y, categorical_indicator, attribute_names = dataset.get_data(
-                    target=task.target_name, dataset_format="dataframe"
-                )
-
                 # Get train/test split
                 train_indices, test_indices = task.get_train_test_split_indices(
                     fold=fold,
                     repeat=repeat,
-                )
-
-                X, categorical_indicator = self._remove_columns_with_one_unique_value(
-                    X,
-                    categorical_indicator,
-                    dataset.name,
                 )
 
                 categorical_column_names = [
@@ -258,8 +277,11 @@ class TabArenaBenchmark(AbstractBenchmark):
                 # Encode labels for classification
                 if task_type == "Supervised Classification":
                     label_encoder = LabelEncoder()
-                    y_train = label_encoder.fit_transform(y_train)
-                    y_test = label_encoder.transform(y_test)
+                    y_train_clean = y_train.astype(str).values
+                    y_test_clean = y_test.astype(str).values
+
+                    y_train = label_encoder.fit_transform(y_train_clean)
+                    y_test = label_encoder.transform(y_test_clean)
                     n_classes = len(label_encoder.classes_)
                     task_type = "Supervised Multiclass Classification" if (n_classes> 2) else "Supervised Binary Classification"
 
@@ -432,7 +454,7 @@ class TabArenaBenchmark(AbstractBenchmark):
             True if evaluator supports the task type.
         """
         task_type = data_split["metadata"]["task_type"]
-        return task_type == evaluator.task_type
+        return evaluator.check_task_type(task_type)
 
     def _get_task_configuration(self, dataset, task) -> tuple[int, int]:
         """Get the number of folds and repeats for a task.
@@ -577,5 +599,3 @@ def run_tabarena_benchmark(
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
-
-
