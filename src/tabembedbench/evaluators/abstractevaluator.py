@@ -26,6 +26,18 @@ class AbstractEvaluator(ABC):
         self._name = name or self.__class__.__name__
         self.task_type = task_type if isinstance(task_type, list) else [task_type]
 
+    @property
+    def name(self) -> str:
+        """Gets the name attribute value.
+
+        This property retrieves the value of the `_name` attribute,
+        which represents the name associated with the instance.
+
+        Returns:
+            str: The name associated with the instance.
+        """
+        return self._name
+
     @abstractmethod
     def get_prediction(
         self,

@@ -97,7 +97,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         # Note: task_type will be determined per dataset
         # Using "Supervised Classification" as default, but will check compatibility per split
         super().__init__(
-            logger_name="TabEmbedBench_TabArena",
+            name="TabEmbedBench_TabArena",
             task_type="Supervised Classification",  # Will be overridden per split
             result_dir=result_dir,
             timestamp=timestamp,
@@ -472,14 +472,6 @@ class TabArenaBenchmark(AbstractBenchmark):
         )
 
         return result_dict
-
-    def _get_benchmark_name(self) -> str:
-        """Get the benchmark name for result saving.
-
-        Returns:
-            String identifier for the benchmark.
-        """
-        return "TabArena"
 
     def _is_compatible(self, evaluator: AbstractEvaluator, data_split: dict) -> bool:
         """Check if evaluator is compatible with the current task.

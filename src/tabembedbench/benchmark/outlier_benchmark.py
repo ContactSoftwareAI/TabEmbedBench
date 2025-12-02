@@ -115,7 +115,7 @@ class OutlierBenchmark(AbstractBenchmark):
             upper_bound_num_features: Maximum number of features to process.
         """
         super().__init__(
-            logger_name="TabEmbedBench_Outlier",
+            name="TabEmbedBench_Outlier",
             task_type="Outlier Detection",
             result_dir=result_dir,
             timestamp=timestamp,
@@ -167,6 +167,13 @@ class OutlierBenchmark(AbstractBenchmark):
             List of dataset file paths.
         """
         return list(self.dataset_paths.glob("*.npz"))
+
+    def _get_default_metrics(self):
+        return {
+            "Outlier Detection": {
+                "auc_score": roc_auc_score,
+            }
+        }
 
     def _should_skip_dataset(
         self, dataset_file: Path, **kwargs
