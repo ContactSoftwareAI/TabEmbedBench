@@ -405,33 +405,35 @@ class TabArenaBenchmark(AbstractBenchmark):
             train=False,
         )
 
+        return test_prediction
+
         # Build result dictionary
-        result_dict = {
-            "dataset_name": [data_split["dataset_name"]],
-            "dataset_size": [data_split["dataset_size"]],
-            "num_features": [data_split["num_features"]],
-            "embed_dim": [train_embeddings.shape[-1]],
-            "time_to_compute_embedding": [compute_time],
-            "algorithm": [evaluator._name],
-            "fold": [data_split["metadata"]["fold"]],
-            "repeat": [data_split["metadata"]["repeat"]],
-        }
-
-        result_dict = self._compute_metrics(
-            result_dict,
-            y_test,
-            test_prediction,
-            task_type,
-            evaluator,
-        )
-
-        if evaluator:
-            # Add evaluator parameters
-            evaluator_params = evaluator.get_parameters()
-            for key, value in evaluator_params.items():
-                result_dict[f"algorithm_{key}"] = [value]
-
-        return result_dict
+        # result_dict = {
+        #     "dataset_name": [data_split["dataset_name"]],
+        #     "dataset_size": [data_split["dataset_size"]],
+        #     "num_features": [data_split["num_features"]],
+        #     "embed_dim": [train_embeddings.shape[-1]],
+        #     "time_to_compute_embedding": [compute_time],
+        #     "algorithm": [evaluator._name],
+        #     "fold": [data_split["metadata"]["fold"]],
+        #     "repeat": [data_split["metadata"]["repeat"]],
+        # }
+        #
+        # result_dict = self._compute_metrics(
+        #     result_dict,
+        #     y_test,
+        #     test_prediction,
+        #     task_type,
+        #     evaluator,
+        # )
+        #
+        # if evaluator:
+        #     # Add evaluator parameters
+        #     evaluator_params = evaluator.get_parameters()
+        #     for key, value in evaluator_params.items():
+        #         result_dict[f"algorithm_{key}"] = [value]
+        #
+        # return result_dict
 
     def _process_end_to_end_model_pipeline(
             self,
