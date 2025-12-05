@@ -53,7 +53,7 @@ def get_embedding_models(debug=False):
 
     #tabicl_row_embedder = TabICLEmbedding()
 
-    tablevector = TableVectorizerEmbedding()
+    #tablevector = TableVectorizerEmbedding()
 
     #tabpfn_embedder = TabPFNEmbedding(
     #    num_estimators=5,
@@ -71,7 +71,7 @@ def get_embedding_models(debug=False):
     embedding_models = [
         #tabicl_row_embedder,
         #tabpfn_embedder,
-        tablevector,
+        #tablevector,
         #sphere_model_2,
         #sphere_model_4,
         #sphere_model_8,
@@ -222,6 +222,7 @@ def run_main(
     dataset_config = DatasetConfig(
         adbench_dataset_path=adbench_dataset_path,
         exclude_adbench_datasets=[],
+        exclude_tabarena_datasets=[],
         upper_bound_dataset_size=max_samples,
         upper_bound_num_features=max_features,
     )

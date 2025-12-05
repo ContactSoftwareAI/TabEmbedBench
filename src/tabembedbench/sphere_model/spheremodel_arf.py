@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from sklearn.base import TransformerMixin
 from scipy.stats import qmc
 
@@ -29,14 +30,14 @@ class SphereModelARF(TransformerMixin):
         super()
         self.embed_dim = embed_dim
         #self.point_generator = SobolPointGenerator(d_internal=self.embed_dim-1)
-        self.categorical_indices = None
-        self.column_properties = []
+        self.categorical_column_names = None
+        self.column_properties = {}
         self.n_cols = None
 
     def fit(
         self,
-        data: np.ndarray,
-        categorical_indices: list[int],
+        data: pd.DataFrame,
+        categorical_column_names: list[str],
         y=None,
     ):
         """Fit the embedding model to the data.
@@ -45,27 +46,26 @@ class SphereModelARF(TransformerMixin):
         for categorical features and min/max ranges for numerical features.
 
         Args:
-            data (np.ndarray): Input data to fit.
+            data (pd.DataFrame): Input data to fit.
             y: Unused parameter, kept for sklearn compatibility. Defaults to None.
-            categorical_indices (list[int] | None, optional): Indices of categorical
+            categorical_column_names (list[str] | None, optional): Names of categorical
                 columns. If None, will be inferred. Defaults to None.
         """
-        self.categorical_indices = categorical_indices
+        self.categorical_column_names = categorical_column_names
 
-        _, self.n_cols = data.shape
+        self.n_cols = len(data.columns)
 
-        for col_idx in range(self.n_cols):
-            column_data = data[:, col_idx]
-            #column_data = np.array(data[list(data)[col_idx]])
+        for col in data.columns:
+            column_data = data[col]
 
-            if col_idx in self.categorical_indices:
+            if col in self.categorical_column_names:
                 unique_categories = np.unique(column_data)
                 category_embeddings = {}
 
                 for category in unique_categories:
                     category_embeddings[category] = new_point_on_unit_sphere(self.embed_dim)
 
-                self.column_properties.append(category_embeddings)
+                self.column_properties[col] = category_embeddings
             else:
                 point = new_point_on_unit_sphere(self.embed_dim)
                 vec = np.zeros(self.embed_dim)
@@ -73,11 +73,12 @@ class SphereModelARF(TransformerMixin):
                     vec[2*j] = point[2*j+1]
                     vec[2*j+1] = -point[2*j]
                 vec /= np.linalg.norm(vec)
-                col_min = np.min(column_data)
-                col_max = np.max(column_data)
-                self.column_properties.append([point,vec,col_min, col_max])
+                col_min = np.nanmin(column_data)
+                col_max = np.nanmax(column_data)
+                #self.column_properties.append([point,vec,col_min, col_max])
+                self.column_properties[col] = {'point': point, 'vec': vec, 'min_value': col_min, 'max_value': col_max}
 
-    def transform(self, data: np.ndarray) -> np.ndarray:
+    def transform(self, data: pd.DataFrame) -> np.ndarray:
         """Transforms input data into embeddings using appropriate methods for categorical and
         numerical columns and returns row-wise embeddings.
 
@@ -86,8 +87,7 @@ class SphereModelARF(TransformerMixin):
         row embeddings by averaging the embeddings of all columns for each row.
 
         Args:
-            data: Input data to be transformed into embeddings. Must be either a Pandas
-                DataFrame or a NumPy ndarray.
+            data: Input data to be transformed into embeddings. Must be either a Pandas DataFrame.
 
         Returns:
             np.ndarray: A NumPy array containing the row embeddings for the input data.
@@ -96,31 +96,29 @@ class SphereModelARF(TransformerMixin):
             ValueError: If the number of columns in the input data does not match the
                 number of columns in the fitted data.
         """
-        data_array = data
-
-        n_rows, n_cols = data_array.shape
+        n_cols = len(data.columns)
         if n_cols != self.n_cols:
             raise ValueError("Number of columns in data does not match fitted data.")
 
         column_embeddings = []
 
-        for col_idx in range(n_cols):
-            column_data = data_array[:, col_idx]
+        for col in data.columns:
+            column_data = data[col]
 
-            if col_idx in self.categorical_indices:
-                col_embedding = self._embed_categorical_column(column_data, col_idx)
+            if col in self.categorical_column_names:
+                col_embedding = self._embed_categorical_column(column_data, col)
             else:
-                col_embedding = self._embed_numerical_column(column_data, col_idx)
+                col_embedding = self._embed_numerical_column(column_data.to_numpy(), col)
 
             column_embeddings.append(col_embedding)
 
-        row_embeddings = np.mean(np.stack(column_embeddings,axis=0),axis=0)
+        row_embeddings = np.mean(np.stack(np.array(column_embeddings),axis=0),axis=0)
         #row_embeddings = np.concatenate(column_embeddings,axis=1)
 
         return row_embeddings
 
     def _embed_numerical_column(
-        self, column_data: np.ndarray, col_idx: int
+        self, column_data: np.ndarray, col: str
     ) -> np.ndarray:
         """Embed a numerical column into the embedding space.
 
@@ -129,18 +127,19 @@ class SphereModelARF(TransformerMixin):
 
         Args:
             column_data (np.ndarray): The numerical data for the column.
-            col_idx (int): Index of the column being processed.
+            col (str): Name of the column being processed.
 
         Returns:
             np.ndarray: Embedded values of shape (len(column_data), embed_dim).
         """
-        point = self.column_properties[col_idx][0].reshape([1,self.embed_dim])
-        vec = self.column_properties[col_idx][1].reshape([1,self.embed_dim])
-        col_min = self.column_properties[col_idx][2]
-        col_max = self.column_properties[col_idx][3]
+        point = self.column_properties[col]['point'].reshape([1,self.embed_dim])
+        vec = self.column_properties[col]['vec'].reshape([1,self.embed_dim])
+        col_min = self.column_properties[col]['min_value']
+        col_max = self.column_properties[col]['max_value']
         col_range = col_max - col_min
 
         embeddings = np.empty((len(column_data), self.embed_dim),dtype=float)
+#       mit Sigmoid auf Großkreis:
 #        for i, value in enumerate(column_data):
 #            if value < col_min:
 #                alpha = 0.2*np.pi*sig(16*(value-col_min)/col_range)
@@ -149,13 +148,17 @@ class SphereModelARF(TransformerMixin):
 #            else:
 #                alpha = 0.1*np.pi*(8*value+col_max-9*col_min)/col_range
 #            embeddings[i, :] = np.sin(alpha) * point + np.cos(alpha) * vec
+#       ohne Sigmoid auf Großkreis:
         alpha = (np.pi * (0.8 * (column_data - col_min) / col_range + 0.1)).reshape([len(column_data),1])
         embeddings = np.sin(alpha) * point + np.cos(alpha) * vec
+#       auf Gerade:
+#        embeddings = (0.5 + (column_data.reshape([len(column_data),1]) - col_min) / col_range) * point
+#        embeddings[np.argwhere(np.isnan(column_data))] = np.zeros(self.embed_dim,dtype=float)
 
-        return embeddings
+        return np.array(embeddings,dtype=float)
 
     def _embed_categorical_column(
-        self, column_data: np.ndarray, col_idx: int
+        self, column_data: pd.Series, col: str
     ) -> np.ndarray:
         """
         Embed a categorical column into the embedding space.
@@ -174,7 +177,7 @@ class SphereModelARF(TransformerMixin):
         Raises:
             ValueError: If unique_category_embeddings is not a dictionary.
         """
-        unique_category_embeddings = self.column_properties[col_idx]
+        unique_category_embeddings = self.column_properties[col]
 
         if not isinstance(unique_category_embeddings, dict):
             raise ValueError(f"The unique category embedding is not an dictionary.")
@@ -188,7 +191,7 @@ class SphereModelARF(TransformerMixin):
         for i, value in enumerate(column_data):
             embeddings[i, :] = unique_category_embeddings[value]
 
-        return embeddings
+        return np.array(embeddings,dtype=float)
 
 
 def new_point_on_unit_sphere(d: int):
@@ -203,6 +206,7 @@ def new_point_on_unit_sphere(d: int):
         candidate_point = np.float32(np.random.randn(d))
         norm = np.linalg.norm(candidate_point)
     return candidate_point/norm
+    #return np.float32(np.random.randn(d))
 
 
 def random_points_on_unit_sphere(num_points: int,
