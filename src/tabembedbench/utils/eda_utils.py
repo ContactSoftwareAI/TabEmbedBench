@@ -493,7 +493,7 @@ def create_tabarena_plots(
 
     # Boxplot for regression
     regression_agg_result = regression.group_by(grouped_columns).agg(
-        pl.col("mape_score").max().alias("mape_score"),
+        pl.col("mape_score").min().alias("mape_score"),
     )
 
     boxplot = sns.boxplot(
