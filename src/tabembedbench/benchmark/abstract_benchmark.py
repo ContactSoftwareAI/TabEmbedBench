@@ -14,7 +14,7 @@ from tabembedbench.utils.tracking_utils import save_result_df
 
 
 class NotEndToEndCompatibleError(Exception):
-    """Raised when data processing fails."""
+    """Raised when the embedding model is not an end-to-end model."""
     def __init__(self, benchmark):
         self.benchmark = benchmark
         self.message = f"The benchmark {self.benchmark} is not compatible for end to end models."
