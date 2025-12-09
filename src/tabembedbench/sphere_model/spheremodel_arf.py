@@ -64,6 +64,7 @@ class SphereModelARF(TransformerMixin):
 
                 for category in unique_categories:
                     category_embeddings[category] = new_point_on_unit_sphere(self.embed_dim)
+                    #category_embeddings[category] = new_point(self.embed_dim)
 
                 self.column_properties[col] = category_embeddings
             else:
@@ -146,14 +147,14 @@ class SphereModelARF(TransformerMixin):
 #            elif value > col_max:
 #                alpha = 0.2*np.pi*(sig(16*(value-col_max)/col_range)+4)
 #            else:
-#                alpha = 0.1*np.pi*(8*value+col_max-9*col_min)/col_range
+#                alpha = np.pi*(0.8*(value-col_min)/col_range+0.1)
 #            embeddings[i, :] = np.sin(alpha) * point + np.cos(alpha) * vec
 #       ohne Sigmoid auf Großkreis:
         alpha = (np.pi * (0.8 * (column_data - col_min) / col_range + 0.1)).reshape([len(column_data),1])
         embeddings = np.sin(alpha) * point + np.cos(alpha) * vec
 #       auf Gerade:
 #        embeddings = (0.5 + (column_data.reshape([len(column_data),1]) - col_min) / col_range) * point
-#        embeddings[np.argwhere(np.isnan(column_data))] = np.zeros(self.embed_dim,dtype=float)
+        embeddings[np.argwhere(np.isnan(column_data))] = np.zeros(self.embed_dim,dtype=float)
 
         return np.array(embeddings,dtype=float)
 
@@ -186,6 +187,7 @@ class SphereModelARF(TransformerMixin):
         for value in unique_categories:
             if value not in unique_category_embeddings.keys():
                 unique_category_embeddings[value] = new_point_on_unit_sphere(self.embed_dim)
+                #unique_category_embeddings[value] = new_point(self.embed_dim)
 
         embeddings = np.empty((len(column_data), self.embed_dim),dtype=float)
         for i, value in enumerate(column_data):
@@ -206,8 +208,10 @@ def new_point_on_unit_sphere(d: int):
         candidate_point = np.float32(np.random.randn(d))
         norm = np.linalg.norm(candidate_point)
     return candidate_point/norm
-    #return np.float32(np.random.randn(d))
 
+
+def new_point(d: int):
+    return np.float32(np.random.randn(d))
 
 def random_points_on_unit_sphere(num_points: int,
                                  d: int,

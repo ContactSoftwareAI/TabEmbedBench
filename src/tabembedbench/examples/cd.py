@@ -1,5 +1,4 @@
 import scikit_posthocs as sp
-import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import polars as pl
@@ -12,28 +11,42 @@ import seaborn as sns
 embedding_models = ['TabICL',
                     'TabPFN',
                     'TableVectorizer',
-                    'Random (Dim 64)',
-                    'Random (Dim 192)',
-                    'Random (Dim 512)',
+                    'Random Line (Dim 64)',
+                    'Random Line (Dim 192)',
+                    'Random Line (Dim 512)',
+                    'Random Circle (Dim 64)',
+                    'Random Circle (Dim 192)',
+                    'Random Circle (Dim 512)',
+                    'Sphere-Based Line (Dim 64)',
+                    'Sphere-Based Line (Dim 192)',
+                    'Sphere-Based Line (Dim 512)',
                     'Sphere-Based (Dim 64)',
                     'Sphere-Based (Dim 192)',
-                    'Sphere-Based (Dim 512)'
-]
+                    'Sphere-Based (Dim 512)',
+                    ]
 colors = [
     "#0080C5", # CIM Database 1
     "#F29100", # Project Office 1
     "#92C108", # Workspaces 1
     "#A90E4E", # IoT 3
+    "#A90E4E", # IoT 3
+    "#A90E4E", # IoT 3
     "#E3075A", # IoT 1
-    "#EE5CA1", # IoT 2
+    "#E3075A", # IoT 1
+    "#E3075A", # IoT 1
+    "#FCB900", # Project Office 2
+    "#FCB900", # Project Office 2
+    "#FCB900", # Project Office 2
+    "#EA5A02", # Project Office 3
+    "#EA5A02", # Project Office 3
+    "#EA5A02", # Project Office 3
     "#005E9E", # CIM Database 3
     "#36AEE7", # CIM Database 2
     "#003254", # CONTACT 1
     "#DBDC2E", # Workspaces 2
     "#639C2E", # Workspaces 3
-    "#FCB900", # Project Office 2
-    "#EA5A02", # Project Office 3
     "#CC171D", # CONTACT rot
+    "#EE5CA1", # IoT 2
 ]
 color_dict = {embedding_models[i]: colors[i] for i in range(len(embedding_models))}
 print(color_dict)
@@ -42,7 +55,7 @@ maximize = ["auc_score"]
 names = {"auc_score": "AUC Score",
          "mape_score": "MAPE Score"}
 
-timestamps = ["20251112_161222","20251204_094445","20251205_140602"]
+timestamps = ["20251112_161222","20251204_094445","20251205_071358","20251209_070143","20251208_151933"]
 directory = f"C:/Users/arf/TabEmbedBench/src/tabembedbench/examples/data"
 result_outlier_files = [f"{directory}/tabembedbench_{timestamp}/results_ADBench_Tabular_{timestamp}.csv" for timestamp in timestamps]
 result_tabarena_files = [f"{directory}/tabembedbench_{timestamp}/results_TabArena_{timestamp}.csv" for timestamp in timestamps]
@@ -69,6 +82,8 @@ benchmark = {"Outlier": {"result_files": result_outlier_files,
                              "algorithms": ["KNNRegressor","MLPRegressor"]}
              }
 
+data_complete_cum = []
+
 for b in benchmark:
     if all(os.path.exists(filename) for filename in benchmark[b]["result_files"]):
         print(f"{b}:")
@@ -91,25 +106,38 @@ for b in benchmark:
                 data = data.loc[data.groupby(['dataset_name','embedding_model'])[benchmark[b]["measure"]].idxmax()].drop_duplicates().reset_index(drop=True)
             else:
                 data = data.loc[data.groupby(['dataset_name','embedding_model'])[benchmark[b]["measure"]].idxmin()].drop_duplicates().reset_index(drop=True)
-            print(data)
 
             pivot = data.pivot_table(index=['dataset_name'],
                                      columns='embedding_model',
                                      values=benchmark[b]["measure"])
             incomplete_datasets = pivot[pivot.isnull().any(axis=1)].index
             data_complete = data[~data['dataset_name'].isin(incomplete_datasets)]
+            print("data_complete:")
+            print(data_complete)
+
+            data_cum = pd.DataFrame(data_complete)
+            if benchmark[b]["measure"] not in maximize:
+                data_cum[benchmark[b]["measure"]] = (-1) * data_cum[benchmark[b]["measure"]]
+            data_cum["dataset_name"] = f"{b}_{algorithm}_" + data_cum["dataset_name"].astype(str)
+            data_complete_cum.append(data_cum.rename(columns={benchmark[b]["measure"]: "measure"}))
+
             pivot = data_complete.pivot_table(index=['dataset_name'],
                                               columns='embedding_model',
                                               values=benchmark[b]["measure"])
 
+            print("pivot:")
             print(pivot)
 
             nemenyi_friedman = sp.posthoc_nemenyi_friedman(data_complete, y_col=benchmark[b]["measure"], block_col='dataset_name', group_col='embedding_model', block_id_col='dataset_name', melted=True)
 
+            print("nemenyi_friedman:")
             print(nemenyi_friedman)
 
             rankmat = pivot.rank(axis='columns', ascending=(benchmark[b]["measure"] not in maximize))
+            print("rankmat:")
+            print(rankmat)
             meanranks = rankmat.mean()
+            print("meanranks:")
             print(meanranks)
 
             fig, ax = plt.subplots(figsize=(10, 3))
@@ -215,3 +243,98 @@ for b in benchmark:
 
             plt.savefig(os.path.join(output_dir,f"{b}_{algorithm}_boxplot.pdf"),dpi=300,pad_inches=0.02)
             plt.close()
+
+data_complete_cum = pd.concat(data_complete_cum, ignore_index=True)
+print(data_complete_cum)
+pivot = data_complete_cum.pivot_table(index=['dataset_name'],
+                                      columns='embedding_model',
+                                      values="measure")
+
+print("pivot:")
+print(pivot)
+
+nemenyi_friedman = sp.posthoc_nemenyi_friedman(data_complete_cum, y_col="measure", block_col='dataset_name',
+                                               group_col='embedding_model', block_id_col='dataset_name', melted=True)
+
+print("nemenyi_friedman:")
+print(nemenyi_friedman)
+
+rankmat = pivot.rank(axis='columns', ascending=False)
+print("rankmat:")
+print(rankmat)
+meanranks = rankmat.mean()
+print("meanranks:")
+print(meanranks)
+
+fig, ax = plt.subplots(figsize=(10, 3))
+
+plt.title("Cumulative")
+sp.critical_difference_diagram(meanranks, nemenyi_friedman, label_props={}, ax=ax)
+# Get all text objects (algorithm labels)
+texts = [t for t in ax.texts if t.get_text().strip()]
+
+for i, line in enumerate(ax.lines):
+    xdata = line.get_xdata()
+    ydata = line.get_ydata()
+
+# Separate elbows from grouping bars with adjusted logic
+elbows = []
+for line in ax.lines:
+    xdata = line.get_xdata()
+    ydata = line.get_ydata()
+
+    # Check if it's a vertical line (elbow)
+    # Different tolerance or check if ydata changes more than xdata
+    if len(xdata) >= 2 and len(ydata) >= 2:
+        x_diff = abs(xdata[-1] - xdata[0])
+        y_diff = abs(ydata[-1] - ydata[0])
+
+        # Vertical line: y changes, x stays roughly the same
+        if y_diff > x_diff:
+            elbows.append(line)
+
+for collection in ax.collections:
+    # This won't work directly, so we need a different approach
+    pass
+
+# Get all text objects (algorithm labels)
+texts = [t for t in ax.texts if t.get_text().strip()]
+
+# Separate elbows from grouping bars
+elbows = []
+for line in ax.lines:
+    xdata = line.get_xdata()
+    ydata = line.get_ydata()
+
+    if len(xdata) >= 2 and len(ydata) >= 2:
+        x_diff = abs(xdata[-1] - xdata[0])
+        y_diff = abs(ydata[-1] - ydata[0])
+
+        if y_diff > x_diff:
+            elbows.append(line)
+
+# Get the axis markers (scatter points)
+# These are usually stored in collections
+markers = ax.collections
+
+# Process each text label
+for i, text in enumerate(texts):
+    original_text = text.get_text()
+    cleaned_text = re.sub(r'\s*\([0-9.]+\)\s*', '', original_text).strip()
+    text.set_text(cleaned_text)
+
+    if cleaned_text in color_dict and i < len(elbows):
+        color = color_dict[cleaned_text]
+        text.set_color(color)
+        elbows[i].set_color(color)
+
+        # Color the corresponding marker (scatter point on axis)
+        if i < len(markers):
+            markers[i].set_color(color)
+            markers[i].set_edgecolor(color)
+            markers[i].set_facecolor(color)
+
+plt.tight_layout()
+
+plt.savefig(os.path.join(output_dir, f"Cumulative_cd.pdf"), dpi=300, pad_inches=0.02)
+plt.close()
