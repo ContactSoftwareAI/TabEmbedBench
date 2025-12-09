@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Callable
 
 import zipfile
 
@@ -17,6 +17,10 @@ from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+TASK_TYPE = "Outlier Detection"
+
+NPZ_FILE_PATTERN = "*.npz"
 
 ADBENCH_CLASSICAL_DATASETS = [
     "10_cover.npz",
@@ -116,7 +120,7 @@ class OutlierBenchmark(AbstractBenchmark):
         """
         super().__init__(
             name="TabEmbedBench_Outlier",
-            task_type="Outlier Detection",
+            task_type=TASK_TYPE,
             result_dir=result_dir,
             timestamp=timestamp,
             save_result_dataframe=save_result_dataframe,
@@ -132,11 +136,11 @@ class OutlierBenchmark(AbstractBenchmark):
 
         if (
             not dataset_paths.exists()
-            or len(list(dataset_paths.glob("*.npz"))) < EXPECTED_DATASET_COUNT
+            or len(list(dataset_paths.glob(NPZ_FILE_PATTERN))) < EXPECTED_DATASET_COUNT
         ):
             found_files = [
                 file_path.stem
-                for file_path in list(dataset_paths.glob("*.npz"))
+                for file_path in dataset_paths.glob(NPZ_FILE_PATTERN)
                 if file_path.stem in ADBENCH_CLASSICAL_DATASETS
             ]
             if len(found_files) == 0:
@@ -168,13 +172,6 @@ class OutlierBenchmark(AbstractBenchmark):
         """
         return list(self.dataset_paths.glob("*.npz"))
 
-    def _get_default_metrics(self):
-        return {
-            "Outlier Detection": {
-                "auc_score": roc_auc_score,
-            }
-        }
-
     def _should_skip_dataset(
         self, dataset_file: Path, **kwargs
     ) -> tuple[bool, str | None]:
@@ -204,7 +201,8 @@ class OutlierBenchmark(AbstractBenchmark):
 
         if not should_skip:
             self.logger.info(
-                f"Running experiments on {dataset_name}. "
+                f"Starting experiments for dataset {dataset_name} "
+                f"and task: Outlier Detection."
                 f"Samples: {num_samples}, Features: {num_features}"
             )
 
@@ -233,65 +231,61 @@ class OutlierBenchmark(AbstractBenchmark):
 
         # Yield single split for outlier detection
         yield {
-            "X": X,
-            "X_train": None,
-            "X_test": None,
-            "y": y,
-            "y_train": None,
-            "y_test": None,
-            "dataset_name": dataset_name,
-            "dataset_size": num_samples,
-            "num_features": num_features,
-            "metadata": {
+            "X_train": X,
+            "y_eval": y,
+            "task_type": TASK_TYPE,
+            "dataset_metadata": {
+                "dataset_name": dataset_name,
+                "num_samples": num_samples,
+                "num_features": num_features,
+                "outlier_ratio": outlier_ratio,
+            },
+            "feature_metadata": {
                 "outlier_ratio": outlier_ratio,
             },
         }
 
-    def _process_evaluator(
+    def _get_default_metrics(self) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
+        """
+        Retrieves a dictionary of default metrics for evaluation purposes.
+
+        The method provides a mapping between metric names and their corresponding
+        evaluation functions. Each metric function is expected to be callable and
+        accept arguments appropriate for the respective metric.
+
+        Returns:
+            dict: A dictionary where keys are metric categories, and values are
+            dictionaries containing metric names mapped to their evaluation
+            functions.
+        """
+        return {
+            "Outlier Detection": {
+                "auc_score": roc_auc_score,
+            }
+        }
+
+    def _get_evaluator_prediction(
         self,
         embeddings: tuple,
         evaluator: AbstractEvaluator,
-        data_split: dict,
-    ) -> dict:
+        dataset_configurations: dict,
+    ) -> np.ndarray:
         """Evaluate embeddings for outlier detection.
 
         Args:
             embeddings: Tuple of (embeddings, test_embeddings, compute_time).
             evaluator: The evaluator to use.
-            data_split: Dictionary with data and metadata.
+            dataset_configurations: Dictionary with data and metadata.
 
         Returns:
             Dictionary containing evaluation results.
         """
-        train_embeddings, test_embeddings, compute_time = embeddings
-        y = data_split["y"]
-        outlier_ratio = data_split["metadata"]["outlier_ratio"]
+        train_embeddings, _, _ = embeddings
 
         # Get prediction from evaluator
         prediction, _ = evaluator.get_prediction(train_embeddings)
 
-        # Compute AUC score
-        score_auc = roc_auc_score(y, prediction)
-
-        # Build result dictionary with all metadata
-        result_dict = {
-            "dataset_name": [data_split["dataset_name"]],
-            "dataset_size": [data_split["dataset_size"]],
-            "num_features": [data_split["num_features"]],
-            "embed_dim": [train_embeddings.shape[-1]],
-            "time_to_compute_embedding": [compute_time],
-            "algorithm": [evaluator._name],
-            "auc_score": [score_auc],
-            "outlier_ratio": [outlier_ratio],
-            "task": ["Outlier Detection"],
-        }
-
-        # Add evaluator parameters
-        evaluator_params = evaluator.get_parameters()
-        for key, value in evaluator_params.items():
-            result_dict[f"algorithm_{key}"] = [value]
-
-        return result_dict
+        return prediction
 
     def _get_benchmark_name(self) -> str:
         """Get the benchmark name for result saving.
