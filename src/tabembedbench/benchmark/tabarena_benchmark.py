@@ -80,6 +80,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         run_tabpfn_subset: bool = True,
         skip_missing_values: bool = True,
         benchmark_metrics: dict | None = None,
+        openml_cache_dir: str | Path | None = None,
     ):
         """Initialize the TabArena benchmark.
 
@@ -115,6 +116,18 @@ class TabArenaBenchmark(AbstractBenchmark):
         self.exclude_datasets = exclude_datasets or []
         self.skip_missing_values = skip_missing_values
         self.benchmark_metrics = benchmark_metrics or self._get_default_metrics()
+
+        # Setup OpenML cache (similar to OutlierBenchmark's dataset_paths)
+        if openml_cache_dir is None:
+            openml_cache_dir = Path("data/tabarena_datasets")
+        else:
+            openml_cache_dir = Path(openml_cache_dir)
+
+        openml_cache_dir.mkdir(parents=True, exist_ok=True)
+        openml.config.set_root_cache_directory(openml_cache_dir)
+        self.openml_cache_dir = openml_cache_dir
+
+        self.logger.info(f"OpenML cache directory: {self.openml_cache_dir}")
 
     def _load_datasets(self, **kwargs) -> list:
         """Load TabArena tasks from OpenML.
@@ -591,6 +604,7 @@ def run_tabarena_benchmark(
     save_result_dataframe: bool = True,
     timestamp: str = TIMESTAMP,
     run_tabpfn_subset: bool = True,
+    openml_cache_dir: str | Path | None = None,
 ) -> pl.DataFrame:
     """Run the TabArena benchmark for a set of embedding models.
 
@@ -614,6 +628,7 @@ def run_tabarena_benchmark(
         save_result_dataframe: Whether to save results to disk. Defaults to True.
         timestamp: Timestamp string for result file naming. Defaults to current timestamp.
         run_tabpfn_subset: Whether to run only the TabPFN subset of tasks. Defaults to True.
+        openml_cache_dir: Directory for caching OpenML datasets. If None, uses default.
 
     Returns:
         pl.DataFrame: Polars DataFrame containing the benchmark results.
@@ -628,6 +643,7 @@ def run_tabarena_benchmark(
         upper_bound_num_samples=upper_bound_num_samples,
         upper_bound_num_features=upper_bound_num_features,
         run_tabpfn_subset=run_tabpfn_subset,
+        openml_cache_dir=openml_cache_dir,
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
