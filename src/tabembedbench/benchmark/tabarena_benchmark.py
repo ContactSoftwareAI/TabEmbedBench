@@ -125,7 +125,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         # Setup OpenML cache (similar to OutlierBenchmark's dataset_paths)
         if openml_cache_dir is None:
-            openml_cache_dir = Path("data/openml_datasets")
+            openml_cache_dir = Path("data/tabarena_datasets")
         else:
             openml_cache_dir = Path(openml_cache_dir)
 
