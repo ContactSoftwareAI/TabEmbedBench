@@ -1,8 +1,9 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator, List, Optional
+from typing import Iterator, List, Optional, Callable
 from functools import partial
 
+import numpy as np
 import openml
 import pandas as pd
 import polars as pl
@@ -17,6 +18,10 @@ from tabembedbench.embedding_models.abstractembedding import (
 from tabembedbench.evaluators.abstractevaluator import AbstractEvaluator
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+SUPERVISED_REGRESSION = "Supervised Regression"
+SUPERVISED_BINARY_CLASSIFICATION = "Supervised Binary Classification"
+SUPERVISED_MULTICLASSIFICATION = "Supervised Multiclass Classification"
 
 TABARENA_TABPFN_SUBSET = [
     363621,
@@ -55,9 +60,7 @@ TABARENA_TABPFN_SUBSET = [
     363679,
 ]
 
-TASK_IDS_WITH_MISSING_VALUES = [
-    363671, 363679, 363684, 363694, 363711, 363712
-]
+TASK_IDS_WITH_MISSING_VALUES = [363671, 363679, 363684, 363694, 363711, 363712]
 
 
 class TabArenaBenchmark(AbstractBenchmark):
@@ -99,7 +102,11 @@ class TabArenaBenchmark(AbstractBenchmark):
         # Using "Supervised Classification" as default, but will check compatibility per split
         super().__init__(
             name="TabEmbedBench_TabArena",
-            task_type="Supervised Classification",  # Will be overridden per split
+            task_type=[
+                SUPERVISED_REGRESSION,
+                SUPERVISED_BINARY_CLASSIFICATION,
+                SUPERVISED_MULTICLASSIFICATION,
+            ],  # Will be overridden per split
             result_dir=result_dir,
             timestamp=timestamp,
             save_result_dataframe=save_result_dataframe,
@@ -156,6 +163,13 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         return datasets
 
+    @staticmethod
+    def _check_missing_value(
+            data: pd.DataFrame,
+    ) -> bool:
+        """Check if dataset contains missing values."""
+        return data.isnull().values.any() or data.isna().values.any()
+
     def _should_skip_dataset(
         self, dataset_info: dict, **kwargs
     ) -> tuple[bool, str | None]:
@@ -183,7 +197,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         if self._check_missing_value(X) and self.skip_missing_values:
             self.logger.warning(f"Dataset {dataset.name} contains missing values.")
             reason = "Dataset contains missing values."
-            should_skip = True and self.skip_missing_values
+            should_skip = self.skip_missing_values
 
         if not should_skip:
             if self.run_tabpfn_subset and task_id not in TABARENA_TABPFN_SUBSET:
@@ -203,13 +217,6 @@ class TabArenaBenchmark(AbstractBenchmark):
                 )
 
         return should_skip, reason
-
-    def _check_missing_value(
-            self,
-            data: pd.DataFrame,
-    ) -> bool:
-        """Check if dataset contains missing values."""
-        return data.isnull().values.any() or data.isna().values.any()
 
     def _prepare_dataset(self, dataset_info: dict, **kwargs) -> Iterator[dict]:
         """
@@ -299,29 +306,33 @@ class TabArenaBenchmark(AbstractBenchmark):
                     y_train = label_encoder.fit_transform(y_train_clean)
                     y_test = label_encoder.transform(y_test_clean)
                     n_classes = len(label_encoder.classes_)
-                    task_type = "Supervised Multiclass Classification" if (n_classes> 2) else "Supervised Binary Classification"
+                    task_type = (
+                        "Supervised Multiclass Classification"
+                        if (n_classes > 2)
+                        else "Supervised Binary Classification"
+                    )
 
                 yield {
-                    "X": None,
                     "X_train": X_train,
                     "X_test": X_test,
-                    "y": None,
                     "y_train": y_train,
-                    "y_test": y_test,
-                    "dataset_name": dataset.name,
-                    "dataset_size": X.shape[0],
-                    "num_features": X_train.shape[1],
-                    "num_classes": n_classes if n_classes else None,
-                    "metadata": {
-                        "task_type": task_type,
-                        "categorical_indices": categorical_indices,
-                        "categorical_column_names": categorical_column_names,
+                    "y_eval": y_test,
+                    "task_type": task_type,
+                    "dataset_metadata": {
+                        "dataset_name": dataset.name,
+                        "num_samples": X.shape[0],
+                        "num_features": X_train.shape[1],
+                        "num_classes": n_classes if n_classes else None,
                         "fold": fold,
                         "repeat": repeat,
                     },
+                    "feature_metadata": {
+                        "categorical_indices": categorical_indices,
+                        "categorical_column_names": categorical_column_names,
+                    },
                 }
 
-    def _get_default_metrics(self):
+    def _get_default_metrics(self) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
         """
         Generates a dictionary containing default metric functions for various supervised
         learning tasks.
@@ -339,74 +350,39 @@ class TabArenaBenchmark(AbstractBenchmark):
             TypeError: If arguments are provided with incorrect types during invocation.
         """
         return {
-            "Supervised Regression": {
+            SUPERVISED_REGRESSION: {
                 "mape_score": mean_absolute_percentage_error,
             },
-            "Supervised Binary Classification": {
+            SUPERVISED_BINARY_CLASSIFICATION: {
                 "auc_score": roc_auc_score,
             },
-            "Supervised Multiclass Classification": {
+            SUPERVISED_MULTICLASSIFICATION: {
                 "auc_score": partial(roc_auc_score, multi_class="ovr"),
                 "log_loss_score": log_loss,
-            }
+            },
         }
 
-    def _compute_metrics(
-            self,
-            result_dict,
-            y_test,
-            test_prediction,
-            task_type,
-    ) -> dict:
-        """
-        Computes and updates the metrics for a given task type and test prediction.
-
-        This function evaluates the performance of a model by computing various
-        metrics specified for the task type (e.g., classification, regression) using
-        the provided test labels and predicted values. The computed metrics are added
-        to the result dictionary to keep track of evaluation results.
-
-        Args:
-            result_dict (dict): A dictionary to store and update the evaluation metrics for the task.
-            y_test: Ground truth labels of the test set.
-            test_prediction: Predicted values for the test set.
-            task_type: The type of the task (e.g., classification, regression)
-                for which metrics need to be computed.
-
-        Returns:
-            dict: Updated dictionary with computed metrics for the specified task type.
-        """
-        result_dict["task"] = [task_type]
-
-        for metric in self.benchmark_metrics[task_type]:
-            metric_func = self.benchmark_metrics[task_type][metric]
-            result_dict[metric] = [metric_func(y_test, test_prediction)]
-
-        return result_dict
-
-    def _process_evaluator(
+    def _get_evaluator_prediction(
         self,
         embeddings: tuple,
         evaluator: AbstractEvaluator,
-        data_split: dict,
+        dataset_configurations: dict,
     ) -> dict:
         """Evaluate embeddings for classification or regression.
 
         Args:
             embeddings: Tuple of (train_embeddings, test_embeddings, compute_time).
             evaluator: The evaluator to use.
-            data_split: Dictionary with data and metadata.
+            dataset_configurations: Dictionary with data and metadata.
 
         Returns:
             Dictionary containing evaluation results.
         """
-        train_embeddings, test_embeddings, compute_time = embeddings
-        y_train = data_split["y_train"]
-        y_test = data_split["y_test"]
-        task_type = data_split["metadata"]["task_type"]
+        train_embeddings, test_embeddings, _ = embeddings
+        y_train = dataset_configurations["y_train"]
 
         # Train evaluator
-        prediction_train, _ = evaluator.get_prediction(
+        evaluator.get_prediction(
             train_embeddings,
             y_train,
             train=True,
@@ -420,38 +396,10 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         return test_prediction
 
-        # Build result dictionary
-        # result_dict = {
-        #     "dataset_name": [data_split["dataset_name"]],
-        #     "dataset_size": [data_split["dataset_size"]],
-        #     "num_features": [data_split["num_features"]],
-        #     "embed_dim": [train_embeddings.shape[-1]],
-        #     "time_to_compute_embedding": [compute_time],
-        #     "algorithm": [evaluator._name],
-        #     "fold": [data_split["metadata"]["fold"]],
-        #     "repeat": [data_split["metadata"]["repeat"]],
-        # }
-        #
-        # result_dict = self._compute_metrics(
-        #     result_dict,
-        #     y_test,
-        #     test_prediction,
-        #     task_type,
-        #     evaluator,
-        # )
-        #
-        # if evaluator:
-        #     # Add evaluator parameters
-        #     evaluator_params = evaluator.get_parameters()
-        #     for key, value in evaluator_params.items():
-        #         result_dict[f"algorithm_{key}"] = [value]
-        #
-        # return result_dict
-
     def _process_end_to_end_model_pipeline(
-            self,
-            embedding_model: AbstractEmbeddingGenerator,
-            data_split: dict,
+        self,
+        embedding_model: AbstractEmbeddingGenerator,
+        data_split: dict,
     ) -> dict:
         X_train = data_split.get("X_train")
         y_train = data_split.get("y_train")
@@ -460,9 +408,8 @@ class TabArenaBenchmark(AbstractBenchmark):
         metadata = data_split.get("metadata")
         task_type = metadata.get("task_type")
 
-        X_train_preprocessed, X_test_preprocessed = embedding_model.preprocess_data(
-            X_train=X_train, X_test=X_test, y_train=y_train, outlier=False,
-            **metadata
+        _, X_test_preprocessed = embedding_model.preprocess_data(
+            X_train=X_train, X_test=X_test, y_train=y_train, outlier=False, **metadata
         )
 
         test_prediction = embedding_model.get_prediction(
