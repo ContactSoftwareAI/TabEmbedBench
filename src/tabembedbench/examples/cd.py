@@ -20,9 +20,10 @@ embedding_models = ['TabICL',
                     'Sphere-Based Line (Dim 64)',
                     'Sphere-Based Line (Dim 192)',
                     'Sphere-Based Line (Dim 512)',
-                    'Sphere-Based (Dim 64)',
-                    'Sphere-Based (Dim 192)',
-                    'Sphere-Based (Dim 512)',
+                    'Sphere-Based Circle (Dim 64)',
+                    'Sphere-Based Circle (Dim 192)',
+                    'Sphere-Based Circle (Dim 512)',
+                    #'Text-Based'
                     ]
 colors = [
     "#0080C5", # CIM Database 1
@@ -55,7 +56,7 @@ maximize = ["auc_score"]
 names = {"auc_score": "AUC Score",
          "mape_score": "MAPE Score"}
 
-timestamps = ["20251112_161222","20251204_094445","20251205_071358","20251209_070143","20251208_151933"]
+timestamps = ["20251112_161222","20251204_094445","20251205_071358","20251208_084628","20251208_151933"]
 directory = f"C:/Users/arf/TabEmbedBench/src/tabembedbench/examples/data"
 result_outlier_files = [f"{directory}/tabembedbench_{timestamp}/results_ADBench_Tabular_{timestamp}.csv" for timestamp in timestamps]
 result_tabarena_files = [f"{directory}/tabembedbench_{timestamp}/results_TabArena_{timestamp}.csv" for timestamp in timestamps]
@@ -147,48 +148,10 @@ for b in benchmark:
             # Get all text objects (algorithm labels)
             texts = [t for t in ax.texts if t.get_text().strip()]
 
-            for i, line in enumerate(ax.lines):
-                xdata = line.get_xdata()
-                ydata = line.get_ydata()
-
-            # Separate elbows from grouping bars with adjusted logic
-            elbows = []
-            for line in ax.lines:
-                xdata = line.get_xdata()
-                ydata = line.get_ydata()
-
-                # Check if it's a vertical line (elbow)
-                # Different tolerance or check if ydata changes more than xdata
-                if len(xdata) >= 2 and len(ydata) >= 2:
-                    x_diff = abs(xdata[-1] - xdata[0])
-                    y_diff = abs(ydata[-1] - ydata[0])
-
-                    # Vertical line: y changes, x stays roughly the same
-                    if y_diff > x_diff:
-                        elbows.append(line)
-
-            for collection in ax.collections:
-                # This won't work directly, so we need a different approach
-                pass
-
-            # Get all text objects (algorithm labels)
-            texts = [t for t in ax.texts if t.get_text().strip()]
-
-            # Separate elbows from grouping bars
-            elbows = []
-            for line in ax.lines:
-                xdata = line.get_xdata()
-                ydata = line.get_ydata()
-
-                if len(xdata) >= 2 and len(ydata) >= 2:
-                    x_diff = abs(xdata[-1] - xdata[0])
-                    y_diff = abs(ydata[-1] - ydata[0])
-
-                    if y_diff > x_diff:
-                        elbows.append(line)
+            # Get lines except grouping bars
+            elbows = [e for e in ax.lines if e.get_color() != 'k']
 
             # Get the axis markers (scatter points)
-            # These are usually stored in collections
             markers = ax.collections
 
             # Process each text label
@@ -273,48 +236,10 @@ sp.critical_difference_diagram(meanranks, nemenyi_friedman, label_props={}, ax=a
 # Get all text objects (algorithm labels)
 texts = [t for t in ax.texts if t.get_text().strip()]
 
-for i, line in enumerate(ax.lines):
-    xdata = line.get_xdata()
-    ydata = line.get_ydata()
-
-# Separate elbows from grouping bars with adjusted logic
-elbows = []
-for line in ax.lines:
-    xdata = line.get_xdata()
-    ydata = line.get_ydata()
-
-    # Check if it's a vertical line (elbow)
-    # Different tolerance or check if ydata changes more than xdata
-    if len(xdata) >= 2 and len(ydata) >= 2:
-        x_diff = abs(xdata[-1] - xdata[0])
-        y_diff = abs(ydata[-1] - ydata[0])
-
-        # Vertical line: y changes, x stays roughly the same
-        if y_diff > x_diff:
-            elbows.append(line)
-
-for collection in ax.collections:
-    # This won't work directly, so we need a different approach
-    pass
-
-# Get all text objects (algorithm labels)
-texts = [t for t in ax.texts if t.get_text().strip()]
-
-# Separate elbows from grouping bars
-elbows = []
-for line in ax.lines:
-    xdata = line.get_xdata()
-    ydata = line.get_ydata()
-
-    if len(xdata) >= 2 and len(ydata) >= 2:
-        x_diff = abs(xdata[-1] - xdata[0])
-        y_diff = abs(ydata[-1] - ydata[0])
-
-        if y_diff > x_diff:
-            elbows.append(line)
+# Get lines except grouping bars
+elbows = [e for e in ax.lines if e.get_color() != 'k']
 
 # Get the axis markers (scatter points)
-# These are usually stored in collections
 markers = ax.collections
 
 # Process each text label
