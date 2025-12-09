@@ -118,26 +118,26 @@ class DatasetBenchmark(AbstractBenchmark):
     def _get_benchmark_name(self) -> str:
         return f"Run_Dataset_{self.dataset_name}"
 
-    def _process_evaluator(
+    def _get_evaluator_prediction(
         self,
         embeddings: tuple,
         evaluator: AbstractEvaluator,
-        data_split: dict,
+        dataset_configurations: dict,
     ) -> dict:
         """Evaluate embeddings for classification or regression.
 
         Args:
             embeddings: Tuple of (train_embeddings, test_embeddings, compute_time).
             evaluator: The evaluator to use.
-            data_split: Dictionary with data and metadata.
+            dataset_configurations: Dictionary with data and metadata.
 
         Returns:
             Dictionary containing evaluation results.
         """
         train_embeddings, test_embeddings, compute_time = embeddings
-        y_train = data_split["y_train"]
-        y_test = data_split["y_test"]
-        task_type = data_split["metadata"]["task_type"]
+        y_train = dataset_configurations["y_train"]
+        y_test = dataset_configurations["y_test"]
+        task_type = dataset_configurations["metadata"]["task_type"]
 
         # Train evaluator
         prediction_train, _ = evaluator.get_prediction(
@@ -154,9 +154,9 @@ class DatasetBenchmark(AbstractBenchmark):
 
         # Build result dictionary
         result_dict = {
-            "dataset_name": [data_split["dataset_name"]],
-            "dataset_size": [data_split["dataset_size"]],
-            "num_features": [data_split["num_features"]],
+            "dataset_name": [dataset_configurations["dataset_name"]],
+            "dataset_size": [dataset_configurations["dataset_size"]],
+            "num_features": [dataset_configurations["num_features"]],
             "embed_dim": [train_embeddings.shape[-1]],
             "time_to_compute_embedding": [compute_time],
             "algorithm": [evaluator._name],
