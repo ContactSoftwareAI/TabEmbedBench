@@ -174,7 +174,7 @@ class OutlierBenchmark(AbstractBenchmark):
 
     def _should_skip_dataset(
         self, dataset_file: Path, **kwargs
-    ) -> tuple[bool, str | None]:
+    ) -> bool:
         """Check if a dataset should be skipped.
 
         Args:
@@ -184,29 +184,32 @@ class OutlierBenchmark(AbstractBenchmark):
         Returns:
             Tuple of (should_skip, reason).
         """
-        # Check if in exclusion list
-        if dataset_file.name in self.exclude_datasets:
-            return True, f"Dataset {dataset_file.name} is in exclusion list"
-
         # Load dataset to check size constraints
         with np.load(dataset_file) as dataset:
             num_samples = dataset["X"].shape[0]
             num_features = dataset["X"].shape[1]
             dataset_name = dataset_file.stem
 
-        # Check size constraints
-        should_skip, reason = self._check_dataset_size_constraints(
-            num_samples, num_features, dataset_name
+        skip_reasons = []
+
+        skip_reasons.extend(self._check_dataset_size_constraints(num_samples, num_features, dataset_name))
+
+        # Check if in exclusion list
+        if dataset_file.name in self.exclude_datasets:
+            skip_reasons.append(f"Excluded by user")
+
+        if skip_reasons:
+            reason = " | ".join(skip_reasons)
+            self.logger.warning(f"Skipping dataset {dataset_name}: {reason}")
+            return True
+
+        self.logger.info(
+            f"Starting experiments for dataset {dataset_name} "
+            f"and task: Outlier Detection."
+            f"Samples: {num_samples}, Features: {num_features}"
         )
 
-        if not should_skip:
-            self.logger.info(
-                f"Starting experiments for dataset {dataset_name} "
-                f"and task: Outlier Detection."
-                f"Samples: {num_samples}, Features: {num_features}"
-            )
-
-        return should_skip, reason
+        return False
 
     def _prepare_dataset(self, dataset_file: Path, **kwargs) -> Iterator[dict]:
         """Prepare data from an ADBench dataset file.

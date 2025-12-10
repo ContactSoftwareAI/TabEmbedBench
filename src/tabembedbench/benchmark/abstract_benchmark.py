@@ -129,7 +129,7 @@ class AbstractBenchmark(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _should_skip_dataset(self, dataset, **kwargs) -> tuple[bool, str | None]:
+    def _should_skip_dataset(self, dataset, **kwargs) -> bool:
         """Determine if a dataset should be skipped.
 
         Args:
@@ -137,7 +137,7 @@ class AbstractBenchmark(ABC):
             **kwargs: Additional parameters for dataset validation.
 
         Returns:
-            Tuple of (should_skip: bool, reason: str | None).
+            bool: True if the dataset should be skipped, False otherwise.
         """
         raise NotImplementedError
 
@@ -376,9 +376,8 @@ class AbstractBenchmark(ABC):
     ) -> None:
         """Process a single dataset: check skip conditions, prepare splits, run models."""
         # Check if dataset should be skipped
-        should_skip, skip_reason = self._should_skip_dataset(dataset, **kwargs)
+        should_skip = self._should_skip_dataset(dataset, **kwargs)
         if should_skip:
-            self.logger.warning(skip_reason)
             return
 
         # Prepare dataset (may yield multiple splits for cross-validation)
@@ -437,7 +436,7 @@ class AbstractBenchmark(ABC):
 
     def _check_dataset_size_constraints(
         self, num_samples: int, num_features: int, dataset_name: str
-    ) -> tuple[bool, str | None]:
+    ) -> list[str] | list[None]:
         """Check if dataset exceeds size constraints.
 
         Args:
@@ -448,21 +447,15 @@ class AbstractBenchmark(ABC):
         Returns:
             Tuple of (should_skip: bool, reason: str | None).
         """
+        skip_reasons = []
+
         if num_samples > self.upper_bound_num_samples:
-            reason = (
-                f"Skipping {dataset_name} - dataset size {num_samples} "
-                f"exceeds limit {self.upper_bound_num_samples}"
-            )
-            return True, reason
+            skip_reasons.append(f"Too many samples ({num_samples} > {self.upper_bound_num_samples})")
 
         if num_features > self.upper_bound_num_features:
-            reason = (
-                f"Skipping {dataset_name} - number of features {num_features} "
-                f"exceeds limit {self.upper_bound_num_features}"
-            )
-            return True, reason
+            skip_reasons.append(f"Too many samples ({num_samples} > {self.upper_bound_num_samples})")
 
-        return False, None
+        return skip_reasons
 
     def _save_results(self):
         """Save the current results to disk if enabled."""

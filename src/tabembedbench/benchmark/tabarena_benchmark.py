@@ -186,37 +186,34 @@ class TabArenaBenchmark(AbstractBenchmark):
         dataset = dataset_info["dataset"]
         num_samples = dataset.qualities["NumberOfInstances"]
         num_features = dataset.qualities["NumberOfFeatures"]
+        num_of_missing_values = dataset.qualities["NumberOfMissingValues"]
 
-        # Check size constraints
-        should_skip, reason = self._check_dataset_size_constraints(
-            num_samples, num_features, dataset.name
+        skip_reasons = []
+
+        skip_reasons.extend(self._check_dataset_size_constraints(num_samples, num_features, dataset.name))
+
+        if num_of_missing_values > 0 and self.skip_missing_values:
+            skip_reasons.append("Contains missing values")
+
+        if self.run_tabpfn_subset and task_id not in TABARENA_TABPFN_SUBSET:
+            skip_reasons.append("Not in TabPFN subset")
+
+        if dataset.name in self.exclude_datasets:
+            skip_reasons.append(f"Excluded by user")
+
+        if skip_reasons:
+            reason = " | ".join(skip_reasons)
+            return True, reason
+
+        self.len_tabpfn_subset -= 1
+        task = dataset_info["task"]
+        self.logger.info(
+            f"Starting experiments for dataset {dataset.name} "
+            f"and task {task.task_type}. "
+            f"{self.len_tabpfn_subset} datasets remaining."
         )
 
-        X, _, _, _ = dataset.get_data(dataset_format="dataframe")
-
-        if self._check_missing_value(X) and self.skip_missing_values:
-            self.logger.warning(f"Dataset {dataset.name} contains missing values.")
-            reason = "Dataset contains missing values."
-            should_skip = self.skip_missing_values
-
-        if not should_skip:
-            if self.run_tabpfn_subset and task_id not in TABARENA_TABPFN_SUBSET:
-                should_skip, reason = True, "Not in TabPFN subset"
-            elif dataset.name in self.exclude_datasets:
-                should_skip, reason = (
-                    True,
-                    f"Excluded dataset {dataset.name} by request of user.",
-                )
-            else:
-                self.len_tabpfn_subset -= 1
-                task = dataset_info["task"]
-                self.logger.info(
-                    f"Starting experiments for dataset {dataset.name} "
-                    f"and task {task.task_type}. "
-                    f"{self.len_tabpfn_subset} datasets remaining."
-                )
-
-        return should_skip, reason
+        return False, None
 
     def _prepare_dataset(self, dataset_info: dict, **kwargs) -> Iterator[dict]:
         """
