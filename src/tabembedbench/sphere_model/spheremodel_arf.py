@@ -14,7 +14,7 @@ class SphereModelARF(TransformerMixin):
 
     Attributes:
         embed_dim (int): Dimensionality of the embedding space.
-        categorical_indices (list[int] | None): Indices of categorical columns.
+        categorical_column_names (list[str]): Names of categorical columns.
         column_properties (list): List storing embedding properties for each column.
         n_cols (int | None): Number of columns in the fitted data.
     """
@@ -48,8 +48,7 @@ class SphereModelARF(TransformerMixin):
         Args:
             data (pd.DataFrame): Input data to fit.
             y: Unused parameter, kept for sklearn compatibility. Defaults to None.
-            categorical_column_names (list[str] | None, optional): Names of categorical
-                columns. If None, will be inferred. Defaults to None.
+            categorical_column_names (list[str] | None, optional): Names of categorical columns.
         """
         self.categorical_column_names = categorical_column_names
 
@@ -59,7 +58,7 @@ class SphereModelARF(TransformerMixin):
             column_data = data[col]
 
             if col in self.categorical_column_names:
-                unique_categories = np.unique(column_data)
+                unique_categories = column_data.dropna().unique()
                 category_embeddings = {}
 
                 for category in unique_categories:
@@ -88,7 +87,7 @@ class SphereModelARF(TransformerMixin):
         row embeddings by averaging the embeddings of all columns for each row.
 
         Args:
-            data: Input data to be transformed into embeddings. Must be either a Pandas DataFrame.
+            data: Input data to be transformed into embeddings. Must be a Pandas DataFrame.
 
         Returns:
             np.ndarray: A NumPy array containing the row embeddings for the input data.
@@ -169,8 +168,8 @@ class SphereModelARF(TransformerMixin):
         dynamically.
 
         Args:
-            column_data (np.ndarray): The categorical data for the column.
-            col_idx (int): Index of the column being processed.
+            column_data (pd.Series): The categorical data for the column.
+            col (str): Name of the column being processed.
 
         Returns:
             np.ndarray: Embedded values of shape (len(column_data), embed_dim).
@@ -183,7 +182,7 @@ class SphereModelARF(TransformerMixin):
         if not isinstance(unique_category_embeddings, dict):
             raise ValueError(f"The unique category embedding is not an dictionary.")
 
-        unique_categories = np.unique(column_data)
+        unique_categories = column_data.dropna().unique()
         for value in unique_categories:
             if value not in unique_category_embeddings.keys():
                 unique_category_embeddings[value] = new_point_on_unit_sphere(self.embed_dim)
@@ -191,7 +190,10 @@ class SphereModelARF(TransformerMixin):
 
         embeddings = np.empty((len(column_data), self.embed_dim),dtype=float)
         for i, value in enumerate(column_data):
-            embeddings[i, :] = unique_category_embeddings[value]
+            if pd.isna(value):
+                embeddings[i, :] = np.zeros(self.embed_dim,dtype=float)
+            else:
+                embeddings[i, :] = unique_category_embeddings[value]
 
         return np.array(embeddings,dtype=float)
 
