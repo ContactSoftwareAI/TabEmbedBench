@@ -1,6 +1,7 @@
 """Simplified outlier detection benchmark using ADBench datasets."""
 
 from datetime import datetime
+import logging
 from pathlib import Path
 from typing import Iterator, Callable
 
@@ -102,6 +103,7 @@ class OutlierBenchmark(AbstractBenchmark):
         exclude_image_datasets: bool = True,
         result_dir: str | Path = "result_outlier",
         timestamp: str = TIMESTAMP,
+        logging_level: int = logging.INFO,
         save_result_dataframe: bool = True,
         upper_bound_num_samples: int = 10000,
         upper_bound_num_features: int = 500,
@@ -123,6 +125,7 @@ class OutlierBenchmark(AbstractBenchmark):
             task_type=[TASK_TYPE],
             result_dir=result_dir,
             timestamp=timestamp,
+            logging_level=logging_level,
             save_result_dataframe=save_result_dataframe,
             upper_bound_num_samples=upper_bound_num_samples,
             upper_bound_num_features=upper_bound_num_features,
@@ -172,9 +175,7 @@ class OutlierBenchmark(AbstractBenchmark):
         """
         return list(self.dataset_paths.glob("*.npz"))
 
-    def _should_skip_dataset(
-        self, dataset_file: Path, **kwargs
-    ) -> bool:
+    def _should_skip_dataset(self, dataset_file: Path, **kwargs) -> bool:
         """Check if a dataset should be skipped.
 
         Args:
@@ -192,7 +193,11 @@ class OutlierBenchmark(AbstractBenchmark):
 
         skip_reasons = []
 
-        skip_reasons.extend(self._check_dataset_size_constraints(num_samples, num_features, dataset_name))
+        skip_reasons.extend(
+            self._check_dataset_size_constraints(
+                num_samples, num_features, dataset_name
+            )
+        )
 
         # Check if in exclusion list
         if dataset_file.name in self.exclude_datasets:
@@ -249,7 +254,9 @@ class OutlierBenchmark(AbstractBenchmark):
             },
         }
 
-    def _get_default_metrics(self) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
+    def _get_default_metrics(
+        self,
+    ) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
         """
         Retrieves a dictionary of default metrics for evaluation purposes.
 
