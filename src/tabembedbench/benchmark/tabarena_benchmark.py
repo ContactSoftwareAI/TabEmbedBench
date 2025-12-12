@@ -324,7 +324,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                     "X_train": X_train,
                     "X_test": X_test,
                     "y_train": y_train,
-                    "y_eval": y_test,
+                    "y_true": y_test,
                     "task_type": task_type,
                     "dataset_metadata": dataset_metadata,
                     "feature_metadata": {
@@ -595,3 +595,18 @@ def run_tabarena_benchmark(
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
+
+if __name__ == "__main__":
+    from tabembedbench.embedding_models import TableVectorizerEmbedding
+    from tabembedbench.evaluators import KNNRegressorEvaluator, KNNClassifierEvaluator
+
+    evaluators = [
+        KNNRegressorEvaluator(num_neighbors=1, metric="euclidean", weights="distance"),
+        KNNClassifierEvaluator(num_neighbors=1, metric="euclidean", weights="distance"),
+    ]
+
+    embedding_models = [
+        TableVectorizerEmbedding()
+    ]
+
+    run_tabarena_benchmark(embedding_models, evaluators)
