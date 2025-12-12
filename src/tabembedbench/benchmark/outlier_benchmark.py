@@ -120,7 +120,7 @@ class OutlierBenchmark(AbstractBenchmark):
         """
         super().__init__(
             name="TabEmbedBench_Outlier",
-            task_type=TASK_TYPE,
+            task_type=[TASK_TYPE],
             result_dir=result_dir,
             timestamp=timestamp,
             save_result_dataframe=save_result_dataframe,
@@ -235,13 +235,14 @@ class OutlierBenchmark(AbstractBenchmark):
         # Yield single split for outlier detection
         yield {
             "X_train": X,
-            "y_eval": y,
+            "y_true": y,
             "task_type": TASK_TYPE,
             "dataset_metadata": {
                 "dataset_name": dataset_name,
                 "num_samples": num_samples,
                 "num_features": num_features,
                 "outlier_ratio": outlier_ratio,
+                "task_type": TASK_TYPE,
             },
             "feature_metadata": {
                 "outlier_ratio": outlier_ratio,
@@ -289,14 +290,6 @@ class OutlierBenchmark(AbstractBenchmark):
         prediction, _ = evaluator.get_prediction(train_embeddings)
 
         return prediction
-
-    def _get_benchmark_name(self) -> str:
-        """Get the benchmark name for result saving.
-
-        Returns:
-            String identifier for the benchmark.
-        """
-        return "ADBench_Tabular"
 
     def download_adbench_tabular_datasets(
         self,

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
+import logging
 from pathlib import Path
 from typing import Iterator, List, Dict, Callable
 
@@ -58,6 +59,7 @@ class AbstractBenchmark(ABC):
         task_type: str | list[str],
         result_dir: str | Path = "results",
         timestamp: str | None = None,
+        logging_level: int = logging.INFO,
         save_result_dataframe: bool = True,
         upper_bound_num_samples: int = 10000,
         upper_bound_num_features: int = 500,
@@ -87,6 +89,7 @@ class AbstractBenchmark(ABC):
                 Defaults to None.
         """
         self.logger = get_benchmark_logger(name)
+        self.logger.setLevel(logging_level)
         self._name = name
         self.task_type = task_type if isinstance(task_type, list) else [task_type]
         self.benchmark_metrics = benchmark_metrics or self._get_default_metrics()
@@ -272,7 +275,7 @@ class AbstractBenchmark(ABC):
 
         """
         dataset_metadata = dataset_configurations["dataset_metadata"]
-
+        self.logger.info(f"Start processing {embedding_model.name} on {dataset_metadata['dataset_name']}...")
         log_gpu_memory(self.logger)
         self.logger.info(
             f"Processing {embedding_model.name} on {dataset_metadata['dataset_name']}..."
@@ -283,6 +286,7 @@ class AbstractBenchmark(ABC):
 
         # Generate embeddings
         try:
+            self.logger.info(f"Generating embeddings with {embedding_model.name}...")
             embeddings = self._generate_embeddings(
                 embedding_model, dataset_configurations
             )
@@ -293,21 +297,22 @@ class AbstractBenchmark(ABC):
             raise
 
         for evaluator in evaluators:
-            if not self._is_compatible(evaluator, dataset_configurations):
-                self.logger.debug(
-                    f"The evaluator {evaluator.name} is not compatible with {self.task_type}. Skipping..."
+            if not self._is_compatible(evaluator, dataset_metadata["task_type"]):
+                self.logger.info(
+                    f"Skipping evaluator {evaluator.name} is not compatible with {self.task_type}. Skipping..."
                 )
                 continue
             else:
+                self.logger.info(f"Evaluating embeddings with {evaluator.name}...")
                 prediction = self._get_evaluator_prediction(
                     embeddings, evaluator, dataset_configurations
                 )
-                metrics_scores = self._compute_metrics(
-                    prediction,
-                    dataset_configurations["y_eval"],
-                    dataset_configurations["task_type"],
+                metric_scores = self._compute_metrics(
+                    y_true=dataset_configurations["y_true"],
+                    y_pred=prediction,
+                    task_type=dataset_configurations["task_type"],
                 )
-                result_row_dict.update(metrics_scores)
+                result_row_dict.update(metric_scores)
                 result_row_dict.update(evaluator.get_parameters())
 
             evaluator.reset_evaluator()
@@ -423,7 +428,7 @@ class AbstractBenchmark(ABC):
         self.logger.info(f"{self.name} benchmark completed.")
         return self.result_df
 
-    def _is_compatible(self, evaluator: AbstractEvaluator, data_split: dict) -> bool:
+    def _is_compatible(self, evaluator: AbstractEvaluator, dataset_tasktype: str) -> bool:
         """Check if evaluator is compatible with the current task.
 
         Args:
@@ -434,7 +439,7 @@ class AbstractBenchmark(ABC):
             True if evaluator is compatible, False otherwise.
         """
         # Check task type compatibility
-        return evaluator.task_type in self.task_type
+        return dataset_tasktype in evaluator.task_type
 
     def _check_dataset_size_constraints(
         self, num_samples: int, num_features: int, dataset_name: str
