@@ -1,2 +1,1 @@
-#from tabembedbench.sphere_model.spheremodel_fho import SphereModelFHO
-from tabembedbench.sphere_model.spheremodel_arf import SphereModelARF
+from tabembedbench.sphere_model.spheremodel import SphereModel

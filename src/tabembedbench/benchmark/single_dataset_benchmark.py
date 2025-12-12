@@ -1,6 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator, Optional
+import os
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -44,6 +45,8 @@ class DatasetBenchmark(AbstractBenchmark):
         feature_columns: Optional[list[str]] = None,
         categorical_columns: Optional[list[str]] = None,
         numerical_columns: Optional[list[str]] = None,
+        text_columns: Optional[list[str]] = None,
+        text_filenames: Optional[list[str]] = None,
         test_size: float = 0.2,
         random_state: int = 42,
         dataset_name: str = None,
@@ -51,7 +54,7 @@ class DatasetBenchmark(AbstractBenchmark):
         task_type: str = "Supervised Classification",
         timestamp: str = TIMESTAMP,
         save_result_dataframe: bool = True,
-        upper_bound_num_samples: int = 100000,
+        upper_bound_num_samples: int = 1000000,
         upper_bound_num_features: int = 500,
     ):
         dataset_name = dataset_name if dataset_name else Path(dataset_path).stem
@@ -71,27 +74,44 @@ class DatasetBenchmark(AbstractBenchmark):
         self.feature_columns = feature_columns
         self.categorical_columns = categorical_columns
         self.numerical_columns = numerical_columns
+        self.text_columns = text_columns
+        self.text_filenames = text_filenames
         self.target_column = target_column
         self.test_size = test_size
         self.random_state = random_state
 
     def _load_datasets(self, **kwargs) -> list[pd.DataFrame]:
-        return [pd.read_csv(self.dataset_path)]
+        return [pd.read_csv(self.dataset_path,low_memory=False)]
 
     def _should_skip_dataset(self, dataset, **kwargs) -> tuple[bool, str | None]:
         return False, None
 
     def _prepare_dataset(self, dataset: pd.DataFrame, **kwargs) -> Iterator[dict]:
-        y = dataset[self.target_column]
-        X = dataset.drop(columns=[self.target_column])
-        if not self.feature_columns:
-            self.feature_columns = X.columns.tolist()
+        if "set" in dataset:
+            data_train = dataset[dataset["set"]!="test"]
+            data_test = dataset[dataset["set"]=="test"]
+            y_train = data_train[self.target_column]
+            y_test = data_test[self.target_column]
+            X_train = data_train.drop(columns=[self.target_column])
+            if not self.feature_columns:
+                self.feature_columns = X_train.columns.tolist()
+            X_train = X_train[self.feature_columns]
+            X_test = data_test.drop(columns=[self.target_column])
+            X_test = X_test[self.feature_columns]
 
-        X = X[self.feature_columns]
+        else:
 
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=self.test_size, random_state=self.random_state
-        )
+            y = dataset[self.target_column]
+            X = dataset.drop(columns=[self.target_column])
+            if not self.feature_columns:
+                self.feature_columns = X.columns.tolist()
+
+
+            X = X[self.feature_columns]
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=self.test_size, random_state=self.random_state
+            )
 
         if self.task_type == "Supervised Classification":
             label_encoder = LabelEncoder()
@@ -106,11 +126,13 @@ class DatasetBenchmark(AbstractBenchmark):
             "y_train": y_train,
             "y_test": y_test,
             "dataset_name": self.dataset_name,
-            "dataset_size": X.shape[0],
-            "num_features": X.shape[-1],
+            "dataset_size": dataset.shape[0],
+            "num_features": X_train.shape[-1],
             "metadata": {
                 "task_type": self.task_type,
                 "categorical_column_names": self.categorical_columns,
+                "text_column_names": self.text_columns,
+                "text_column_paths": [os.path.join(self.result_dir,f) for f in self.text_filenames],
                 "numerical_columns": self.numerical_columns,
             },
         }
@@ -191,20 +213,47 @@ class DatasetBenchmark(AbstractBenchmark):
 
 
 if __name__ == "__main__":
-    from tabembedbench.examples.eurips_run import get_evaluators, get_embedding_models
+    from tabembedbench.examples.sphere_model_run import get_evaluators, get_embedding_models
 
-    embedding_models = get_embedding_models(debug=True)
-    evaluators = get_evaluators(debug=True)
+    embedding_models = get_embedding_models(debug=False)
+    evaluators = get_evaluators(debug=False)
 
-    csv_path = ""
-    target_column = ""
-    task_type = "Supervised Classification"
-    feature_columns = []
+    #csv_path = r"C:\Users\arf\data.tabdata-testsets\Titanic\titanic_split.csv"
+    #target_column = "Survived"
+    #task_type = "Supervised Classification"
+    #categorical_columns = ["Pclass","Sex","Embarked"]
+    #numerical_columns = ["Age","SibSp","Parch","Fare"]
+
+    #csv_path = r"C:\Users\arf\data.tabdata-testsets\Rossmann\rossmann_normalized.csv"
+    #target_column = "NormalizedSales"
+    #task_type = "Supervised Regression"
+    #categorical_columns = ["Store","Promo","StateHoliday","SchoolHoliday"]
+    #numerical_columns = ["DayOfWeek","Date"]
+
+    #csv_path = r"C:\Users\arf\data.tabdata-testsets\WSV\ZEICHNUNG_cleaned.csv"
+    #target_column = 'WSV_Z_OBTEIL_NR'
+    #task_type = "Supervised Classification"
+    #categorical_columns = ['Z_STATUS', 'ERZEUG_SYSTEM', 'EV_LOCATION', 'CDB_SITE_ID']
+    #numerical_columns = []
+    #text_columns = ["WSV_Z_EINZEL"]
+    #text_filenames = [rf"{i}.pkl" for i in text_columns]
+
+    csv_path = r"C:\Users\arf\data.tabdata-testsets\simple\simpleWithText.csv"
+    target_column = 'Grade'
+    task_type = "Supervised Regression"
+    categorical_columns = ['Pupil', 'Subject', 'Teacher']
+    numerical_columns = []
+    text_columns = ["Comment"]
+    text_filenames = [rf"{i}.pkl" for i in text_columns]
 
     dataset_benchmark = DatasetBenchmark(
         dataset_path=csv_path,
         target_column=target_column,
-        feature_columns=feature_columns if len(feature_columns) > 0 else None,
+        categorical_columns=categorical_columns,
+        numerical_columns=numerical_columns,
+        text_columns=text_columns,
+        text_filenames=text_filenames,
+        feature_columns=categorical_columns+numerical_columns+text_columns,
         task_type=task_type,
     )
 

@@ -2,7 +2,7 @@ import numpy as np
 import polars as pl
 import pandas as pd
 from sklearn.base import TransformerMixin
-from tabembedbench.sphere_model import SphereModelARF as SphereModel
+from tabembedbench.sphere_model import SphereModel
 
 from tabembedbench.embedding_models.abstractembedding import AbstractEmbeddingGenerator
 
@@ -44,6 +44,8 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
         outlier: bool = False,
         categorical_column_names: list[str] = [],
         categorical_indices: list[int] = [],
+        text_column_names: list[str] = [],
+        text_indices: list[int] = [],
         **kwargs,
     ) -> pd.DataFrame:
 
@@ -53,6 +55,10 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
             X (np.ndarray | pl.DataFrame | pd.DataFrame): Input data to preprocess.
             train (bool, optional): Whether this is training mode. Defaults to True.
             outlier (bool, optional): Whether to handle outliers. Defaults to False.
+            categorical_column_names: Names of the categorical columns,
+            categorical_indices: Indices of the categorical columns,
+            text_column_names: Names of the text columns,
+            text_indices: Indices of the text columns,
             **kwargs: Additional keyword arguments (unused).
 
         Returns:
@@ -67,6 +73,10 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
 
                 if i in categorical_indices:
                     column_names.append(f"categorical_{i}")
+                    # Keep as-is, Pandas will likely assign object dtype for mixed/string
+                    temp_data_list.append(col_series)
+                elif i in text_indices:
+                    column_names.append(f"text_{i}")
                     # Keep as-is, Pandas will likely assign object dtype for mixed/string
                     temp_data_list.append(col_series)
                 else:
@@ -91,6 +101,8 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
 
                 if col_name in categorical_column_names:
                     processed_cols[col_name] = col_series
+                elif col_name in text_column_names:
+                    processed_cols[col_name] = col_series
                 else:
                     if pd.api.types.is_numeric_dtype(dtype):
                         processed_cols[col_name] = col_series.replace([np.inf, -np.inf], np.nan)
@@ -114,6 +126,8 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
             for col_index, (col_name, dtype) in enumerate(processed_df.dtypes.items()):
                 col_series = processed_df[col_name]
                 if col_name in categorical_column_names:
+                    processed_pd_dfs.append(col_series.to_frame())
+                if col_name in text_column_names:
                     processed_pd_dfs.append(col_series.to_frame())
                 else:
                     if pd.api.types.is_numeric_dtype(dtype):
@@ -144,20 +158,29 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
         self,
         data: pd.DataFrame,
         categorical_column_names: list[str] | None = None,
+        text_column_names: list[str] | None = None,
+        text_column_paths: list[str] | None = None,
         **kwargs,
     ):
         """Fit the embedding model to preprocessed data.
 
         Args:
             data (pd:DataFrame): Preprocessed input data.
-            categorical_indices (list[int] | None, optional): Categorical column indices.
+            categorical_column_names (list[str] | None, optional): Names of categorical columns.
+                Defaults to None.
+            textl_column_names (list[str] | None, optional): Names of text columns.
                 Defaults to None.
             **kwargs: Additional keyword arguments (unused).
         """
         if categorical_column_names is None:
             categorical_column_names = []
             #categorical_indices = infer_categorical_columns(data)
-        self.model.fit(data, categorical_column_names=categorical_column_names)
+        if text_column_names is None:
+            text_column_names = []
+        self.model.fit(data,
+                       categorical_column_names=categorical_column_names,
+                       text_column_names=text_column_names,
+                       text_column_paths=text_column_paths)
 
     def _compute_embeddings(
         self,

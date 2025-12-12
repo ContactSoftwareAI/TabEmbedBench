@@ -23,7 +23,7 @@ embedding_models = ['TabICL',
                     'Sphere-Based Circle (Dim 64)',
                     'Sphere-Based Circle (Dim 192)',
                     'Sphere-Based Circle (Dim 512)',
-                    #'Text-Based'
+                    'Text-Based'
                     ]
 colors = [
     "#0080C5", # CIM Database 1
@@ -41,9 +41,9 @@ colors = [
     "#EA5A02", # Project Office 3
     "#EA5A02", # Project Office 3
     "#EA5A02", # Project Office 3
+    "#003254", # CONTACT 1
     "#005E9E", # CIM Database 3
     "#36AEE7", # CIM Database 2
-    "#003254", # CONTACT 1
     "#DBDC2E", # Workspaces 2
     "#639C2E", # Workspaces 3
     "#CC171D", # CONTACT rot
@@ -56,7 +56,7 @@ maximize = ["auc_score"]
 names = {"auc_score": "AUC Score",
          "mape_score": "MAPE Score"}
 
-timestamps = ["20251112_161222","20251204_094445","20251205_071358","20251208_084628","20251208_151933"]
+timestamps = ["20251112_161222","20251204_094445","20251205_071358","20251208_084628","20251208_151933","20251210_073948"]
 directory = f"C:/Users/arf/TabEmbedBench/src/tabembedbench/examples/data"
 result_outlier_files = [f"{directory}/tabembedbench_{timestamp}/results_ADBench_Tabular_{timestamp}.csv" for timestamp in timestamps]
 result_tabarena_files = [f"{directory}/tabembedbench_{timestamp}/results_TabArena_{timestamp}.csv" for timestamp in timestamps]

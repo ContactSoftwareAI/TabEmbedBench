@@ -64,9 +64,10 @@ def get_embedding_models(debug=False):
     #sphere_model_8 = SphereBasedEmbedding(embed_dim=8)
     #sphere_model_16 = SphereBasedEmbedding(embed_dim=16)
     #sphere_model_32 = SphereBasedEmbedding(embed_dim=32)
-    sphere_model_64 = SphereBasedEmbedding(embed_dim=64)
-    sphere_model_192 = SphereBasedEmbedding(embed_dim=192)
-    sphere_model_512 = SphereBasedEmbedding(embed_dim=512)
+    #sphere_model_64 = SphereBasedEmbedding(embed_dim=64)
+    #sphere_model_192 = SphereBasedEmbedding(embed_dim=192)
+    sphere_model_256 = SphereBasedEmbedding(embed_dim=256)
+    #sphere_model_512 = SphereBasedEmbedding(embed_dim=512)
 
     embedding_models = [
         #tabicl_row_embedder,
@@ -77,9 +78,10 @@ def get_embedding_models(debug=False):
         #sphere_model_8,
         #sphere_model_16,
         #sphere_model_32,
-        sphere_model_64,
-        sphere_model_192,
-        sphere_model_512
+        #sphere_model_64,
+        #sphere_model_192,
+        sphere_model_256,
+        #sphere_model_512
     ]
 
     return embedding_models

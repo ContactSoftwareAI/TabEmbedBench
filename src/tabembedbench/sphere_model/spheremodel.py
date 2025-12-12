@@ -1,20 +1,24 @@
 import numpy as np
 import pandas as pd
+import os
+import pickle
 from sklearn.base import TransformerMixin
 from scipy.stats import qmc
+from tabembedbench.utils.google_embeddings import embed_text
 
 
-class SphereModelARF(TransformerMixin):
+class SphereModel(TransformerMixin):
     """Sphere-based embedding generator for tabular data.
 
-    This embedding model projects tabular data onto high-dimensional spheres,
-    treating categorical and numerical features differently. Categorical features
-    are embedded as points in small regions around random sphere points, while
-    numerical features are embedded along radial directions.
+    This embedding model projects tabular data onto a high-dimensional unit sphere,
+    treating categorical, text and numerical features differently. Categorical features
+    are embedded as random points on the unit sphere, while text is embedded using an LLM
+    and numerical features are embedded along a great circle.
 
     Attributes:
         embed_dim (int): Dimensionality of the embedding space.
         categorical_column_names (list[str]): Names of categorical columns.
+        text_column_names (list[str]): Names of text columns.
         column_properties (list): List storing embedding properties for each column.
         n_cols (int | None): Number of columns in the fitted data.
     """
@@ -31,13 +35,16 @@ class SphereModelARF(TransformerMixin):
         self.embed_dim = embed_dim
         #self.point_generator = SobolPointGenerator(d_internal=self.embed_dim-1)
         self.categorical_column_names = None
+        self.text_column_names = None
         self.column_properties = {}
         self.n_cols = None
 
     def fit(
         self,
         data: pd.DataFrame,
-        categorical_column_names: list[str],
+        categorical_column_names: list[str] = [],
+        text_column_names: list[str] = [],
+        text_column_paths: list[str] = [],
         y=None,
     ):
         """Fit the embedding model to the data.
@@ -47,10 +54,14 @@ class SphereModelARF(TransformerMixin):
 
         Args:
             data (pd.DataFrame): Input data to fit.
+            categorical_column_names (list[str], optional): Names of categorical columns.
+            text_column_names (list[str], optional): Names of text columns.
+            text_column_paths (list[str], optional): Names of pickle files where precomputed text
+                embeddings are stored.
             y: Unused parameter, kept for sklearn compatibility. Defaults to None.
-            categorical_column_names (list[str] | None, optional): Names of categorical columns.
         """
         self.categorical_column_names = categorical_column_names
+        self.text_column_names = text_column_names
 
         self.n_cols = len(data.columns)
 
@@ -66,6 +77,12 @@ class SphereModelARF(TransformerMixin):
                     #category_embeddings[category] = new_point(self.embed_dim)
 
                 self.column_properties[col] = category_embeddings
+            elif col in self.text_column_names:
+                pos = self.text_column_names.index(col)
+                if pos<len(text_column_paths) or not text_column_paths[pos].endswith(".pkl"):
+                    self.column_properties[col] = {'path': text_column_paths[pos]}
+                else:
+                    self.column_properties[col] = {'path': 'None'}
             else:
                 point = new_point_on_unit_sphere(self.embed_dim)
                 vec = np.zeros(self.embed_dim)
@@ -79,11 +96,11 @@ class SphereModelARF(TransformerMixin):
                 self.column_properties[col] = {'point': point, 'vec': vec, 'min_value': col_min, 'max_value': col_max}
 
     def transform(self, data: pd.DataFrame) -> np.ndarray:
-        """Transforms input data into embeddings using appropriate methods for categorical and
+        """Transforms input data into embeddings using appropriate methods for categorical, text and
         numerical columns and returns row-wise embeddings.
 
         This method processes input data to generate embeddings for each column based on
-        whether the column contains categorical or numerical data. It then calculates
+        whether the column contains categorical, text or numerical data. It then calculates
         row embeddings by averaging the embeddings of all columns for each row.
 
         Args:
@@ -107,6 +124,8 @@ class SphereModelARF(TransformerMixin):
 
             if col in self.categorical_column_names:
                 col_embedding = self._embed_categorical_column(column_data, col)
+            elif col in self.text_column_names:
+                col_embedding = self._embed_text_column(column_data, col)
             else:
                 col_embedding = self._embed_numerical_column(column_data.to_numpy(), col)
 
@@ -194,6 +213,50 @@ class SphereModelARF(TransformerMixin):
                 embeddings[i, :] = np.zeros(self.embed_dim,dtype=float)
             else:
                 embeddings[i, :] = unique_category_embeddings[value]
+
+        return np.array(embeddings,dtype=float)
+
+
+    def _embed_text_column(
+        self, column_data: pd.Series, col: str
+    ) -> np.ndarray:
+        """
+        Embed a text column into the embedding space using an LLM.
+
+        Args:
+            column_data (pd.Series): The text data for the column.
+            col (str): Name of the column being processed.
+
+        Returns:
+            np.ndarray: Embedded values of shape (len(column_data), embed_dim).
+        """
+        embeddings = np.zeros((len(column_data), self.embed_dim),dtype=float)
+        result_map = {}
+        precomputed_embeddings = {}
+        unique_elements = column_data.dropna().unique()
+        elements_to_process_list = unique_elements.tolist()
+        if os.path.exists(self.column_properties[col]['path']):
+            precomputed_embeddings = pickle.load(open(self.column_properties[col]['path'],'rb'))
+            elements_to_process_list = [item for item in elements_to_process_list if item not in precomputed_embeddings]
+        if elements_to_process_list:
+            success = False
+            batchsize = 128
+            while not success and batchsize >= 1:
+                try:
+                    text_embeddings = embed_text(elements_to_process_list, batchsize=batchsize)
+                    success = True
+                except Exception as e:
+                    print(f"An error occurred during text embedding for batchsize {batchsize}: {e}")
+                    print("reducing batchsize")
+                    batchsize = int(batchsize/2)
+            if success:
+                result_map = dict(zip(elements_to_process_list, text_embeddings))
+                precomputed_embeddings.update(result_map)
+                if self.column_properties[col]['path'] != "None":
+                    pickle.dump(precomputed_embeddings,open(self.column_properties[col]['path'],'wb'))
+                processed_values = column_data.map(precomputed_embeddings)
+                update_mask = processed_values.notna().to_numpy()
+                embeddings[update_mask] = np.stack(processed_values[update_mask].to_list())
 
         return np.array(embeddings,dtype=float)
 
