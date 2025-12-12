@@ -1,16 +1,14 @@
 """Simplified outlier detection benchmark using ADBench datasets."""
 
-from datetime import datetime
 import logging
-from pathlib import Path
-from typing import Iterator, Callable
-
 import zipfile
-
-import requests
+from datetime import datetime
+from pathlib import Path
+from typing import Callable, Iterator
 
 import numpy as np
 import polars as pl
+import requests
 from sklearn.metrics import roc_auc_score
 
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
@@ -201,7 +199,7 @@ class OutlierBenchmark(AbstractBenchmark):
 
         # Check if in exclusion list
         if dataset_file.name in self.exclude_datasets:
-            skip_reasons.append(f"Excluded by user")
+            skip_reasons.append("Excluded by user")
 
         if skip_reasons:
             reason = " | ".join(skip_reasons)
