@@ -255,6 +255,19 @@ class TabArenaBenchmark(AbstractBenchmark):
         folds = dataset_info["folds"]
         repeats = dataset_info["repeats"]
 
+        dataset_metadata = {
+            "dataset_name": dataset.name,
+            "num_samples": dataset.qualities["NumberOfInstances"],
+            "num_features": dataset.qualities["NumberOfFeatures"],
+            "percentage_of_numeric_features": dataset.qualities["PercentageNumericFeatures"],
+            "ratio_features_samples": dataset.qualities["Dimensionality"],
+        }
+
+        {"dataset_name": dataset.name, "num_samples": X.shape[0],
+            "num_features": X_train.shape[1],
+            "num_classes": n_classes if n_classes else None, "fold": fold,
+            "repeat": repeat, }
+
         task_type = task.task_type
 
         X, y, categorical_indicator, _ = dataset.get_data(
@@ -315,14 +328,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                     "y_train": y_train,
                     "y_eval": y_test,
                     "task_type": task_type,
-                    "dataset_metadata": {
-                        "dataset_name": dataset.name,
-                        "num_samples": X.shape[0],
-                        "num_features": X_train.shape[1],
-                        "num_classes": n_classes if n_classes else None,
-                        "fold": fold,
-                        "repeat": repeat,
-                    },
+                    "dataset_metadata": dataset_metadata,
                     "feature_metadata": {
                         "categorical_indices": categorical_indices,
                         "categorical_column_names": categorical_column_names,
