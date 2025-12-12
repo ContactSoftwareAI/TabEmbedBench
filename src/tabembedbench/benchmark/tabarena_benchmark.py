@@ -310,11 +310,9 @@ class TabArenaBenchmark(AbstractBenchmark):
                 # Encode labels for classification
                 if task_type == "Supervised Classification":
                     label_encoder = LabelEncoder()
-                    y_train_clean = y_train.astype(str).values
-                    y_test_clean = y_test.astype(str).values
 
-                    y_train = label_encoder.fit_transform(y_train_clean)
-                    y_test = label_encoder.transform(y_test_clean)
+                    y_train = label_encoder.fit_transform(y_train)
+                    y_test = label_encoder.transform(y_test)
                     n_classes = len(label_encoder.classes_)
                     task_type = (
                         "Supervised Multiclass Classification"
