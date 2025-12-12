@@ -271,13 +271,15 @@ class AbstractBenchmark(ABC):
             dataset_configurations: A subset of the dataset to be processed with the embedding model.
 
         """
+        dataset_metadata = dataset_configurations["dataset_metadata"]
+
         log_gpu_memory(self.logger)
         self.logger.info(
-            f"Processing {embedding_model.name} on {dataset_configurations['dataset_name']}..."
+            f"Processing {embedding_model.name} on {dataset_metadata['dataset_name']}..."
         )
 
         result_row_dict = {"embedding_model": embedding_model.name}
-        result_row_dict.update(dataset_configurations["dataset_metadata"])
+        result_row_dict.update(dataset_metadata)
 
         # Generate embeddings
         try:
@@ -363,7 +365,7 @@ class AbstractBenchmark(ABC):
                 continue
             except Exception as e:
                 self.logger.exception(
-                    f"Error running embedding model {embedding_model.name} on {dataset_configurations['dataset_name']} dataset: {e}"
+                    f"Error processing embedding model {embedding_model.name} on dataset {dataset_configurations["dataset_metadata"].get("dataset_name", "Unknown")}: {e}"
                 )
                 continue
 
@@ -453,7 +455,7 @@ class AbstractBenchmark(ABC):
             skip_reasons.append(f"Too many samples ({num_samples} > {self.upper_bound_num_samples})")
 
         if num_features > self.upper_bound_num_features:
-            skip_reasons.append(f"Too many samples ({num_samples} > {self.upper_bound_num_samples})")
+            skip_reasons.append(f"Too many features ({num_features} > {self.upper_bound_num_features})")
 
         return skip_reasons
 
