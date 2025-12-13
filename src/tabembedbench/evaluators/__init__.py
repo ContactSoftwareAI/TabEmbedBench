@@ -2,10 +2,12 @@ from tabembedbench.evaluators.abstractevaluator import (
     AbstractEvaluator,
     AbstractHPOEvaluator,
 )
+from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
+from tabembedbench.evaluators.knn_regressor import KNNRegressorEvaluator
 from tabembedbench.evaluators.outlier import (
     DeepSVDDEvaluator,
-    LocalOutlierFactorEvaluator,
     IsolationForestEvaluator,
+    LocalOutlierFactorEvaluator,
 )
 
 __all__ = [
@@ -14,4 +16,6 @@ __all__ = [
     "DeepSVDDEvaluator",
     "LocalOutlierFactorEvaluator",
     "IsolationForestEvaluator",
+    "KNNRegressorEvaluator",
+    "KNNClassifierEvaluator",
 ]
