@@ -309,6 +309,7 @@ class AbstractBenchmark(ABC):
                     y_pred=prediction,
                     task_type=dataset_metadata.get("task_type"),
                 )
+                result_row_dict["algorithm"] = evaluator.name
                 result_row_dict.update(metric_scores)
                 result_row_dict.update(evaluator.get_parameters())
 

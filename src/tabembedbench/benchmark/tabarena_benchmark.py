@@ -428,9 +428,10 @@ class TabArenaBenchmark(AbstractBenchmark):
             "dataset_name": [data_split["dataset_name"]],
             "dataset_size": [data_split["dataset_size"]],
             "num_features": [data_split["num_features"]],
-            "algorithm": [embedding_model.name],
+            "embedding_model": [embedding_model.name],
             "fold": [data_split["metadata"]["fold"]],
             "repeat": [data_split["metadata"]["repeat"]],
+            "algorithm": [embedding_model.name],
         }
 
         result_dict = self._compute_metrics(
