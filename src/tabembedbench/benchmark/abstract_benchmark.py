@@ -271,37 +271,34 @@ class AbstractBenchmark(ABC):
 
         """
         dataset_metadata = dataset_configurations["dataset_metadata"]
-        self.logger.info(
-            f"Start processing {embedding_model.name} on {dataset_metadata['dataset_name']}..."
-        )
+        logger_prefix = f"Dataset: {dataset_metadata['dataset_name']} - Embedding Model: {embedding_model.name}"
+
+        self.logger.info(f"{logger_prefix} - Start processing...")
         log_gpu_memory(self.logger)
-        self.logger.info(
-            f"Processing {embedding_model.name} on {dataset_metadata['dataset_name']}..."
-        )
 
         result_row_dict = {"embedding_model": embedding_model.name}
         result_row_dict.update(dataset_metadata)
 
         # Generate embeddings
         try:
-            self.logger.info(f"Generating embeddings with {embedding_model.name}...")
+            self.logger.info(f"{logger_prefix} - Generating embeddings...")
             embeddings = self._generate_embeddings(
                 embedding_model, dataset_configurations
             )
         except Exception as e:
-            self.logger.exception(
-                f"Error generating embeddings with {embedding_model.name}: {e}"
-            )
+            self.logger.exception(f"{logger_prefix} - Error generating embeddings: {e}")
             raise
 
         for evaluator in evaluators:
             if not self._is_compatible(evaluator, dataset_metadata.get("task_type")):
-                self.logger.info(
-                    f"Skipping evaluator {evaluator.name} is not compatible with {self.task_type}. Skipping..."
+                self.logger.debug(
+                    f"{logger_prefix} - Skipping evaluator {evaluator.name} is not compatible with {self.task_type}. Skipping..."
                 )
                 continue
             else:
-                self.logger.info(f"Evaluating embeddings with {evaluator.name}...")
+                self.logger.info(
+                    f"{logger_prefix} - Evaluating embeddings with {evaluator.name}..."
+                )
                 prediction = self._get_evaluator_prediction(
                     embeddings,
                     evaluator,
