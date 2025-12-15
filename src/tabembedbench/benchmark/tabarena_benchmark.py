@@ -370,6 +370,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         Returns:
             Dictionary containing evaluation results.
         """
+        task_type = dataset_configurations["dataset_metadata"]["task_type"]
         train_embeddings, test_embeddings, _ = embeddings
         y_train = dataset_configurations["y_train"]
 
@@ -385,6 +386,9 @@ class TabArenaBenchmark(AbstractBenchmark):
             test_embeddings,
             train=False,
         )
+
+        if task_type == SUPERVISED_BINARY_CLASSIFICATION:
+            test_prediction = test_prediction[:, 1]
 
         return test_prediction
 
@@ -573,24 +577,3 @@ def run_tabarena_benchmark(
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
-
-
-if __name__ == "__main__":
-    from tabembedbench.embedding_models import TableVectorizerEmbedding
-    from tabembedbench.evaluators import KNNClassifierEvaluator, KNNRegressorEvaluator
-
-    evaluators = [
-        KNNRegressorEvaluator(num_neighbors=1, metric="euclidean", weights="distance"),
-        KNNClassifierEvaluator(num_neighbors=1, metric="euclidean", weights="distance"),
-    ]
-
-    embedding_models = [TableVectorizerEmbedding()]
-
-    result = run_tabarena_benchmark(
-        embedding_models,
-        evaluators,
-        upper_bound_num_samples=1000,
-        upper_bound_num_features=100,
-    )
-
-    print(result)
