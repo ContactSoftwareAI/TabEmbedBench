@@ -198,13 +198,12 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         if skip_reasons:
             reason = " | ".join(skip_reasons)
-            return True, f"Skipping dataset {dataset.name}: {reason}"
+            return True, f"Dataset {dataset.name} - Skipping dataset: {reason}"
 
         self.len_tabpfn_subset -= 1
         task = dataset_info["task"]
         msg = (
-            f"Starting experiments for dataset {dataset.name} "
-            f"and task {task.task_type}. "
+            f"Dataset {dataset.name} - Starting experiments for task {task.task_type}. "
             f"{self.len_tabpfn_subset} datasets remaining."
         )
 

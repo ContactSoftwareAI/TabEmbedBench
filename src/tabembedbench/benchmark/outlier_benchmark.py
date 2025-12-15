@@ -203,9 +203,9 @@ class OutlierBenchmark(AbstractBenchmark):
 
         if skip_reasons:
             reason = " | ".join(skip_reasons)
-            return True, f"Skipping dataset {dataset_name}: {reason}"
+            return True, f"Dataset: {dataset_name} - Skipping dataset: {reason}"
 
-        msg = f"Starting experiments for dataset {dataset_name}. "
+        msg = f"Dataset: {dataset_name} - Starting experiments... "
 
         return False, msg
 
