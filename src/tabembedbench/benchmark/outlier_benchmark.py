@@ -4,7 +4,7 @@ import logging
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Iterator, Optional
+from typing import Callable, Iterator, Optional, Tuple
 
 import numpy as np
 import polars as pl
@@ -173,7 +173,7 @@ class OutlierBenchmark(AbstractBenchmark):
         """
         return list(self.dataset_paths.glob("*.npz"))
 
-    def _should_skip_dataset(self, dataset_file: Path, **kwargs) -> Optional[str]:
+    def _should_skip_dataset(self, dataset_file: Path, **kwargs) -> Tuple[bool, str]:
         """Check if a dataset should be skipped.
 
         Args:
@@ -189,7 +189,7 @@ class OutlierBenchmark(AbstractBenchmark):
             num_features = dataset["X"].shape[1]
             dataset_name = dataset_file.stem
 
-        skip_reasons = []
+        skip_reasons: list[str] = []
 
         skip_reasons.extend(
             self._check_dataset_size_constraints(
@@ -203,9 +203,11 @@ class OutlierBenchmark(AbstractBenchmark):
 
         if skip_reasons:
             reason = " | ".join(skip_reasons)
-            return f"Skipping dataset {dataset_name}: {reason}"
+            return True, f"Skipping dataset {dataset_name}: {reason}"
 
-        return None
+        msg = f"Starting experiments for dataset {dataset_name}. "
+
+        return False, msg
 
     def _prepare_dataset(self, dataset_file: Path, **kwargs) -> Iterator[dict]:
         """Prepare data from an ADBench dataset file.
@@ -268,8 +270,9 @@ class OutlierBenchmark(AbstractBenchmark):
 
     def _get_evaluator_prediction(
         self,
-        embeddings: tuple,
+        embeddings: Tuple[np.ndarray, np.ndarray, float],
         evaluator: AbstractEvaluator,
+        dataset_configurations: dict,
     ) -> np.ndarray:
         """Evaluate embeddings for outlier detection.
 
