@@ -55,6 +55,21 @@ TABARENA_TABPFN_SUBSET = [
 ]
 
 
+def configure_openml_cache(cache_dir: str | Path | None = None) -> None:
+    """Configure OpenML to cache datasets locally.
+
+    Args:
+        cache_dir: Path where OpenML datasets should be cached. If None, uses default.
+    """
+    if cache_dir is None:
+        cache_dir = Path("data/openml_datasets")
+    else:
+        cache_dir = Path(cache_dir)
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    openml.config.set_cache_directory(str(cache_dir))
+
+
 class TabArenaBenchmark(AbstractBenchmark):
     """Simplified benchmark for TabArena classification and regression tasks.
 
@@ -73,6 +88,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         upper_bound_num_samples: int = 100000,
         upper_bound_num_features: int = 500,
         run_tabpfn_subset: bool = True,
+        openml_cache_dir: str | Path | None = None,
     ):
         """Initialize the TabArena benchmark.
 
@@ -106,6 +122,18 @@ class TabArenaBenchmark(AbstractBenchmark):
         self.task_ids = None
         self.len_tabpfn_subset = len(TABARENA_TABPFN_SUBSET)
         self.exclude_datasets = exclude_datasets or []
+
+        # Setup OpenML cache (similar to OutlierBenchmark's dataset_paths)
+        if openml_cache_dir is None:
+            openml_cache_dir = Path("data/tabarena_datasets")
+        else:
+            openml_cache_dir = Path(openml_cache_dir)
+
+        openml_cache_dir.mkdir(parents=True, exist_ok=True)
+        openml.config.set_root_cache_directory(openml_cache_dir)
+        self.openml_cache_dir = openml_cache_dir
+
+        self.logger.info(f"OpenML cache directory: {self.openml_cache_dir}")
 
     def _load_datasets(self, **kwargs) -> list:
         """Load TabArena tasks from OpenML.
@@ -473,6 +501,7 @@ def run_tabarena_benchmark(
     save_result_dataframe: bool = True,
     timestamp: str = TIMESTAMP,
     run_tabpfn_subset: bool = True,
+    openml_cache_dir: str | Path | None = None,
 ) -> pl.DataFrame:
     """Run the TabArena benchmark for a set of embedding models.
 
@@ -496,6 +525,7 @@ def run_tabarena_benchmark(
         save_result_dataframe: Whether to save results to disk. Defaults to True.
         timestamp: Timestamp string for result file naming. Defaults to current timestamp.
         run_tabpfn_subset: Whether to run only the TabPFN subset of tasks. Defaults to True.
+        openml_cache_dir: Directory for caching OpenML datasets. If None, uses default.
 
     Returns:
         pl.DataFrame: Polars DataFrame containing the benchmark results.
@@ -510,6 +540,7 @@ def run_tabarena_benchmark(
         upper_bound_num_samples=upper_bound_num_samples,
         upper_bound_num_features=upper_bound_num_features,
         run_tabpfn_subset=run_tabpfn_subset,
+        openml_cache_dir=openml_cache_dir,
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
