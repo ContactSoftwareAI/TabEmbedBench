@@ -26,33 +26,6 @@ class NotEndToEndCompatibleError(Exception):
 
 
 class AbstractBenchmark(ABC):
-    """Abstract base class for benchmark implementations.
-
-    This class provides a simplified structure for different benchmark types
-    (e.g., outlier detection, classification, regression). It handles common
-    functionality such as result management, logging, and GPU cache management.
-
-    The workflow is clear and linear:
-    1. Load datasets
-    2. For each dataset:
-       a. Check if should skip
-       b. Prepare data (yields one or more data splits)
-       c. For each data split:
-          - Generate embeddings with each model
-          - Evaluate embeddings with each evaluator
-          - Save results
-
-    Attributes:
-        logger: Logger instance for the benchmark.
-        result_df: Polars DataFrame to store benchmark results.
-        result_dir: Directory path for saving results.
-        timestamp: Timestamp string for result file naming.
-        save_result_dataframe: Flag to determine if results should be saved.
-        upper_bound_num_samples: Maximum number of samples to process.
-        upper_bound_num_features: Maximum number of features to process.
-        task_type: Type of task (e.g., 'Outlier Detection', 'Supervised Classification').
-    """
-
     def __init__(
         self,
         name: str,
@@ -66,27 +39,25 @@ class AbstractBenchmark(ABC):
         benchmark_metrics: Dict | None = None,
     ):
         """
-        Initializes the benchmark object with the provided parameters and sets up
-        necessary configurations such as logging, metrics, and result directories.
+        Initializes an instance of the benchmarking class with specified configurations, logging,
+        and optional parameters for task execution.
 
         Args:
-            name (str): The name of the benchmark.
-            task_type (str | list[str]): The type of task, either a string or a list
-                of task types.
-            result_dir (str | Path, optional): The directory where results will be saved.
-                Defaults to "results".
-            timestamp (str | None, optional): A specific timestamp for the benchmark
-                execution. If not provided, the current timestamp is used. Defaults
-                to None.
-            save_result_dataframe (bool, optional): Whether to save the result
-                dataframe. Defaults to True.
-            upper_bound_num_samples (int, optional): The upper limit on the number
-                of samples for benchmarking. Defaults to 10000.
-            upper_bound_num_features (int, optional): The upper limit on the number
-                of features for benchmarking. Defaults to 500.
-            benchmark_metrics (Dict | None, optional): A dictionary of benchmark
-                metrics to be used. If not provided, default metrics will be used.
-                Defaults to None.
+            name (str): Name of the benchmark or task identifier.
+            task_type (str | list[str]): Type or types of tasks to execute, e.g., "classification".
+            result_dir (str | Path, optional): Directory path where results will be stored. Defaults
+                to "results".
+            timestamp (str | None, optional): A string timestamp for benchmarking identification.
+                If None, the current timestamp is used. Defaults to None.
+            logging_level (int, optional): Logging verbosity level. Defaults to logging.INFO.
+            save_result_dataframe (bool, optional): Whether to save the results in a DataFrame
+                format. Defaults to True.
+            upper_bound_num_samples (int, optional): Maximum number of samples allowed during
+                task execution. Defaults to 10000.
+            upper_bound_num_features (int, optional): Maximum number of features allowed during
+                task execution. Defaults to 500.
+            benchmark_metrics (Dict | None, optional): Dictionary of metrics to evaluate task
+                performance. If None, default metrics are used. Defaults to None.
         """
         self.logger = get_benchmark_logger(name)
         self.logger.setLevel(logging_level)
@@ -105,10 +76,10 @@ class AbstractBenchmark(ABC):
 
     @property
     def name(self) -> str:
-        """Gets the name attribute value.
+        """Gets the name of the benchmark.
 
         This property retrieves the value of the `_name` attribute,
-        which represents the name associated with the instance.
+        which represents the name associated with the benchmark.
 
         Returns:
             str: The name associated with the instance.
@@ -116,7 +87,20 @@ class AbstractBenchmark(ABC):
         return self._name
 
     @property
-    def result_df(self):
+    def result_df(self) -> pl.DataFrame:
+        """
+        Gets the processed result DataFrame.
+
+        This property retrieves a DataFrame representation of data stored in the
+        current internal results buffer. If the results buffer is empty, it returns
+        an empty DataFrame. The method provides a convenient way to access results
+        as a Polars DataFrame.
+
+        Returns:
+            pl.DataFrame: A Polars DataFrame instance representing the contents
+            of the results buffer. If the results buffer is empty, this returns
+            an empty DataFrame.
+        """
         if not self._results_buffer:
             return pl.DataFrame()
         return pl.from_dicts(data=self._results_buffer)
@@ -145,7 +129,7 @@ class AbstractBenchmark(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _prepare_dataset(self, dataset, **kwargs) -> Iterator[dict]:
+    def _prepare_dataset(self, dataset) -> Iterator[dict]:
         """Prepare data from a dataset for embedding generation.
 
         This method should yield one or more data splits in a standardized format.
@@ -153,19 +137,18 @@ class AbstractBenchmark(ABC):
         For classification/regression: yields multiple dicts for each CV fold.
 
         Each yielded dict must contain:
-            - 'X_train': Training data or None
-            - 'X_test': Test data or None
+            - 'X_train': Training data
+            - 'X_test': Test data (can be None)
             - 'y_train': Training labels or None
-            - 'y_eval': Labels for evaluation (for outlier detection) or test labels for supervised learning
-            - 'dataset_metadata': Dictionary containing additional dataset metadata, such as:
+            - 'y_true': Labels for evaluation (for outlier detection) or test labels for supervised learning
+            - 'dataset_metadata': Dictionary containing additional dataset metadata, the following keys should be present:
                 - 'dataset_name': Name of the dataset
-                - 'dataset_size': Number of samples
+                - 'num_samples': Number of samples
                 - 'num_features': Number of features
             - 'feature_metadata': Dict with any additional info (categorical_indices, etc.)
 
         Args:
             dataset: The dataset to prepare.
-            **kwargs: Additional parameters for data preparation.
 
         Yields:
             Dictionary containing prepared data and metadata in standardized format.
@@ -209,15 +192,26 @@ class AbstractBenchmark(ABC):
         self,
         embedding_model: AbstractEmbeddingGenerator,
         dataset_configurations: dict,
-    ) -> tuple:
-        """Generate embeddings using the provided model.
+    ) -> Tuple[np.ndarray, np.ndarray | None, float]:
+        """
+        Generates embeddings for training and testing datasets using a provided embedding
+        model. This function ensures that the embedding generation process is handled in a
+        model-specific manner while accommodating configurations such as feature metadata.
 
         Args:
-            embedding_model: The embedding model to use.
-            dataset_configurations: Dictionary containing data and feature_metadata.
+            embedding_model: An instance of AbstractEmbeddingGenerator that performs the
+                embedding generation process for the datasets.
+            dataset_configurations: A dictionary containing configuration details for the
+                datasets. Must include the key "X_train". Optionally, it may also include
+                the keys "X_test" and "feature_metadata".
 
         Returns:
-            Tuple of (train_embeddings, test_embeddings, compute_time).
+            Tuple[np.ndarray, np.ndarray | None, float]: A tuple where:
+                - The first element is the embeddings for the training dataset (X_train).
+                - The second element is the embeddings for the testing dataset (X_test) if
+                  provided; otherwise, it is None.
+                - The third element is a float that indicates some additional contextual metric
+                  or information calculated during the embedding generation process.
         """
         X_train = dataset_configurations.get("X_train")
         X_test = dataset_configurations.get("X_test", None)
@@ -232,24 +226,24 @@ class AbstractBenchmark(ABC):
             **feature_metadata,
         )
 
-    def _compute_metrics(self, y_true, y_pred, task_type: str) -> dict:
+    def _compute_metrics(
+        self, y_true, y_pred, task_type: str
+    ) -> Dict[str, float | int]:
         """
-        Computes evaluation metrics for the provided predictions and ground truth
-        values based on the specified task type.
-
-        The function calculates metrics using pre-defined metric functions for
-        the specified task type. Results are compiled into a dictionary
-        containing the task type and computed metric values.
+        Computes and returns a dictionary of evaluation metrics for the given task type by applying
+        the specified metric functions on the provided true and predicted values.
 
         Args:
-            y_true: Ground truth values.
-            y_pred: Predicted values.
-            task_type: A string representing the type of task for which metrics
-                are being computed, such as "classification" or "regression".
+            y_true: Ground truth labels. Structure and format depend on the specific task.
+            y_pred: Predicted labels or scores produced by the model.
+                Structure and format depend on the specific task.
+            task_type: Type of the task to be evaluated (e.g., "classification", "regression").
+                Determines which metrics and functions to apply.
 
         Returns:
-            A dictionary containing the task type and the computed metric values
-            for the given task.
+            Dict[str, float]: A dictionary containing the task type and the computed metrics.
+                The dictionary keys are metric names, and the values are their corresponding
+                computed values.
         """
         result_dict = {"task_type": task_type}
 
@@ -310,7 +304,6 @@ class AbstractBenchmark(ABC):
                 self.logger.info(f"Evaluating embeddings with {evaluator.name}...")
                 prediction = self._get_evaluator_prediction(
                     embeddings,
-                    dataset_configurations["y_train"],
                     evaluator,
                     dataset_configurations,
                 )
@@ -346,8 +339,7 @@ class AbstractBenchmark(ABC):
             embedding_model: Instance of AbstractEmbeddingGenerator responsible for
                 generating embeddings for the data.
             dataset_configurations: Dictionary containing data split information, typically with
-                keys that specify different parts of the dataset (e.g., 'train',
-                'validation', 'test') and their associated data.
+                keys that specify different parts of the dataset (e.g., 'train',                'validation', 'test') and their associated data.
 
         Raises:
             NotImplementedError: Indicates that this functionality is not supported
@@ -361,7 +353,24 @@ class AbstractBenchmark(ABC):
         embedding_models: list[AbstractEmbeddingGenerator],
         evaluators: list[AbstractEvaluator],
     ) -> None:
-        """Process all embedding models on a single data split."""
+        """
+        Processes the dataset configuration by applying embedding models and evaluators.
+        Determines if an embedding model is an end-to-end model and processes it accordingly.
+
+        Args:
+            dataset_configurations (dict): Dictionary containing dataset configuration details.
+            embedding_models (list[AbstractEmbeddingGenerator]): List of embedding model instances
+                to be applied on the dataset.
+            evaluators (list[AbstractEvaluator]): List of evaluator instances to validate the
+                embedding models on the dataset.
+
+        Raises:
+            NotEndToEndCompatibleError: Raised when an end-to-end incompatible embedding model is
+                encountered. This exception is logged and processing continues with the next model.
+            Exception: Handles all other unforeseen exceptions that occur during embedding model
+                processing. These exceptions are logged along with the relevant dataset and
+                embedding model details.
+        """
         for embedding_model in embedding_models:
             try:
                 if embedding_model.is_end_to_end_model:
@@ -381,17 +390,11 @@ class AbstractBenchmark(ABC):
                 )
                 continue
 
-    def _validate_dataset_configurations(
-        self, dataset_configurations: Iterator[dict]
-    ) -> None:
-        pass
-
     def _process_dataset(
         self,
         dataset,
         embedding_models: list[AbstractEmbeddingGenerator],
         evaluators: list[AbstractEvaluator],
-        **kwargs,
     ) -> None:
         """
         Processes a given dataset through multiple embedding models and evaluators.
@@ -408,11 +411,8 @@ class AbstractBenchmark(ABC):
                 model instances responsible for generating embeddings for the dataset.
             evaluators (list[AbstractEvaluator]): A list of evaluator instances used
                 to evaluate the dataset's embeddings or other features.
-            **kwargs: Additional configuration options for dataset preparation and
-                processing, dependent on the specific implementation details of the
-                embedding models or evaluators.
         """
-        should_skip, msg = self._should_skip_dataset(dataset, **kwargs)
+        should_skip, msg = self._should_skip_dataset(dataset)
         if should_skip:
             self.logger.info(msg)
             return
@@ -420,7 +420,7 @@ class AbstractBenchmark(ABC):
         # Prepare dataset (may yield multiple splits for cross-validation)
         try:
             self.logger.info(msg)
-            dataset_configurations = self._prepare_dataset(dataset, **kwargs)
+            dataset_configurations = self._prepare_dataset(dataset)
         except Exception as e:
             self.logger.exception(f"Error preparing dataset: {e}")
             return

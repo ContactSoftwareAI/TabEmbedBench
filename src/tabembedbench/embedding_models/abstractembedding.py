@@ -1,10 +1,11 @@
-import time
 import logging
+import time
 from abc import ABC, abstractmethod
+from typing import Tuple
 
 import numpy as np
-import polars as pl
 import pandas as pd
+import polars as pl
 
 
 class AbstractEmbeddingGenerator(ABC):
@@ -257,8 +258,9 @@ class AbstractEmbeddingGenerator(ABC):
         else:
             X_test_preprocessed = None
 
-        self._fit_model(X_train_preprocessed, y_train=y_train, outlier=outlier,
-                        **kwargs)
+        self._fit_model(
+            X_train_preprocessed, y_train=y_train, outlier=outlier, **kwargs
+        )
 
         return X_train_preprocessed, X_test_preprocessed
 
@@ -268,7 +270,7 @@ class AbstractEmbeddingGenerator(ABC):
         X_test: np.ndarray | None = None,
         outlier: bool = False,
         **kwargs,
-    ):
+    ) -> Tuple[np.ndarray, np.ndarray | None, float]:
         """Generates embeddings for the given training and optional testing
         data.
 
@@ -326,16 +328,19 @@ class AbstractEmbeddingGenerator(ABC):
         y_train: np.ndarray,
         X_test: np.ndarray | None = None,
         task_type: str = "Supervised Classification",
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         if not self._is_end_to_end_model:
             raise NotImplementedError(
                 "get_predictions() is only available for end-to-end models."
             )
-        if (self.end_to_end_compatible_tasks and task_type not in
-                self.end_to_end_compatible_tasks):
+        if (
+            self.end_to_end_compatible_tasks
+            and task_type not in self.end_to_end_compatible_tasks
+        ):
             raise ValueError()
 
-        _, X_test_preprocessed = self.preprocess_data(X_train, X_test=X_test,
-                                         y_train=y_train, **kwargs)
+        _, X_test_preprocessed = self.preprocess_data(
+            X_train, X_test=X_test, y_train=y_train, **kwargs
+        )
         return self._get_prediction(X_test_preprocessed)

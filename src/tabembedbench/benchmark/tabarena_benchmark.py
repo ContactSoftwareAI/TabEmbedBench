@@ -210,7 +210,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         return False, msg
 
-    def _prepare_dataset(self, dataset_info: dict, **kwargs) -> Iterator[dict]:
+    def _prepare_dataset(self, dataset_info: dict) -> Iterator[dict]:
         """
         Prepares the dataset for model training and evaluation by performing preprocessing
         and creating train-test splits. Handles categorical and numerical transformations,
@@ -226,8 +226,6 @@ class TabArenaBenchmark(AbstractBenchmark):
                 - "dataset": The dataset object from which data can be retrieved.
                 - "folds": The number of data folds for splitting.
                 - "repeats": The number of repeats for each fold.
-            **kwargs: Additional arguments that might be required for processing
-                the dataset. These are ignored by default.
 
         Yields:
             Iterator[dict]: An iterator that generates dictionaries, each containing
