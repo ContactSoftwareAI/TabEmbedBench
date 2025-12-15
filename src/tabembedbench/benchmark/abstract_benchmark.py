@@ -1,11 +1,11 @@
+import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-import logging
 from pathlib import Path
-from typing import Iterator, List, Dict, Callable
+from typing import Any, Callable, Dict, Iterator, List, Tuple
 
-import polars as pl
 import numpy as np
+import polars as pl
 
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
@@ -123,7 +123,7 @@ class AbstractBenchmark(ABC):
 
     # ========== Abstract Methods (Subclasses must implement) ==========
     @abstractmethod
-    def _load_datasets(self, **kwargs) -> list:
+    def _load_datasets(self, **kwargs) -> List[Dict[str, Any]]:
         """Load datasets for the benchmark.
 
         Returns:
@@ -132,7 +132,7 @@ class AbstractBenchmark(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _should_skip_dataset(self, dataset, **kwargs) -> bool:
+    def _should_skip_dataset(self, dataset, **kwargs) -> Tuple[bool, str]:
         """Determine if a dataset should be skipped.
 
         Args:
@@ -173,14 +173,16 @@ class AbstractBenchmark(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _get_default_metrics(self) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
+    def _get_default_metrics(
+        self,
+    ) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
         """Get the default metrics for the benchmark."""
         raise NotImplementedError
 
     @abstractmethod
     def _get_evaluator_prediction(
         self,
-        embeddings: tuple,
+        embeddings: Tuple[np.ndarray, np.ndarray, float],
         evaluator: AbstractEvaluator,
         dataset_configurations: dict,
     ) -> np.ndarray:
@@ -275,7 +277,9 @@ class AbstractBenchmark(ABC):
 
         """
         dataset_metadata = dataset_configurations["dataset_metadata"]
-        self.logger.info(f"Start processing {embedding_model.name} on {dataset_metadata['dataset_name']}...")
+        self.logger.info(
+            f"Start processing {embedding_model.name} on {dataset_metadata['dataset_name']}..."
+        )
         log_gpu_memory(self.logger)
         self.logger.info(
             f"Processing {embedding_model.name} on {dataset_metadata['dataset_name']}..."
@@ -297,7 +301,7 @@ class AbstractBenchmark(ABC):
             raise
 
         for evaluator in evaluators:
-            if not self._is_compatible(evaluator, dataset_metadata["task_type"]):
+            if not self._is_compatible(evaluator, dataset_metadata.get("task_type")):
                 self.logger.info(
                     f"Skipping evaluator {evaluator.name} is not compatible with {self.task_type}. Skipping..."
                 )
@@ -305,12 +309,15 @@ class AbstractBenchmark(ABC):
             else:
                 self.logger.info(f"Evaluating embeddings with {evaluator.name}...")
                 prediction = self._get_evaluator_prediction(
-                    embeddings, evaluator, dataset_configurations
+                    embeddings,
+                    dataset_configurations["y_train"],
+                    evaluator,
+                    dataset_configurations,
                 )
                 metric_scores = self._compute_metrics(
                     y_true=dataset_configurations["y_true"],
                     y_pred=prediction,
-                    task_type=dataset_configurations["task_type"],
+                    task_type=dataset_metadata.get("task_type"),
                 )
                 result_row_dict.update(metric_scores)
                 result_row_dict.update(evaluator.get_parameters())
@@ -370,9 +377,14 @@ class AbstractBenchmark(ABC):
                 continue
             except Exception as e:
                 self.logger.exception(
-                    f"Error processing embedding model {embedding_model.name} on dataset {dataset_configurations["dataset_metadata"].get("dataset_name", "Unknown")}: {e}"
+                    f"Error processing embedding model {embedding_model.name} on dataset {dataset_configurations['dataset_metadata'].get('dataset_name', 'Unknown')}: {e}"
                 )
                 continue
+
+    def _validate_dataset_configurations(
+        self, dataset_configurations: Iterator[dict]
+    ) -> None:
+        pass
 
     def _process_dataset(
         self,
@@ -381,14 +393,33 @@ class AbstractBenchmark(ABC):
         evaluators: list[AbstractEvaluator],
         **kwargs,
     ) -> None:
-        """Process a single dataset: check skip conditions, prepare splits, run models."""
-        # Check if dataset should be skipped
-        should_skip = self._should_skip_dataset(dataset, **kwargs)
+        """
+        Processes a given dataset through multiple embedding models and evaluators.
+
+        This function determines if the dataset should be skipped based on specific
+        conditions. If it is not skipped, the dataset is prepared (potentially
+        yielding multiple splits for tasks like cross-validation) and then processed
+        using the provided embedding models and evaluators.
+
+        Args:
+            dataset: The dataset to be processed. Format and structure are expected to
+                match the requirements of the embedding models and evaluators.
+            embedding_models (list[AbstractEmbeddingGenerator]): A list of embedding
+                model instances responsible for generating embeddings for the dataset.
+            evaluators (list[AbstractEvaluator]): A list of evaluator instances used
+                to evaluate the dataset's embeddings or other features.
+            **kwargs: Additional configuration options for dataset preparation and
+                processing, dependent on the specific implementation details of the
+                embedding models or evaluators.
+        """
+        should_skip, msg = self._should_skip_dataset(dataset, **kwargs)
         if should_skip:
+            self.logger.info(msg)
             return
 
         # Prepare dataset (may yield multiple splits for cross-validation)
         try:
+            self.logger.info(msg)
             dataset_configurations = self._prepare_dataset(dataset, **kwargs)
         except Exception as e:
             self.logger.exception(f"Error preparing dataset: {e}")
@@ -421,14 +452,16 @@ class AbstractBenchmark(ABC):
         self.logger.info(f"Starting {self.name} benchmark...")
 
         datasets = self._load_datasets(**kwargs)
-
+        # TODO: Counter machen.
         for dataset in datasets:
             self._process_dataset(dataset, embedding_models, evaluators, **kwargs)
 
         self.logger.info(f"{self.name} benchmark completed.")
         return self.result_df
 
-    def _is_compatible(self, evaluator: AbstractEvaluator, dataset_tasktype: str) -> bool:
+    def _is_compatible(
+        self, evaluator: AbstractEvaluator, dataset_tasktype: str
+    ) -> bool:
         """Check if evaluator is compatible with the current task.
 
         Args:
@@ -457,10 +490,14 @@ class AbstractBenchmark(ABC):
         skip_reasons = []
 
         if num_samples > self.upper_bound_num_samples:
-            skip_reasons.append(f"Too many samples ({num_samples} > {self.upper_bound_num_samples})")
+            skip_reasons.append(
+                f"Too many samples ({num_samples} > {self.upper_bound_num_samples})"
+            )
 
         if num_features > self.upper_bound_num_features:
-            skip_reasons.append(f"Too many features ({num_features} > {self.upper_bound_num_features})")
+            skip_reasons.append(
+                f"Too many features ({num_features} > {self.upper_bound_num_features})"
+            )
 
         return skip_reasons
 

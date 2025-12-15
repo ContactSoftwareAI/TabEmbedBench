@@ -1,7 +1,8 @@
+import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Iterator, List, Optional, Callable
 from functools import partial
+from pathlib import Path
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
 import openml
@@ -9,7 +10,6 @@ import pandas as pd
 import polars as pl
 from sklearn.metrics import log_loss, mean_absolute_percentage_error, roc_auc_score
 from sklearn.preprocessing import LabelEncoder
-
 
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
 from tabembedbench.embedding_models.abstractembedding import (
@@ -77,6 +77,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         exclude_datasets: list[str] | None = None,
         result_dir: str | Path = "result_tabarena",
         timestamp: str = TIMESTAMP,
+        logging_level: int = logging.INFO,
         save_result_dataframe: bool = True,
         upper_bound_num_samples: int = 100000,
         upper_bound_num_features: int = 500,
@@ -98,8 +99,6 @@ class TabArenaBenchmark(AbstractBenchmark):
             upper_bound_num_features: Maximum number of features to process.
             run_tabpfn_subset: Whether to run only a subset of TabPFN tasks.
         """
-        # Note: task_type will be determined per dataset
-        # Using "Supervised Classification" as default, but will check compatibility per split
         super().__init__(
             name="TabEmbedBench_TabArena",
             task_type=[
@@ -109,6 +108,7 @@ class TabArenaBenchmark(AbstractBenchmark):
             ],  # Will be overridden per split
             result_dir=result_dir,
             timestamp=timestamp,
+            logging_level=logging_level,
             save_result_dataframe=save_result_dataframe,
             upper_bound_num_samples=upper_bound_num_samples,
             upper_bound_num_features=upper_bound_num_features,
@@ -136,7 +136,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         self.logger.info(f"OpenML cache directory: {self.openml_cache_dir}")
 
-    def _load_datasets(self, **kwargs) -> list:
+    def _load_datasets(self, **kwargs) -> List[Dict[str, Any]]:
         """Load TabArena tasks from OpenML.
 
         Returns:
@@ -163,16 +163,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         return datasets
 
-    @staticmethod
-    def _check_missing_value(
-            data: pd.DataFrame,
-    ) -> bool:
-        """Check if dataset contains missing values."""
-        return data.isnull().values.any() or data.isna().values.any()
-
-    def _should_skip_dataset(
-        self, dataset_info: dict, **kwargs
-    ) -> tuple[bool, str | None]:
+    def _should_skip_dataset(self, dataset_info: dict, **kwargs) -> Tuple[bool, str]:
         """Check if a dataset should be skipped.
 
         Args:
@@ -188,9 +179,13 @@ class TabArenaBenchmark(AbstractBenchmark):
         num_features = dataset.qualities["NumberOfFeatures"]
         num_of_missing_values = dataset.qualities["NumberOfMissingValues"]
 
-        skip_reasons = []
+        skip_reasons: list[str] = []
 
-        skip_reasons.extend(self._check_dataset_size_constraints(num_samples, num_features, dataset.name))
+        skip_reasons.extend(
+            self._check_dataset_size_constraints(
+                num_samples, num_features, dataset.name
+            )
+        )
 
         if num_of_missing_values > 0 and self.skip_missing_values:
             skip_reasons.append("Contains missing values")
@@ -199,21 +194,21 @@ class TabArenaBenchmark(AbstractBenchmark):
             skip_reasons.append("Not in TabPFN subset")
 
         if dataset.name in self.exclude_datasets:
-            skip_reasons.append(f"Excluded by user")
+            skip_reasons.append("Excluded by user")
 
         if skip_reasons:
             reason = " | ".join(skip_reasons)
-            return True, reason
+            return True, f"Skipping dataset {dataset.name}: {reason}"
 
         self.len_tabpfn_subset -= 1
         task = dataset_info["task"]
-        self.logger.info(
+        msg = (
             f"Starting experiments for dataset {dataset.name} "
             f"and task {task.task_type}. "
             f"{self.len_tabpfn_subset} datasets remaining."
         )
 
-        return False, None
+        return False, msg
 
     def _prepare_dataset(self, dataset_info: dict, **kwargs) -> Iterator[dict]:
         """
@@ -257,16 +252,14 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         dataset_metadata = {
             "dataset_name": dataset.name,
-            "num_samples": dataset.qualities["NumberOfInstances"],
-            "num_features": dataset.qualities["NumberOfFeatures"],
-            "percentage_of_numeric_features": dataset.qualities["PercentageNumericFeatures"],
+            "num_samples": dataset.qualities.get("NumberOfInstances"),
+            "num_features": dataset.qualities.get("NumberOfFeatures"),
+            "num_classes": dataset.qualities.get("NumberOfClasses", None),
+            "percentage_of_numeric_features": dataset.qualities.get(
+                "PercentageNumericFeatures", None
+            ),
             "ratio_features_samples": dataset.qualities["Dimensionality"],
         }
-
-        {"dataset_name": dataset.name, "num_samples": X.shape[0],
-            "num_features": X_train.shape[1],
-            "num_classes": n_classes if n_classes else None, "fold": fold,
-            "repeat": repeat, }
 
         task_type = task.task_type
 
@@ -283,8 +276,6 @@ class TabArenaBenchmark(AbstractBenchmark):
         # Iterate through all folds and repeats
         for repeat in range(repeats):
             for fold in range(folds):
-                n_classes = None
-
                 # Get train/test split
                 train_indices, test_indices = task.get_train_test_split_indices(
                     fold=fold,
@@ -313,19 +304,19 @@ class TabArenaBenchmark(AbstractBenchmark):
 
                     y_train = label_encoder.fit_transform(y_train)
                     y_test = label_encoder.transform(y_test)
-                    n_classes = len(label_encoder.classes_)
                     task_type = (
                         "Supervised Multiclass Classification"
-                        if (n_classes > 2)
+                        if (dataset_metadata["num_classes"] > 2)
                         else "Supervised Binary Classification"
                     )
+
+                dataset_metadata["task_type"] = task_type
 
                 yield {
                     "X_train": X_train,
                     "X_test": X_test,
                     "y_train": y_train,
                     "y_true": y_test,
-                    "task_type": task_type,
                     "dataset_metadata": dataset_metadata,
                     "feature_metadata": {
                         "categorical_indices": categorical_indices,
@@ -333,22 +324,24 @@ class TabArenaBenchmark(AbstractBenchmark):
                     },
                 }
 
-    def _get_default_metrics(self) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
+    def _get_default_metrics(
+        self,
+    ) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
         """
-        Generates a dictionary containing default metric functions for various supervised
-        learning tasks.
+        Returns default metrics for different supervised learning tasks.
 
-        The method provides default performance metrics specific to the type of supervised
-        learning problem, such as regression, binary classification, and multiclass classification.
+        This function provides a mapping of supervised learning task types to their default
+        evaluation metrics. The supported task types and their associated metrics are as
+        follows:
+        - SUPERVISED_REGRESSION: Includes "mape_score" for Mean Absolute Percentage Error.
+        - SUPERVISED_BINARY_CLASSIFICATION: Includes "auc_score" for Area Under the ROC Curve.
+        - SUPERVISED_MULTICLASSIFICATION: Includes "auc_score" for Area Under the ROC Curve
+          with one-vs-rest strategy and "log_loss_score" for Log Loss.
 
         Returns:
-            dict: A dictionary where the keys are the supervised learning task types
-            (e.g., 'Supervised Regression', 'Supervised Binary Classification', and 'Supervised
-            Multiclass Classification'), and the values are dictionaries containing the
-            respective metric names and their corresponding functions.
-
-        Raises:
-            TypeError: If arguments are provided with incorrect types during invocation.
+            dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]: A nested dictionary
+            where keys represent supervised task types, and values are dictionaries that map
+            metric names to callable functions implementing those metrics.
         """
         return {
             SUPERVISED_REGRESSION: {
@@ -365,7 +358,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
     def _get_evaluator_prediction(
         self,
-        embeddings: tuple,
+        embeddings: Tuple[np.ndarray, np.ndarray, float],
         evaluator: AbstractEvaluator,
         dataset_configurations: dict,
     ) -> dict:
@@ -435,19 +428,6 @@ class TabArenaBenchmark(AbstractBenchmark):
         )
 
         return result_dict
-
-    def _is_compatible(self, evaluator: AbstractEvaluator, data_split: dict) -> bool:
-        """Check if evaluator is compatible with the current task.
-
-        Args:
-            evaluator: The evaluator to check.
-            data_split: Dictionary containing data split information.
-
-        Returns:
-            True if evaluator supports the task type.
-        """
-        task_type = data_split["metadata"]["task_type"]
-        return evaluator.check_task_type(task_type)
 
     def _get_task_configuration(self, dataset, task) -> tuple[int, int]:
         """Get the number of folds and repeats for a task.
@@ -596,17 +576,23 @@ def run_tabarena_benchmark(
 
     return benchmark.run_benchmark(embedding_models, evaluators)
 
+
 if __name__ == "__main__":
     from tabembedbench.embedding_models import TableVectorizerEmbedding
-    from tabembedbench.evaluators import KNNRegressorEvaluator, KNNClassifierEvaluator
+    from tabembedbench.evaluators import KNNClassifierEvaluator, KNNRegressorEvaluator
 
     evaluators = [
         KNNRegressorEvaluator(num_neighbors=1, metric="euclidean", weights="distance"),
         KNNClassifierEvaluator(num_neighbors=1, metric="euclidean", weights="distance"),
     ]
 
-    embedding_models = [
-        TableVectorizerEmbedding()
-    ]
+    embedding_models = [TableVectorizerEmbedding()]
 
-    run_tabarena_benchmark(embedding_models, evaluators)
+    result = run_tabarena_benchmark(
+        embedding_models,
+        evaluators,
+        upper_bound_num_samples=1000,
+        upper_bound_num_features=100,
+    )
+
+    print(result)

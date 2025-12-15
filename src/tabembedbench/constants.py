@@ -1,0 +1,54 @@
+
+
+
+TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+#### Outlier
+TASK_TYPE = "Outlier Detection"
+
+#### TabArena Constants
+SUPERVISED_REGRESSION = "Supervised Regression"
+SUPERVISED_BINARY_CLASSIFICATION = "Supervised Binary Classification"
+SUPERVISED_MULTICLASSIFICATION = "Supervised Multiclass Classification"
+
+TABARENA_TASKS = [SUPERVISED_REGRESSION, SUPERVISED_BINARY_CLASSIFICATION, SUPERVISED_MULTICLASSIFICATION]
+
+TABARENA_TABPFN_SUBSET = [
+    363621,
+    363629,
+    363614,
+    363698,
+    363626,
+    363685,
+    363625,
+    363696,
+    363675,
+    363707,
+    363671,
+    363612,
+    363615,
+    363711,
+    363682,
+    363684,
+    363674,
+    363700,
+    363702,
+    363704,
+    363623,
+    363694,
+    363708,
+    363706,
+    363689,
+    363624,
+    363619,
+    363676,
+    363712,
+    363632,
+    363691,
+    363681,
+    363686,
+    363679,
+]
+
+TABARENA_TASK_IDS_WITH_MISSING_VALUES = [363671, 363679, 363684, 363694, 363711, 363712]

@@ -4,7 +4,7 @@ import logging
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Optional
 
 import numpy as np
 import polars as pl
@@ -173,7 +173,7 @@ class OutlierBenchmark(AbstractBenchmark):
         """
         return list(self.dataset_paths.glob("*.npz"))
 
-    def _should_skip_dataset(self, dataset_file: Path, **kwargs) -> bool:
+    def _should_skip_dataset(self, dataset_file: Path, **kwargs) -> Optional[str]:
         """Check if a dataset should be skipped.
 
         Args:
@@ -203,16 +203,9 @@ class OutlierBenchmark(AbstractBenchmark):
 
         if skip_reasons:
             reason = " | ".join(skip_reasons)
-            self.logger.warning(f"Skipping dataset {dataset_name}: {reason}")
-            return True
+            return f"Skipping dataset {dataset_name}: {reason}"
 
-        self.logger.info(
-            f"Starting experiments for dataset {dataset_name} "
-            f"and task: Outlier Detection."
-            f"Samples: {num_samples}, Features: {num_features}"
-        )
-
-        return False
+        return None
 
     def _prepare_dataset(self, dataset_file: Path, **kwargs) -> Iterator[dict]:
         """Prepare data from an ADBench dataset file.
@@ -277,7 +270,6 @@ class OutlierBenchmark(AbstractBenchmark):
         self,
         embeddings: tuple,
         evaluator: AbstractEvaluator,
-        dataset_configurations: dict,
     ) -> np.ndarray:
         """Evaluate embeddings for outlier detection.
 
