@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator, Optional
 import os
+import numpy as np
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -117,6 +118,14 @@ class DatasetBenchmark(AbstractBenchmark):
             label_encoder = LabelEncoder()
             y_train = label_encoder.fit_transform(y_train)
             y_test = label_encoder.transform(y_test)
+            if max(y_train)>1 or max(y_test)>1:
+                num_classes = max(max(y_train),max(y_test))+1
+                new_y_test = []
+                for i in range(len(y_test)):
+                    y_temp = np.zeros(num_classes,dtype = int)
+                    y_temp[y_test[i]] = 1
+                    new_y_test.append(y_temp)
+                y_test = np.array(new_y_test)
 
         yield {
             "X": None,
@@ -197,8 +206,8 @@ class DatasetBenchmark(AbstractBenchmark):
                 result_dict["task"] = ["classification"]
                 result_dict["classification_type"] = ["binary"]
             else:
-                auc_score = roc_auc_score(y_test, test_prediction, multi_class="ovr")
-                log_loss_score = log_loss(y_test, test_prediction)
+                auc_score = roc_auc_score(y_true=y_test, y_score=test_prediction, multi_class="ovr", average="weighted")
+                log_loss_score = log_loss(y_true=y_test, y_pred=test_prediction)
                 result_dict["task"] = ["classification"]
                 result_dict["classification_type"] = ["multiclass"]
                 result_dict["log_loss_score"] = [log_loss_score]
@@ -223,28 +232,34 @@ if __name__ == "__main__":
     #task_type = "Supervised Classification"
     #categorical_columns = ["Pclass","Sex","Embarked"]
     #numerical_columns = ["Age","SibSp","Parch","Fare"]
+    #text_columns = []
+    #text_filenames = []
 
     #csv_path = r"C:\Users\arf\data.tabdata-testsets\Rossmann\rossmann_normalized.csv"
     #target_column = "NormalizedSales"
     #task_type = "Supervised Regression"
     #categorical_columns = ["Store","Promo","StateHoliday","SchoolHoliday"]
     #numerical_columns = ["DayOfWeek","Date"]
+    #text_columns = []
+    #text_filenames = []
 
-    #csv_path = r"C:\Users\arf\data.tabdata-testsets\WSV\ZEICHNUNG_cleaned.csv"
-    #target_column = 'WSV_Z_OBTEIL_NR'
-    #task_type = "Supervised Classification"
-    #categorical_columns = ['Z_STATUS', 'ERZEUG_SYSTEM', 'EV_LOCATION', 'CDB_SITE_ID']
-    #numerical_columns = []
+    csv_path = r"C:\Users\arf\data.tabdata-testsets\WSV\ZEICHNUNG_cleaned.csv"
+    target_column = 'WSV_Z_OBTEIL_NR'
+    task_type = "Supervised Classification"
+    categorical_columns = ['Z_STATUS', 'ERZEUG_SYSTEM', 'EV_LOCATION', 'CDB_SITE_ID']
+    numerical_columns = []
+    text_columns = []
+    text_filenames = []
     #text_columns = ["WSV_Z_EINZEL"]
     #text_filenames = [rf"{i}.pkl" for i in text_columns]
 
-    csv_path = r"C:\Users\arf\data.tabdata-testsets\simple\simpleWithText.csv"
-    target_column = 'Grade'
-    task_type = "Supervised Regression"
-    categorical_columns = ['Pupil', 'Subject', 'Teacher']
-    numerical_columns = []
-    text_columns = ["Comment"]
-    text_filenames = [rf"{i}.pkl" for i in text_columns]
+    #csv_path = r"C:\Users\arf\data.tabdata-testsets\simple\simpleWithText_Classification.csv"
+    #target_column = 'Grade'
+    #task_type = "Supervised Classification"
+    #categorical_columns = ['Pupil', 'Subject', 'Teacher']
+    #numerical_columns = []
+    #text_columns = ["Comment"]
+    #text_filenames = [rf"{i}.pkl" for i in text_columns]
 
     dataset_benchmark = DatasetBenchmark(
         dataset_path=csv_path,

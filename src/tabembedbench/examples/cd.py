@@ -11,19 +11,19 @@ import seaborn as sns
 embedding_models = ['TabICL',
                     'TabPFN',
                     'TableVectorizer',
-                    'Random Line (Dim 64)',
-                    'Random Line (Dim 192)',
-                    'Random Line (Dim 512)',
-                    'Random Circle (Dim 64)',
-                    'Random Circle (Dim 192)',
-                    'Random Circle (Dim 512)',
                     'Sphere-Based Line (Dim 64)',
                     'Sphere-Based Line (Dim 192)',
                     'Sphere-Based Line (Dim 512)',
                     'Sphere-Based Circle (Dim 64)',
                     'Sphere-Based Circle (Dim 192)',
                     'Sphere-Based Circle (Dim 512)',
-                    'Text-Based'
+                    'Random Line (Dim 64)',
+                    'Random Line (Dim 192)',
+                    'Random Line (Dim 512)',
+                    'Random Circle (Dim 64)',
+                    'Random Circle (Dim 192)',
+                    'Random Circle (Dim 512)',
+                    'TabStar'
                     ]
 colors = [
     "#0080C5", # CIM Database 1
@@ -56,7 +56,7 @@ maximize = ["auc_score"]
 names = {"auc_score": "AUC Score",
          "mape_score": "MAPE Score"}
 
-timestamps = ["20251112_161222","20251204_094445","20251205_071358","20251208_084628","20251208_151933","20251210_073948"]
+timestamps = ["20251112_161222","20251205_071358","20251208_084628","20251215_083012"]
 directory = f"C:/Users/arf/TabEmbedBench/src/tabembedbench/examples/data"
 result_outlier_files = [f"{directory}/tabembedbench_{timestamp}/results_ADBench_Tabular_{timestamp}.csv" for timestamp in timestamps]
 result_tabarena_files = [f"{directory}/tabembedbench_{timestamp}/results_TabArena_{timestamp}.csv" for timestamp in timestamps]
