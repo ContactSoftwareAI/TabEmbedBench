@@ -21,6 +21,7 @@ from tabembedbench.embedding_models import (
     TabICLEmbedding,
     TableVectorizerEmbedding,
     TabPFNEmbedding,
+    TabStarEmbedding,
 )
 from tabembedbench.evaluators.outlier import (
     IsolationForestEvaluator,
@@ -58,10 +59,13 @@ def get_embedding_models(debug=False):
         num_estimators=5,
     )
 
+    tabstar_embedder = TabStarEmbedding()
+
     embedding_models = [
-        tabicl_row_embedder,
-        tabpfn_embedder,
-        tablevector,
+        #tabicl_row_embedder,
+        #tabpfn_embedder,
+        tabstar_embedder,
+        #tablevector,
     ]
 
     return embedding_models
@@ -261,7 +265,7 @@ def run_main(
 @click.option("--max-samples", default=10000, help="Upper bound for dataset size")
 @click.option("--max-features", default=200, help="Upper bound for number of features")
 @click.option(
-    "--run-outlier/--no-run-outlier", default=True, help="Run outlier detection"
+    "--run-outlier/--no-run-outlier", default=False, help="Run outlier detection"
 )
 @click.option(
     "--run-supervised/--no-run-supervised",

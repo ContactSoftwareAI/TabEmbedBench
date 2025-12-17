@@ -82,16 +82,31 @@ class DatasetBenchmark(AbstractBenchmark):
         return False, None
 
     def _prepare_dataset(self, dataset: pd.DataFrame, **kwargs) -> Iterator[dict]:
-        y = dataset[self.target_column]
-        X = dataset.drop(columns=[self.target_column])
-        if not self.feature_columns:
-            self.feature_columns = X.columns.tolist()
+        if "set" in dataset:
+            data_train = dataset[dataset["set"]!="test"]
+            data_test = dataset[dataset["set"]=="test"]
+            y_train = data_train[self.target_column]
+            y_test = data_test[self.target_column]
+            X_train = data_train.drop(columns=[self.target_column])
+            if not self.feature_columns:
+                self.feature_columns = X_train.columns.tolist()
+            X_train = X_train[self.feature_columns]
+            X_test = data_test.drop(columns=[self.target_column])
+            X_test = X_test[self.feature_columns]
 
-        X = X[self.feature_columns]
+        else:
 
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=self.test_size, random_state=self.random_state
-        )
+            y = dataset[self.target_column]
+            X = dataset.drop(columns=[self.target_column])
+            if not self.feature_columns:
+                self.feature_columns = X.columns.tolist()
+
+
+            X = X[self.feature_columns]
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=self.test_size, random_state=self.random_state
+            )
 
         if self.task_type == "Supervised Classification":
             label_encoder = LabelEncoder()
@@ -106,8 +121,8 @@ class DatasetBenchmark(AbstractBenchmark):
             "y_train": y_train,
             "y_test": y_test,
             "dataset_name": self.dataset_name,
-            "dataset_size": X.shape[0],
-            "num_features": X.shape[-1],
+            "dataset_size": dataset.shape[0],
+            "num_features": X_train.shape[-1],
             "metadata": {
                 "task_type": self.task_type,
                 "categorical_column_names": self.categorical_columns,
@@ -199,11 +214,15 @@ if __name__ == "__main__":
     csv_path = ""
     target_column = ""
     task_type = "Supervised Classification"
-    feature_columns = []
+    categorical_columns = []
+    numerical_columns = []
 
     dataset_benchmark = DatasetBenchmark(
         dataset_path=csv_path,
         target_column=target_column,
+        categorical_columns=categorical_columns,
+        numerical_columns=numerical_columns,
+        feature_columns=categorical_columns+numerical_columns,
         feature_columns=feature_columns if len(feature_columns) > 0 else None,
         task_type=task_type,
     )
