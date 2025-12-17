@@ -70,10 +70,6 @@ class AbstractEmbeddingGenerator(ABC):
         """
         return self._is_end_to_end_model
 
-    @is_end_to_end_model.setter
-    def is_end_to_end_model(self, value: bool):
-        self._is_end_to_end_model = value
-
     @property
     def end_to_end_compatible_tasks(self):
         return self._end_to_end_compatible_tasks

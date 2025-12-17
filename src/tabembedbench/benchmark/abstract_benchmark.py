@@ -34,6 +34,7 @@ class AbstractBenchmark(ABC):
         timestamp: str | None = None,
         logging_level: int = logging.INFO,
         save_result_dataframe: bool = True,
+        save_embeddings: bool = False,
         upper_bound_num_samples: int = 10000,
         upper_bound_num_features: int = 500,
         benchmark_metrics: Dict | None = None,
@@ -245,7 +246,7 @@ class AbstractBenchmark(ABC):
                 The dictionary keys are metric names, and the values are their corresponding
                 computed values.
         """
-        result_dict = {"task_type": task_type}
+        result_dict = {"task": task_type}
 
         for metric in self.benchmark_metrics[task_type]:
             metric_func = self.benchmark_metrics[task_type][metric]
