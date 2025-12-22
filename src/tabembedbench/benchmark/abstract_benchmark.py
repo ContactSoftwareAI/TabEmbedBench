@@ -11,7 +11,7 @@ from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
 from tabembedbench.utils.logging_utils import get_benchmark_logger
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device, log_gpu_memory
-from tabembedbench.utils.tracking_utils import save_result_df
+from tabembedbench.utils.tracking_utils import MemoryTracker, save_result_df
 
 
 class NotEndToEndCompatibleError(Exception):
@@ -283,9 +283,27 @@ class AbstractBenchmark(ABC):
         # Generate embeddings
         try:
             self.logger.info(f"{logger_prefix} - Generating embeddings...")
+
+            model_memory_tracker = MemoryTracker()
+            model_memory_tracker.start_tracking()
+
             embeddings = self._generate_embeddings(
                 embedding_model, dataset_configurations
             )
+
+            model_memory = model_memory_tracker.stop_tracking()
+            result_row_dict.update(model_memory)
+
+            self.logger.info(
+                f"{logger_prefix} - Memory: CPU Used={model_memory.get('cpu_memory_used_mb', 0):.2f}MB, "
+                f"CPU Peak={model_memory.get('cpu_peak_memory_mb', 0):.2f}MB"
+            )
+            if "gpu_0_memory_used_mb" in model_memory:
+                self.logger.info(
+                    f"{logger_prefix} - GPU: Used={model_memory.get('gpu_0_memory_used_mb', 0):.2f}MB, "
+                    f"Peak={model_memory.get('gpu_0_max_allocated_mb', 0):.2f}MB"
+                )
+
         except Exception as e:
             self.logger.exception(f"{logger_prefix} - Error generating embeddings: {e}")
             raise
