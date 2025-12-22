@@ -344,11 +344,7 @@ class TabPFNWrapper(TabPFNEmbedding):
         super().__init__(num_estimators=num_estimators)
         self._is_end_to_end_model = True
         self.name = "TabPFN"
-        self.compatible_tasks_for_end_to_end = [
-            "Supervised Binary Classification",
-            "Supervised Multiclass Classification",
-            "Supervised Regression",
-        ]
+        self.compatible_tasks_for_end_to_end = TABARENA_TASKS
         self.task_model = None
 
     def _fit_model(
