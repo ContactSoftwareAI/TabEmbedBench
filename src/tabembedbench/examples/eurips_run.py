@@ -56,17 +56,17 @@ def get_embedding_models(debug=False):
 
     tablevector = TableVectorizerEmbedding()
 
-    tabpfn_embedder = TabPFNEmbedding(
-        num_estimators=5,
-    )
+    # tabpfn_embedder = TabPFNEmbedding(
+    #     num_estimators=5,
+    # )
 
     tabstar_embedder = TabStarEmbedding()
 
     embedding_models = [
-        #tabicl_row_embedder,
-        #tabpfn_embedder,
+        tabicl_row_embedder,
+        # tabpfn_embedder,
         tabstar_embedder,
-        #tablevector,
+        tablevector,
     ]
 
     return embedding_models

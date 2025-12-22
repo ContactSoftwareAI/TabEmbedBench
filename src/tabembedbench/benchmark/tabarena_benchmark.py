@@ -8,7 +8,14 @@ import numpy as np
 import openml
 import pandas as pd
 import polars as pl
-from sklearn.metrics import log_loss, mean_absolute_percentage_error, roc_auc_score
+from sklearn.metrics import (
+    log_loss,
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    r2_score,
+    roc_auc_score,
+    root_mean_squared_error,
+)
 from sklearn.preprocessing import LabelEncoder
 
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
@@ -342,13 +349,17 @@ class TabArenaBenchmark(AbstractBenchmark):
         """
         return {
             SUPERVISED_REGRESSION: {
+                "mae_score": mean_absolute_error,
                 "mape_score": mean_absolute_percentage_error,
+                "r2_score": r2_score,
+                "rmse_score": root_mean_squared_error,
             },
             SUPERVISED_BINARY_CLASSIFICATION: {
                 "auc_score": roc_auc_score,
             },
             SUPERVISED_MULTICLASSIFICATION: {
-                "auc_score": partial(roc_auc_score, multi_class="ovr"),
+                "auc_score_ovr": partial(roc_auc_score, multi_class="ovr"),
+                "auc_score_ovo": partial(roc_auc_score, multi_class="ovo"),
                 "log_loss_score": log_loss,
             },
         }
