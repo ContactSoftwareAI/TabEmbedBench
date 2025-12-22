@@ -253,7 +253,7 @@ class AbstractBenchmark(ABC):
 
         return metric_scores
 
-    def _process_embedding_model(
+    def _process_embedding_model_pipeline(
         self,
         embedding_model: AbstractEmbeddingGenerator,
         evaluators: list[AbstractEvaluator],
@@ -392,7 +392,7 @@ class AbstractBenchmark(ABC):
                         embedding_model, dataset_configurations
                     )
                 else:
-                    self._process_embedding_model(
+                    self._process_embedding_model_pipeline(
                         embedding_model, evaluators, dataset_configurations
                     )
             except NotEndToEndCompatibleError as e:

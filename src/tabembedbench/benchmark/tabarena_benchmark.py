@@ -383,14 +383,37 @@ class TabArenaBenchmark(AbstractBenchmark):
     def _process_end_to_end_model_pipeline(
         self,
         embedding_model: AbstractEmbeddingGenerator,
-        data_split: dict,
-    ) -> dict:
-        X_train = data_split.get("X_train")
-        y_train = data_split.get("y_train")
-        X_test = data_split.get("X_test")
-        y_true = data_split.get("y_true")
-        dataset_metadata = data_split.get("dataset_metadata")
-        feature_metadata = data_split.get("feature_metadata")
+        dataset_configurations: dict,
+    ) -> None:
+        """Processes an end-to-end model pipeline to generate predictions and compute evaluation metrics.
+
+        This function manages the pipeline for training a given end-to-end model on the specified dataset,
+        generating predictions for a test set, computing relevant metrics, and storing the results in a
+        buffer for later usage.
+
+        Args:
+            embedding_model: An instance of AbstractEmbeddingGenerator that supplies methods for embedding
+                generation and end-to-end prediction.
+            dataset_configurations: A dictionary containing configurations of the dataset, including
+                training and test data, ground truth labels, dataset metadata, and feature metadata. The
+                following keys are expected in the dictionary:
+                - X_train: Training features.
+                - y_train: Training labels.
+                - X_test: Testing features.
+                - y_true: Ground truth labels for the test data.
+                - dataset_metadata: A dictionary describing dataset-specific metadata, such as task type.
+                - feature_metadata: A dictionary describing feature-related metadata, such as current fold
+                  and repeat.
+
+        Returns:
+            None
+        """
+        X_train = dataset_configurations.get("X_train")
+        y_train = dataset_configurations.get("y_train")
+        X_test = dataset_configurations.get("X_test")
+        y_true = dataset_configurations.get("y_true")
+        dataset_metadata = dataset_configurations.get("dataset_metadata")
+        feature_metadata = dataset_configurations.get("feature_metadata")
         task_type = dataset_metadata.get("task_type")
 
         result_row_dict = {
@@ -417,7 +440,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         result_row_dict.update(metric_scores)
 
-        return result_row_dict
+        self._results_buffer.append(result_row_dict)
 
     def _get_task_configuration(self, dataset, task) -> tuple[int, int]:
         """Get the number of folds and repeats for a task.
@@ -576,9 +599,9 @@ if __name__ == "__main__":
     from tabembedbench.evaluators import KNNClassifierEvaluator, KNNRegressorEvaluator
 
     embedding_models = [
-        # TabICLEmbedding(),
+        TabICLEmbedding(),
         TabPFNWrapper(num_estimators=1),
-        # TableVectorizerEmbedding(),
+        TableVectorizerEmbedding(),
     ]
 
     evaluators = [
