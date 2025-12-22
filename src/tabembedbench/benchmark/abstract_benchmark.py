@@ -1,11 +1,13 @@
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Tuple
+from typing import Any
 
 import numpy as np
 import polars as pl
+from numpy import ndarray
 
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
@@ -37,10 +39,9 @@ class AbstractBenchmark(ABC):
         save_embeddings: bool = False,
         upper_bound_num_samples: int = 10000,
         upper_bound_num_features: int = 500,
-        benchmark_metrics: Dict | None = None,
+        benchmark_metrics: dict | None = None,
     ):
-        """
-        Initializes an instance of the benchmarking class with specified configurations, logging,
+        """Initializes an instance of the benchmarking class with specified configurations, logging,
         and optional parameters for task execution.
 
         Args:
@@ -65,7 +66,7 @@ class AbstractBenchmark(ABC):
         self._name = name
         self.task_type = task_type if isinstance(task_type, list) else [task_type]
         self.benchmark_metrics = benchmark_metrics or self._get_default_metrics()
-        self._results_buffer: List[dict] = []
+        self._results_buffer: list[dict] = []
         result_dir = Path(result_dir) if isinstance(result_dir, str) else result_dir
         result_dir.mkdir(parents=True, exist_ok=True)
         self.result_dir = result_dir
@@ -89,8 +90,7 @@ class AbstractBenchmark(ABC):
 
     @property
     def result_df(self) -> pl.DataFrame:
-        """
-        Gets the processed result DataFrame.
+        """Gets the processed result DataFrame.
 
         This property retrieves a DataFrame representation of data stored in the
         current internal results buffer. If the results buffer is empty, it returns
@@ -108,7 +108,7 @@ class AbstractBenchmark(ABC):
 
     # ========== Abstract Methods (Subclasses must implement) ==========
     @abstractmethod
-    def _load_datasets(self, **kwargs) -> List[Dict[str, Any]]:
+    def _load_datasets(self, **kwargs) -> list[dict[str, Any]]:
         """Load datasets for the benchmark.
 
         Returns:
@@ -117,7 +117,7 @@ class AbstractBenchmark(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _should_skip_dataset(self, dataset, **kwargs) -> Tuple[bool, str]:
+    def _should_skip_dataset(self, dataset, **kwargs) -> tuple[bool, str]:
         """Determine if a dataset should be skipped.
 
         Args:
@@ -166,12 +166,11 @@ class AbstractBenchmark(ABC):
     @abstractmethod
     def _get_evaluator_prediction(
         self,
-        embeddings: Tuple[np.ndarray, np.ndarray, float],
+        embeddings: tuple[np.ndarray, np.ndarray, float],
         evaluator: AbstractEvaluator,
         dataset_configurations: dict,
     ) -> np.ndarray:
-        """
-        Generates predictions using the provided evaluator and embeddings according to
+        """Generates predictions using the provided evaluator and embeddings according to
         the specified dataset configurations.
 
         Args:
@@ -193,9 +192,8 @@ class AbstractBenchmark(ABC):
         self,
         embedding_model: AbstractEmbeddingGenerator,
         dataset_configurations: dict,
-    ) -> Tuple[np.ndarray, np.ndarray | None, float]:
-        """
-        Generates embeddings for training and testing datasets using a provided embedding
+    ) -> tuple[np.ndarray, np.ndarray | None, float]:
+        """Generates embeddings for training and testing datasets using a provided embedding
         model. This function ensures that the embedding generation process is handled in a
         model-specific manner while accommodating configurations such as feature metadata.
 
@@ -215,7 +213,7 @@ class AbstractBenchmark(ABC):
                   or information calculated during the embedding generation process.
         """
         X_train = dataset_configurations.get("X_train")
-        X_test = dataset_configurations.get("X_test", None)
+        X_test = dataset_configurations.get("X_test")
 
         # Pass feature_metadata for model-specific handling
         feature_metadata = dataset_configurations.get("feature_metadata", {})
@@ -228,10 +226,9 @@ class AbstractBenchmark(ABC):
         )
 
     def _compute_metrics(
-        self, y_true, y_pred, task_type: str
-    ) -> Dict[str, float | int]:
-        """
-        Computes and returns a dictionary of evaluation metrics for the given task type by applying
+        self, y_true: np.ndarray, y_pred: np.ndarray, task_type: str
+    ) -> dict[str, float]:
+        """Computes and returns a dictionary of evaluation metrics for the given task type by applying
         the specified metric functions on the provided true and predicted values.
 
         Args:
@@ -246,22 +243,23 @@ class AbstractBenchmark(ABC):
                 The dictionary keys are metric names, and the values are their corresponding
                 computed values.
         """
-        result_dict = {"task": task_type}
+        metric_scores = {"task": task_type}
 
         for metric in self.benchmark_metrics[task_type]:
-            metric_func = self.benchmark_metrics[task_type][metric]
-            result_dict[metric] = metric_func(y_true, y_pred)
+            metric_func: Callable[[ndarray, ndarray], float] = self.benchmark_metrics[
+                task_type
+            ][metric]
+            metric_scores[metric] = metric_func(y_true, y_pred)
 
-        return result_dict
+        return metric_scores
 
     def _process_embedding_model(
         self,
         embedding_model: AbstractEmbeddingGenerator,
-        evaluators: List[AbstractEvaluator],
+        evaluators: list[AbstractEvaluator],
         dataset_configurations: dict,
     ) -> None:
-        """
-        Processes an embedding model over a given dataset with a set of evaluators. Generates
+        """Processes an embedding model over a given dataset with a set of evaluators. Generates
         embeddings for the provided dataset using the embedding model, evaluates the generated
         embeddings with compatible evaluators, and saves the results.
 
@@ -293,17 +291,6 @@ class AbstractBenchmark(ABC):
 
             model_memory = model_memory_tracker.stop_tracking()
             result_row_dict.update(model_memory)
-
-            self.logger.info(
-                f"{logger_prefix} - Memory: CPU Used={model_memory.get('cpu_memory_used_mb', 0):.2f}MB, "
-                f"CPU Peak={model_memory.get('cpu_peak_memory_mb', 0):.2f}MB"
-            )
-            if "gpu_0_memory_used_mb" in model_memory:
-                self.logger.info(
-                    f"{logger_prefix} - GPU: Used={model_memory.get('gpu_0_memory_used_mb', 0):.2f}MB, "
-                    f"Peak={model_memory.get('gpu_0_max_allocated_mb', 0):.2f}MB"
-                )
-
         except Exception as e:
             self.logger.exception(f"{logger_prefix} - Error generating embeddings: {e}")
             raise
@@ -314,23 +301,22 @@ class AbstractBenchmark(ABC):
                     f"{logger_prefix} - Skipping evaluator {evaluator.name} is not compatible with {self.task_type}. Skipping..."
                 )
                 continue
-            else:
-                self.logger.info(
-                    f"{logger_prefix} - Evaluating embeddings with {evaluator.name}..."
-                )
-                prediction = self._get_evaluator_prediction(
-                    embeddings,
-                    evaluator,
-                    dataset_configurations,
-                )
-                metric_scores = self._compute_metrics(
-                    y_true=dataset_configurations["y_true"],
-                    y_pred=prediction,
-                    task_type=dataset_metadata.get("task_type"),
-                )
-                result_row_dict["algorithm"] = evaluator.name
-                result_row_dict.update(metric_scores)
-                result_row_dict.update(evaluator.get_parameters())
+            self.logger.info(
+                f"{logger_prefix} - Evaluating embeddings with {evaluator.name}..."
+            )
+            prediction = self._get_evaluator_prediction(
+                embeddings,
+                evaluator,
+                dataset_configurations,
+            )
+            metric_scores = self._compute_metrics(
+                y_true=dataset_configurations["y_true"],
+                y_pred=prediction,
+                task_type=dataset_metadata.get("task_type"),
+            )
+            result_row_dict["algorithm"] = evaluator.name
+            result_row_dict.update(metric_scores)
+            result_row_dict.update(evaluator.get_parameters())
 
             evaluator.reset_evaluator()
             self._cleanup_gpu_cache()
@@ -345,8 +331,7 @@ class AbstractBenchmark(ABC):
         embedding_model: AbstractEmbeddingGenerator,
         dataset_configurations: dict,
     ) -> None:
-        """
-        Processes the pipeline for an end-to-end model.
+        """Processes the pipeline for an end-to-end model.
 
         This function is intended to handle the processing related to end-to-end
         models but is not implemented. It raises a NotImplementedError when called
@@ -370,8 +355,7 @@ class AbstractBenchmark(ABC):
         embedding_models: list[AbstractEmbeddingGenerator],
         evaluators: list[AbstractEvaluator],
     ) -> None:
-        """
-        Processes the dataset configuration by applying embedding models and evaluators.
+        """Processes the dataset configuration by applying embedding models and evaluators.
         Determines if an embedding model is an end-to-end model and processes it accordingly.
 
         Args:
@@ -424,8 +408,7 @@ class AbstractBenchmark(ABC):
         embedding_models: list[AbstractEmbeddingGenerator],
         evaluators: list[AbstractEvaluator],
     ) -> None:
-        """
-        Processes a given dataset through multiple embedding models and evaluators.
+        """Processes a given dataset through multiple embedding models and evaluators.
 
         This function determines if the dataset should be skipped based on specific
         conditions. If it is not skipped, the dataset is prepared (potentially
