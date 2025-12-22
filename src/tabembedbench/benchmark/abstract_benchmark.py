@@ -223,7 +223,7 @@ class AbstractBenchmark(ABC):
         return embedding_model.generate_embeddings(
             X_train=X_train,
             X_test=X_test,
-            outlier=(self.task_type == "Outlier Detection"),
+            outlier=("Outlier Detection" in self.task_type),
             **feature_metadata,
         )
 
