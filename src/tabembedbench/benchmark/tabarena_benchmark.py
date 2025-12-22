@@ -24,7 +24,6 @@ from tabembedbench.benchmark.constants import (
     SUPERVISED_MULTICLASSIFICATION,
     SUPERVISED_REGRESSION,
     TABARENA_TABPFN_SUBSET,
-    TASK_IDS_WITH_MISSING_VALUES,
 )
 from tabembedbench.embedding_models.abstractembedding import (
     AbstractEmbeddingGenerator,
