@@ -588,33 +588,3 @@ def run_tabarena_benchmark(
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
-
-
-if __name__ == "__main__":
-    from tabembedbench.embedding_models import (
-        TabICLEmbedding,
-        TableVectorizerEmbedding,
-        TabPFNWrapper,
-    )
-    from tabembedbench.evaluators import KNNClassifierEvaluator, KNNRegressorEvaluator
-
-    embedding_models = [
-        TabICLEmbedding(),
-        TabPFNWrapper(num_estimators=1),
-        TableVectorizerEmbedding(),
-    ]
-
-    evaluators = [
-        KNNRegressorEvaluator(num_neighbors=5, metric="euclidean", weights="distance"),
-        KNNClassifierEvaluator(num_neighbors=5, metric="euclidean", weights="distance"),
-    ]
-
-    result = run_tabarena_benchmark(
-        embedding_models=embedding_models,
-        evaluators=evaluators,
-        tabarena_version="tabarena-v0.1",
-        upper_bound_num_samples=1000,
-        upper_bound_num_features=200,
-    )
-
-    print(result)
