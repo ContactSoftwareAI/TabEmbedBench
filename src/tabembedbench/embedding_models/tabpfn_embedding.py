@@ -355,7 +355,7 @@ class TabPFNWrapper(TabPFNEmbedding):
         self,
         X_preprocessed: np.ndarray,
         y_preprocessed: np.ndarray | None = None,
-        task_type="Supervised Classification",
+        task_type=SUPERVISED_BINARY_CLASSIFICATION,
         **kwargs,
     ):
         self.task_model = (
@@ -367,15 +367,21 @@ class TabPFNWrapper(TabPFNEmbedding):
             )
             else self.tabpfn_reg
         )
-        self.task_model.fit(X_preprocessed, y_preprocessed)
+        self.task_model.fit(X=X_preprocessed, y=y_preprocessed)
         self._is_fitted = True
 
     def _get_prediction(
         self,
         X: np.ndarray,
+        task_type: str = SUPERVISED_BINARY_CLASSIFICATION,
     ) -> np.ndarray:
         if not self.task_model:
             raise ValueError("Something went wrong.")
+        if task_type in CLASSIFICATION_TASKS:
+            probs = self.task_model.predict_proba(X)
+            if task_type == SUPERVISED_BINARY_CLASSIFICATION and probs.shape[1] == 2:
+                return probs[:, 1]
+            return probs
         return self.task_model.predict(X)
 
     def _reset_embedding_model(self):
