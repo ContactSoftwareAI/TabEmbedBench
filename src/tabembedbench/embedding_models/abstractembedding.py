@@ -164,7 +164,7 @@ class AbstractEmbeddingGenerator(ABC):
         """
         raise NotImplementedError
 
-    def _get_prediction(self, X: np.ndarray):
+    def _get_prediction(self, X: np.ndarray, **kwargs) -> np.ndarray:
         raise NotImplementedError
 
     @staticmethod
@@ -266,7 +266,7 @@ class AbstractEmbeddingGenerator(ABC):
             X_test_preprocessed = None
 
         self._fit_model(
-            X_train_preprocessed, y_train=y_train, outlier=outlier, **kwargs
+            X_train_preprocessed, y_preprocessed=y_train, outlier=outlier, **kwargs
         )
 
         return X_train_preprocessed, X_test_preprocessed
@@ -328,7 +328,7 @@ class AbstractEmbeddingGenerator(ABC):
             compute_embeddings_time,
         )
 
-    def get_prediction(
+    def get_end_to_end_prediction(
         self,
         X_train: np.ndarray | pl.DataFrame | pd.DataFrame,
         y_train: np.ndarray,
@@ -338,7 +338,7 @@ class AbstractEmbeddingGenerator(ABC):
     ) -> np.ndarray:
         if not self._is_end_to_end_model:
             raise NotImplementedError(
-                "get_predictions() is only available for end-to-end models."
+                "get_end_to_end_prediction() is only available for end-to-end models."
             )
         if (
             self.end_to_end_compatible_tasks
@@ -347,6 +347,6 @@ class AbstractEmbeddingGenerator(ABC):
             raise ValueError()
 
         _, X_test_preprocessed = self.preprocess_data(
-            X_train, X_test=X_test, y_train=y_train, **kwargs
+            X_train, X_test=X_test, y_train=y_train, task_type=task_type, **kwargs
         )
-        return self._get_prediction(X_test_preprocessed)
+        return self._get_prediction(X_test_preprocessed, task_type=task_type)
