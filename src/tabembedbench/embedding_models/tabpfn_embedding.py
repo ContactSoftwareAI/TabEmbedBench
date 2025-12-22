@@ -9,6 +9,11 @@ from tabpfn import TabPFNClassifier, TabPFNRegressor
 from tabpfn.constants import ModelVersion
 from tabpfn.utils import infer_categorical_features
 
+from tabembedbench.benchmark.constants import (
+    CLASSIFICATION_TASKS,
+    SUPERVISED_BINARY_CLASSIFICATION,
+    TABARENA_TASKS,
+)
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.utils.torch_utils import get_device
 
@@ -355,13 +360,7 @@ class TabPFNWrapper(TabPFNEmbedding):
         **kwargs,
     ):
         self.task_model = (
-            self.tabpfn_clf
-            if task_type
-            in (
-                "Supervised Binary Classification",
-                "Supervised Multiclass Classification",
-            )
-            else self.tabpfn_reg
+            self.tabpfn_clf if task_type in CLASSIFICATION_TASKS else self.tabpfn_reg
         )
         self.task_model.fit(X=X_preprocessed, y=y_preprocessed)
         self._is_fitted = True
