@@ -28,6 +28,8 @@ class AbstractEmbeddingGenerator(ABC):
         name: str,
         is_end_to_end_model: bool = False,
         end_to_end_compatible_tasks: list[str] | None = None,
+        max_num_samples: int = 100000,
+        max_num_features: int = 500,
     ):
         """
         Initializes the object with the provided name and a flag indicating whether it is
@@ -44,6 +46,8 @@ class AbstractEmbeddingGenerator(ABC):
         self._is_end_to_end_model = is_end_to_end_model
         self._logger = logging.getLogger(__name__)
         self._end_to_end_compatible_tasks = end_to_end_compatible_tasks
+        self.max_num_samples = max_num_samples
+        self.max_num_features = max_num_features
 
     @property
     def name(self) -> str:
@@ -78,6 +82,7 @@ class AbstractEmbeddingGenerator(ABC):
     def end_to_end_compatible_tasks(self, tasks: list[str]):
         self._end_to_end_compatible_tasks = tasks
 
+    # ========== Abstract Methods (Subclasses must implement) ==========
     @abstractmethod
     def _preprocess_data(
         self,
@@ -178,6 +183,9 @@ class AbstractEmbeddingGenerator(ABC):
                   otherwise False.
         """
         return len(embeddings.shape) == 2
+
+    def check_dataset_constraints(self, num_samples: int, num_features: int):
+        return num_samples <= self.max_num_samples and num_features <= self.max_num_features
 
     @staticmethod
     def _check_nan(embeddings: np.ndarray) -> bool:

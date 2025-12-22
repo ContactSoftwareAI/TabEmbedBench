@@ -376,10 +376,12 @@ class AbstractBenchmark(ABC):
                     self._process_end_to_end_model_pipeline(
                         embedding_model, dataset_configurations
                     )
-                else:
+                elif embedding_model.check_dataset_constraints(num_samples=dataset_configurations["dataset_metadata"]["num_samples"], num_features=dataset_configurations["dataset_metadata"]["num_features"]):
                     self._process_embedding_model(
                         embedding_model, evaluators, dataset_configurations
                     )
+                else:
+                    self.logger.info(f"Skipping embedding model {embedding_model.name} due to size constraints.")
             except NotEndToEndCompatibleError as e:
                 self.logger.info(str(e))
                 continue

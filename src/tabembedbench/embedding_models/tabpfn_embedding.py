@@ -61,7 +61,11 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
             emb_agg (str, optional): Method for aggregating embeddings across columns.
                 Options: 'mean', 'concat'. Defaults to "mean".
         """
-        super().__init__(name="TabPFN Embedding")
+        super().__init__(
+            name="TabPFN Embedding",
+            max_num_samples=15000,
+            max_num_features=500,
+        )
         self.num_estimators = num_estimators
 
         self.device = get_device()
