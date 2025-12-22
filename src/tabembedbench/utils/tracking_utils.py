@@ -48,8 +48,18 @@ class MemoryTracker:
         self._start_gpu_memory = {}
 
     def start_tracking(self) -> None:
-        """Start CPU and GPU memory tracking."""
-        # CPU memory tracking
+        """
+        Starts tracking memory usage for both CPU and GPU.
+
+        This method initializes memory tracking for the current process. On the CPU side, it uses
+        the `tracemalloc` Python module to capture the initial memory snapshot. For GPU memory,
+        it resets the peak memory statistics of all available CUDA devices and records the
+        initial amount of memory allocated per GPU.
+
+        Raises:
+            RuntimeError: If GPU memory tracking is attempted but CUDA is not available.
+
+        """
         tracemalloc.start()
         self._start_memory = tracemalloc.get_traced_memory()[0]
 
@@ -60,7 +70,24 @@ class MemoryTracker:
                 self._start_gpu_memory[i] = torch.cuda.memory_allocated(i)
 
     def stop_tracking(self) -> Dict[str, float]:
-        """Stop tracking and return CPU and GPU memory stats."""
+        """
+        Stops resource tracking and collects memory statistics for both CPU and GPU.
+
+        This method calculates the memory usage and peak memory details during the tracking
+        period and returns a dictionary of the collected statistics. GPU statistics are only
+        collected if CUDA is available, otherwise the method notes that GPU tracking is not available.
+
+        Returns:
+            Dict[str, float]: A dictionary containing the following keys:
+                - "cpu_memory_used_mb": The memory used by the CPU in MB during the tracking period.
+                - "cpu_peak_memory_mb": The peak memory used by the CPU in MB during the tracking period.
+                - "gpu_X_memory_used_mb": The memory used by each GPU X in MB during the tracking period
+                  (one for each available device).
+                - "gpu_X_max_allocated_mb": The maximum memory allocated for each GPU X in MB at any point
+                  during the tracking period.
+                - "gpu_X_reserved_mb": The reserved memory for each GPU X in MB during the tracking period.
+                - "gpu_available": A boolean value indicating whether GPU is available.
+        """
         stats = {}
 
         # CPU memory stats
@@ -75,6 +102,9 @@ class MemoryTracker:
 
         # GPU memory stats (if available)
         if torch.cuda.is_available():
+            total_gpu_used = 0
+            total_gpu_peak = 0
+
             for i in range(torch.cuda.device_count()):
                 allocated = torch.cuda.memory_allocated(i) / 1024 / 1024  # MB
                 start = self._start_gpu_memory.get(i, 0) / 1024 / 1024  # MB
@@ -86,6 +116,13 @@ class MemoryTracker:
                 stats[f"gpu_{i}_memory_used_mb"] = gpu_used
                 stats[f"gpu_{i}_max_allocated_mb"] = max_allocated
                 stats[f"gpu_{i}_reserved_mb"] = reserved
+
+                total_gpu_used += gpu_used
+                # For peak, we take the MAX peak across all cards (usually the limiting factor)
+                total_gpu_peak = max(total_gpu_peak, max_allocated)
+
+            stats["gpu_total_used_mb"] = total_gpu_used
+            stats["gpu_max_peak_single_card_mb"] = total_gpu_peak
         else:
             stats["gpu_available"] = False
 
