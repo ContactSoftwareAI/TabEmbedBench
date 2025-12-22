@@ -185,7 +185,10 @@ class AbstractEmbeddingGenerator(ABC):
         return len(embeddings.shape) == 2
 
     def check_dataset_constraints(self, num_samples: int, num_features: int):
-        return num_samples <= self.max_num_samples and num_features <= self.max_num_features
+        return (
+            num_samples <= self.max_num_samples
+            and num_features <= self.max_num_features
+        )
 
     @staticmethod
     def _check_nan(embeddings: np.ndarray) -> bool:
@@ -305,7 +308,6 @@ class AbstractEmbeddingGenerator(ABC):
         X_train_preprocessed, X_test_preprocessed = self.preprocess_data(
             X_train, X_test, outlier=outlier, **kwargs
         )
-
         start_time = time.perf_counter()
         train_embeddings, test_embeddings = self._compute_embeddings(
             X_train_preprocessed, X_test_preprocessed, outlier=outlier, **kwargs
