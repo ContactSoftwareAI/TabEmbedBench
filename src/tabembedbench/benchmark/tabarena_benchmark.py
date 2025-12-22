@@ -289,6 +289,8 @@ class TabArenaBenchmark(AbstractBenchmark):
                     "feature_metadata": {
                         "categorical_indices": categorical_indices,
                         "categorical_column_names": categorical_column_names,
+                        "fold": fold,
+                        "repeat": repeat,
                     },
                 }
 
@@ -386,37 +388,36 @@ class TabArenaBenchmark(AbstractBenchmark):
         X_train = data_split.get("X_train")
         y_train = data_split.get("y_train")
         X_test = data_split.get("X_test")
-        y_test = data_split.get("y_test")
-        metadata = data_split.get("metadata")
-        task_type = metadata.get("task_type")
+        y_true = data_split.get("y_true")
+        dataset_metadata = data_split.get("dataset_metadata")
+        feature_metadata = data_split.get("feature_metadata")
+        task_type = dataset_metadata.get("task_type")
 
-        _, X_test_preprocessed = embedding_model.preprocess_data(
-            X_train=X_train, X_test=X_test, y_train=y_train, outlier=False, **metadata
-        )
-
-        test_prediction = embedding_model.get_prediction(
-            X=X_test_preprocessed,
-        )
-
-        # Build result dictionary
-        result_dict = {
-            "dataset_name": [data_split["dataset_name"]],
-            "dataset_size": [data_split["dataset_size"]],
-            "num_features": [data_split["num_features"]],
-            "embedding_model": [embedding_model.name],
-            "fold": [data_split["metadata"]["fold"]],
-            "repeat": [data_split["metadata"]["repeat"]],
-            "algorithm": [embedding_model.name],
+        result_row_dict = {
+            "embedding_model": None,
+            "algorithm": embedding_model.name,
+            "fold": feature_metadata["fold"],
+            "repeat": feature_metadata["repeat"],
         }
 
-        result_dict = self._compute_metrics(
-            result_dict,
-            y_test,
+        result_row_dict.update(dataset_metadata)
+
+        test_prediction = embedding_model.get_end_to_end_prediction(
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            task_type=task_type,
+        )
+
+        metric_scores = self._compute_metrics(
+            y_true,
             test_prediction,
             task_type,
         )
 
-        return result_dict
+        result_row_dict.update(metric_scores)
+
+        return result_row_dict
 
     def _get_task_configuration(self, dataset, task) -> tuple[int, int]:
         """Get the number of folds and repeats for a task.
@@ -564,3 +565,33 @@ def run_tabarena_benchmark(
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
+
+
+if __name__ == "__main__":
+    from tabembedbench.embedding_models import (
+        TabICLEmbedding,
+        TableVectorizerEmbedding,
+        TabPFNWrapper,
+    )
+    from tabembedbench.evaluators import KNNClassifierEvaluator, KNNRegressorEvaluator
+
+    embedding_models = [
+        # TabICLEmbedding(),
+        TabPFNWrapper(num_estimators=1),
+        # TableVectorizerEmbedding(),
+    ]
+
+    evaluators = [
+        KNNRegressorEvaluator(num_neighbors=5, metric="euclidean", weights="distance"),
+        KNNClassifierEvaluator(num_neighbors=5, metric="euclidean", weights="distance"),
+    ]
+
+    result = run_tabarena_benchmark(
+        embedding_models=embedding_models,
+        evaluators=evaluators,
+        tabarena_version="tabarena-v0.1",
+        upper_bound_num_samples=1000,
+        upper_bound_num_features=200,
+    )
+
+    print(result)
