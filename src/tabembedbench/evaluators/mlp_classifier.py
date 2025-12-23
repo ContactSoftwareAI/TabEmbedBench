@@ -8,7 +8,11 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils._tags import Tags, TargetTags
 
-from tabembedbench.constants import MAX_BEST_MODEL_ITERATIONS, MAX_HPO_ITERATIONS
+from tabembedbench.constants import (
+    CLASSIFICATION_TASKS,
+    MAX_BEST_MODEL_ITERATIONS,
+    MAX_HPO_ITERATIONS,
+)
 from tabembedbench.evaluators.abstractevaluator import AbstractHPOEvaluator
 from tabembedbench.utils.torch_utils import get_device
 
@@ -178,10 +182,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
         """
         super().__init__(
             name="MLPClassifier",
-            task_type=[
-                "Supervised Binary Classification",
-                "Supervised Multiclass Classification",
-            ],
+            task_type=CLASSIFICATION_TASKS,
             n_trials=n_trials,
             cv_folds=cv_folds,
             random_state=random_state,
@@ -193,7 +194,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
     def _get_search_space(self) -> dict:
         """Define the hyperparameter search space for sklearn MLP classifier."""
         return {
-            "n_layers": {"type": "int", "low": 1, "high": 5},
+            "n_layers": {"type": "int", "low": 1, "high": 10},
             "hidden_layer_sizes": {
                 "type": "int_sequence",
                 "length_param": "n_layers",
@@ -204,11 +205,18 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
             "alpha": {"type": "float", "low": 1e-5, "high": 1e-1, "log": True},
             "learning_rate_init": {
                 "type": "float",
-                "low": 1e-4,
+                "low": 1e-6,
                 "high": 1e-2,
                 "log": True,
             },
-            "batch_size": {"type": "categorical", "choices": [16, 32, 64, 128]},
+            "batch_size": {
+                "type": "categorical",
+                "choices": [16, 32, 64, 128, 256, 512],
+            },
+            "max_iter": {
+                "type": "constant",
+                "value": MAX_HPO_ITERATIONS,
+            },
             "activation": {
                 "type": "categorical",
                 "choices": ["relu", "tanh", "logistic"],
