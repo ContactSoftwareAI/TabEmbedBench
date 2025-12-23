@@ -56,18 +56,28 @@ class TabArenaBenchmark(AbstractBenchmark):
         benchmark_metrics: dict | None = None,
         openml_cache_dir: str | Path | None = None,
     ):
-        """Initialize the TabArena benchmark.
+        """
+        Initializes the class with configuration options for running benchmarks using TabArena datasets.
+        The class is designed to support various supervised learning tasks with configurable parameters
+        such as benchmark versions, dataset inclusion/exclusion, and cache management. Additionally,
+        it sets up directories and logging for efficient benchmark execution.
 
         Args:
-            tabarena_version: OpenML suite identifier.
-            tabarena_lite: Whether to use lite mode (fewer folds/repeats).
-            exclude_datasets: List of dataset names to exclude from the benchmark.
-            result_dir: Directory for saving results.
-            timestamp: Timestamp string for result file naming.
-            save_result_dataframe: Whether to save results to disk.
-            upper_bound_num_samples: Maximum dataset size to process.
-            upper_bound_num_features: Maximum number of features to process.
-            run_tabpfn_subset: Whether to run only a subset of TabPFN tasks.
+            tabarena_version (str): Defines the version of the TabArena benchmark suite used.
+            tabarena_lite (bool): Determines whether to use the lightweight configuration of TabArena.
+            exclude_datasets (list[str] | None): List of datasets to exclude from the benchmark process.
+            result_dir (str | Path): Path to the directory where benchmark results will be stored.
+            timestamp (str): Timestamp used for organizing run-specific outputs and logs.
+            logging_level (int): Logging level for the benchmark process (e.g., logging.INFO).
+            save_result_dataframe (bool): Determines whether to save benchmark results as a DataFrame.
+            upper_bound_num_samples (int): Maximum allowed number of samples in the dataset.
+            upper_bound_num_features (int): Maximum allowed number of features in the dataset.
+            run_tabpfn_subset (bool): Indicates if a specific subset of TabPFN should be included.
+            skip_missing_values (bool): Specifies whether to skip datasets with missing values.
+            benchmark_metrics (dict | None): Dictionary of benchmark metrics to use. Defaults to a
+                predefined set.
+            openml_cache_dir (str | Path | None): Path to the directory for caching OpenML datasets.
+                Defaults to "data/tabarena_datasets" if not provided.
         """
         super().__init__(
             name="TabEmbedBench_TabArena",
@@ -94,7 +104,6 @@ class TabArenaBenchmark(AbstractBenchmark):
         self.skip_missing_values = skip_missing_values
         self.benchmark_metrics = benchmark_metrics or self._get_default_metrics()
 
-        # Setup OpenML cache (similar to OutlierBenchmark's dataset_paths)
         if openml_cache_dir is None:
             openml_cache_dir = Path("data/tabarena_datasets")
         else:
@@ -107,10 +116,26 @@ class TabArenaBenchmark(AbstractBenchmark):
         self.logger.info(f"OpenML cache directory: {self.openml_cache_dir}")
 
     def _load_datasets(self, **kwargs) -> List[Dict[str, Any]]:
-        """Load TabArena tasks from OpenML.
+        """
+        Loads and processes datasets from the OpenML benchmark suite.
+
+        This method retrieves the OpenML benchmark suite based on the specified
+        `tabarena_version`, extracts tasks from the suite, and fetches their corresponding
+        datasets. Additionally, it determines the folds and repeats configuration for each
+        task dataset and compiles the collected information into a list.
+
+        Args:
+            **kwargs: Optional keyword arguments that may be used in the dataset loading
+                process.
 
         Returns:
-            List of dictionaries containing task information.
+            List[Dict[str, Any]]: A list of dictionaries, each containing the following
+                information for a task:
+                - task_id: The identifier of the task.
+                - task: The OpenML task object.
+                - dataset: The dataset associated with the task.
+                - folds: The number of folds for cross-validation associated with the task.
+                - repeats: The number of repeats for cross-validation associated with the task.
         """
         self.benchmark_suite = openml.study.get_suite(self.tabarena_version)
         self.task_ids = self.benchmark_suite.tasks

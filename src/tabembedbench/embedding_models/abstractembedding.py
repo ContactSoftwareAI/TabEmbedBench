@@ -88,6 +88,7 @@ class AbstractEmbeddingGenerator(ABC):
         self,
         X: np.ndarray,
         train: bool = True,
+        task_type: str = "classification",
         **kwargs,
     ) -> np.ndarray:
         """Preprocesses the input data.
@@ -185,6 +186,20 @@ class AbstractEmbeddingGenerator(ABC):
         return len(embeddings.shape) == 2
 
     def check_dataset_constraints(self, num_samples: int, num_features: int):
+        """
+        Checks if the dataset satisfies the constraints on the number of samples and features
+        for this specific embedding or end-to-end model.
+
+        The method verifies whether the given number of samples and features meet
+        the maximum allowed values defined by the class constraints.
+
+        Args:
+            num_samples (int): The number of samples in the dataset.
+            num_features (int): The number of features in the dataset.
+
+        Returns:
+            bool: True if the dataset satisfies the constraints, False otherwise.
+        """
         return (
             num_samples <= self.max_num_samples
             and num_features <= self.max_num_features
@@ -333,9 +348,28 @@ class AbstractEmbeddingGenerator(ABC):
         X_train: np.ndarray | pl.DataFrame | pd.DataFrame,
         y_train: np.ndarray,
         X_test: np.ndarray | None = None,
-        task_type: str = "Supervised Classification",
+        task_type: str = "Supervised Binary Classification",
         **kwargs,
     ) -> np.ndarray:
+        """
+        Generates predictions using an end-to-end model after preprocessing the input data.
+
+        This method preprocesses the training and testing data, verifies compatibility of the
+        task type with end-to-end modeling, and subsequently generates predictions. It is
+        specifically available only for models that support end-to-end processing.
+
+        Args:
+            X_train (np.ndarray | pl.DataFrame | pd.DataFrame): Input training features.
+            y_train (np.ndarray): Input training labels.
+            X_test (np.ndarray | None, optional): Testing features. If None, the method
+                assumes the testing dataset is not provided.
+            task_type (str, optional): Type of machine learning task. Defaults to
+                "Supervised Binary Classification".
+            **kwargs: Additional keyword arguments for data preprocessing or prediction.
+
+        Returns:
+            np.ndarray: Predictions generated for the test dataset.
+        """
         if not self._is_end_to_end_model:
             raise NotImplementedError(
                 "get_end_to_end_prediction() is only available for end-to-end models."

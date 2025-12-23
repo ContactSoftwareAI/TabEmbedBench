@@ -36,7 +36,6 @@ class AbstractBenchmark(ABC):
         timestamp: str | None = None,
         logging_level: int = logging.INFO,
         save_result_dataframe: bool = True,
-        save_embeddings: bool = False,
         upper_bound_num_samples: int = 10000,
         upper_bound_num_features: int = 500,
         benchmark_metrics: dict | None = None,
