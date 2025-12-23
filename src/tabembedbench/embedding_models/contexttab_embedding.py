@@ -1,6 +1,6 @@
 from huggingface_hub import hf_hub_download
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Union, Optional
 from pathlib import Path
 import torch
 import gc
@@ -15,7 +15,17 @@ from sap_rpt_oss.model.torch_model import RPT
 from sap_rpt_oss.constants import ModelSize
 from sap_rpt_oss.data.tokenizer import Tokenizer
 
-
+## aus ConTextTab Repo
+def to_device(x, device: Union[torch.device, int], dtype: Optional[torch.dtype] = None, raise_on_unexpected=True):
+    for k, v in x.items():
+        if isinstance(v, torch.Tensor):
+            target_dtype = dtype if v.dtype == torch.float32 else v.dtype
+            x[k] = v.to(device, dtype=target_dtype)
+        elif isinstance(v, dict):
+            x[k] = to_device(v, device, dtype=dtype)
+        elif v is not None and raise_on_unexpected:
+            raise ValueError(f'Unknown type, {type(v)}')
+    return x
 
 class ConTextTabModel(RPT):
 
@@ -25,12 +35,14 @@ class ConTextTabModel(RPT):
                          classification_type=classification_type
         )
 
+
     ## aus contexttab repo
     def forward(self, data: dict[str, torch.Tensor], labels=None, **kwargs):
-        input_embeds = self.embeddings(data, is_regression=True)
+        data = to_device(data, self.device, raise_on_unexpected=False)
+        input_embeds = self.embeddings(data['data'], is_regression=True)
         # (max_num_rows, max_num_columns, hidden_size)
 
-        extended_attention_mask = self.build_context_attention_mask(data, input_embeds.device)
+        extended_attention_mask = self.build_context_attention_mask(data['data'], input_embeds.device)
         extended_attention_mask = extended_attention_mask.type(input_embeds.dtype)
 
         # ToDo: If im original beachten und evtl. anpassen
@@ -96,7 +108,9 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
         if not isinstance(X, DataFrame):
         #ToDo: Handle column names
             X = DataFrame(X)
-        y = Series(np.zeros(len(X)), name="target", index=X.index)
+
+        rng = np.random.default_rng(self.seed)
+        y = Series(rng.standard_normal(len(X)), name="target", index=X.index)
 
         df = pd.concat([X, y.to_frame()], axis=1)
 
@@ -156,18 +170,32 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
             **kwargs
     ) -> Tuple[np.ndarray, np.ndarray | None]:
 
-        if outlier:
-            embeddings = self.contexttab_embedder(X_train_preprocessed)
+        self.contexttab_embedder.eval()
+        device_type = 'cuda' if 'cuda' in str(self.device) else 'cpu'
+        with torch.no_grad(), torch.autocast(device_type=device_type, enabled=(device_type == 'cuda')):
+            if outlier:
+                embeddings = self.contexttab_embedder(X_train_preprocessed)
 
-            return embeddings, None
+                return embeddings, None
 
-        else:
-            embeddings_train = self.contexttab_embedder(X_train_preprocessed)
-            X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
-            embeddings = self.contexttab_embedder(X_train_test_stack)
-            embeddings_test = embeddings[len(X_train_preprocessed):]
+            else:
+                embeddings_train = self.contexttab_embedder(X_train_preprocessed)
 
-            return embeddings_train, embeddings_test
+                #ToDo: Adapt other values such as num rows
+                combined_data = X_train_preprocessed.copy()
+                combined_data['data'] = torch.cat([
+                    X_train_preprocessed['data'],
+                    X_test_preprocessed['data']
+                ], dim=0)
+
+                embeddings_all = self.contexttab_embedder(combined_data)
+                embeddings_test = embeddings_all[len(X_train_preprocessed['data']):]
+
+                #X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
+                #embeddings = self.contexttab_embedder(X_train_test_stack)
+                #embeddings_test = embeddings[len(X_train_preprocessed):]
+
+                return embeddings_train, embeddings_test
 
     def _reset_embedding_model(self, *args, **kwargs):
         """
