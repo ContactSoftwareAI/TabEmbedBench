@@ -48,7 +48,6 @@ class SklearnMLPRegressorWrapper(BaseEstimator, RegressorMixin):
 
         self.scaler = StandardScaler()
         self.model = None
-        self.is_fitted_ = False
 
     def __sklearn_tags__(self):
         """Implement sklearn tags for compatibility with newer sklearn versions."""
