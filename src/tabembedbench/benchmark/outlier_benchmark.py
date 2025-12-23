@@ -2,7 +2,6 @@
 
 import logging
 import zipfile
-from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterator, Optional, Tuple
 
@@ -14,8 +13,6 @@ from sklearn.metrics import roc_auc_score
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
-
-TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 TASK_TYPE = "Outlier Detection"
 
@@ -100,7 +97,7 @@ class OutlierBenchmark(AbstractBenchmark):
         exclude_datasets: list[str] | None = None,
         exclude_image_datasets: bool = True,
         result_dir: str | Path = "result_outlier",
-        timestamp: str = TIMESTAMP,
+        timestamp: str | None = None,
         logging_level: int = logging.INFO,
         save_result_dataframe: bool = True,
         upper_bound_num_samples: int = 10000,
@@ -369,7 +366,7 @@ def run_outlier_benchmark(
     upper_bound_num_features: int = 500,
     save_result_dataframe: bool = True,
     result_dir: str | Path = "result_outlier",
-    timestamp: str = TIMESTAMP,
+    timestamp: str | None = None,
 ) -> pl.DataFrame:
     """Run outlier detection benchmark using the provided embedding models.
 

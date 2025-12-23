@@ -179,6 +179,15 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
         self,
         list_dataset_collections: Dict[str, str | List[int]],
         random_seed: Optional[int] = None,
+        result_dir: str | Path = "result_dataset_separation",
+        timestamp: str | None = None,
+        logging_level: int = logging.INFO,
+        save_result_dataframe: bool = True,
+        create_embedding_plots: bool = False,
+        benchmark_metrics: (
+            Dict[str, Dict[str, Callable[[np.ndarray, np.ndarray], float]]] | None
+        ) = None,
+        openml_cache_dir: str | Path | None = None,
     ):
         super().__init__(
             name="Dataset Separation Benchmark",
