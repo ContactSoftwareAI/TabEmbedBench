@@ -234,6 +234,12 @@ class AbstractHPOEvaluator(AbstractEvaluator):
 
             params[param_name] = suggestion_methods[param_type](param_name, config)
 
+        # Remove parameters which are only suggested for length of a sequence like number of layers
+        for config in search_space.values():
+            length_param = config.get("length_param")
+            if length_param and length_param in params:
+                params.pop(length_param)
+
         return self.model_class(**params)
 
     def objective(
