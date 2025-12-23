@@ -1,10 +1,12 @@
 import json
+import logging
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import numpy as np
 import openml
+import polars as pl
 from pydantic import BaseModel, RootModel, ValidationError
 from sklearn.metrics import (
     log_loss,
@@ -75,17 +77,27 @@ def get_list_of_dataset_collections(
         else openml.study.get_suite(tabarena_version).tasks
     )
 
+    filtered_task_ids = []
+
     for task_id in task_ids:
         task = openml.tasks.get_task(task_id)
         dataset = task.get_dataset()
 
-        if (
+        if not (
             dataset.qualities["NumberOfInstances"] > max_num_samples
             or dataset.qualities["NumberOfFeatures"] > max_num_features
+            or dataset.qualities["NumberOfMissingValues"] > 0
         ):
-            task_ids.remove(task_id)
+            filtered_task_ids.append(task_id)
 
+    task_ids = filtered_task_ids
     rng = np.random.default_rng(random_seed)
+
+    if len(task_ids) < 2:
+        raise ValueError(
+            f"Not enough filtered tasks ({len(task_ids)}) to create collections. "
+            f"Adjust max_num_samples ({max_num_samples}) or max_num_features ({max_num_features})."
+        )
 
     collections = {}
 
@@ -139,7 +151,7 @@ def save_dataset_collections(
 
 def load_dataset_collections_json(
     json_file_path: str | Path,
-) -> DatasetCollections:
+) -> Dict[str, str | List[int]]:
     """
     Loads dataset collections from a JSON file and returns them as a dictionary.
 
@@ -152,7 +164,7 @@ def load_dataset_collections_json(
         json_file_path (str | Path): Path to the JSON file containing dataset collections.
 
     Returns:
-        DatasetCollections: A dictionary with dataset collection names as keys and
+        Dict[str, str | List[int]]: A dictionary with dataset collection names as keys and
         their corresponding data (either a string or a list of integers) as values.
     """
     json_file_path = Path(json_file_path)
@@ -192,15 +204,30 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
         super().__init__(
             name="Dataset Separation Benchmark",
             task_type=CLASSIFICATION_TASKS,
+            result_dir=result_dir,
+            timestamp=timestamp,
+            logging_level=logging_level,
+            save_result_dataframe=save_result_dataframe,
+            benchmark_metrics=benchmark_metrics,
         )
         self.list_dataset_collections = list_dataset_collections
         self.random_seed = random_seed
         self.rng = np.random.default_rng(self.random_seed)
+        self.create_embedding_plots = create_embedding_plots
+
+        if openml_cache_dir is None:
+            openml_cache_dir = Path("data/tabarena_datasets")
+        else:
+            openml_cache_dir = Path(openml_cache_dir)
+
+        openml_cache_dir.mkdir(parents=True, exist_ok=True)
+        openml.config.set_root_cache_directory(openml_cache_dir)
+        self.openml_cache_dir = openml_cache_dir
 
     def _load_datasets(self, **kwargs) -> Dict[str, Any]:
         dataset_collections = {}
         for collection_name, collection in self.list_dataset_collections.items():
-            selected_tasks_str = collection["selected_tasks_str"]
+            selected_tasks_str = collection["selected_task_ids_str"]
             collection_list = []
             for index, task_id in enumerate(collection["selected_task_ids"]):
                 task = openml.tasks.get_task(task_id)
@@ -293,6 +320,7 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
             "name": dataset_collection["name"],
             "selected_tasks_str": dataset_collection["selected_tasks_str"],
             "dataset_metadata": {
+                "dataset_name": dataset_collection["name"],
                 "num_features": max_features,
                 "num_samples": max_samples,
             },
@@ -344,6 +372,24 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
         embedding_model: AbstractEmbeddingGenerator,
         dataset_collection: list[dict],
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Aggregates embeddings and labels from a collection of datasets and returns
+        them as shuffled training and testing sets. Embeddings and labels from each
+        dataset in the dataset collection are concatenated to create combined sets.
+
+        Args:
+            embedding_model: The embedding generator used to encode dataset inputs
+                into feature vectors.
+            dataset_collection: A collection of dataset configurations, each being
+                a dictionary with necessary data and labels for training and testing.
+
+        Returns:
+            A tuple containing:
+                - numpy.ndarray: Shuffled training embeddings.
+                - numpy.ndarray: Shuffled training labels.
+                - numpy.ndarray: Combined test embeddings.
+                - numpy.ndarray: Combined test labels.
+        """
         train_embeddings = []
         test_embeddings = []
         train_labels = []
@@ -400,6 +446,8 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
             )
         )
 
+        # TODO: Visulaization of embeddings
+
         dataset_collection_configuration = {
             "y_train": train_labels,
             "task_type": task_type,
@@ -440,3 +488,56 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
             # Save intermediate results after each model
             self._save_results()
             self._cleanup_gpu_cache()
+
+
+def run_dataseparation_benchmark(
+    embedding_models: List[AbstractEmbeddingGenerator],
+    evaluators: List[AbstractEvaluator],
+    max_num_samples: int = 100000,
+    max_num_features: int = 500,
+    num_collections: int = 10,
+    use_tabpfn_subset: bool = False,
+    result_dir: str | Path = "result_dataset_separation",
+    save_result_dataframe: bool = True,
+    dataset_configurations_json_path: str | Path = None,
+    openml_cache_dir: str | Path | None = None,
+) -> pl.DataFrame:
+    if not dataset_configurations_json_path:
+        dataset_collections = get_list_of_dataset_collections(
+            max_num_samples=max_num_samples,
+            max_num_features=max_num_features,
+            num_collections=num_collections,
+            use_tabpfn_subset=use_tabpfn_subset,
+        )
+    else:
+        dataset_collections = load_dataset_collections_json(
+            dataset_configurations_json_path
+        )
+
+    benchmark = DatasetSeparationBenchmark(
+        list_dataset_collections=dataset_collections,
+        result_dir=result_dir,
+        save_result_dataframe=save_result_dataframe,
+        openml_cache_dir=openml_cache_dir,
+    )
+
+    return benchmark.run_benchmark(embedding_models, evaluators)
+
+
+if __name__ == "__main__":
+    from tabembedbench.embedding_models import TabICLEmbedding
+    from tabembedbench.evaluators import KNNClassifierEvaluator
+
+    emb_models = [TabICLEmbedding()]
+
+    evaluators = [
+        KNNClassifierEvaluator(num_neighbors=5),
+    ]
+
+    run_dataseparation_benchmark(
+        embedding_models=emb_models,
+        evaluators=evaluators,
+        max_num_samples=1500,
+        max_num_features=200,
+        num_collections=2,
+    )
