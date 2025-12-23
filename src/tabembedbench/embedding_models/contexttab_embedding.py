@@ -1,135 +1,150 @@
 from huggingface_hub import hf_hub_download
 import numpy as np
-from typing import Tuple, Union
-import safetensors.torch
-from torch import Tensor
-from transformers import AutoTokenizer, AutoModel, PreTrainedModel
-from tabstar.arch.config import TabStarConfig, E5_SMALL
-from tabstar.arch.fusion import NumericalFusion
-from tabstar.tabstar_verbalizer import TabSTARVerbalizer, TabSTARData
-from tabstar.arch.interaction import InteractionEncoder
-from tabstar.training.dataloader import get_dataloader
+from typing import Tuple
+from pathlib import Path
 import torch
 import gc
+import os
+import pandas as pd
 from pandas import DataFrame, Series
+from dotenv import load_dotenv
 from sklearn.model_selection import train_test_split
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.utils.torch_utils import get_device
-from tabstar.training.devices import clear_cuda_cache
 from sap_rpt_oss.model.torch_model import RPT
+from sap_rpt_oss.constants import ModelSize
+from sap_rpt_oss.data.tokenizer import Tokenizer
 
 
-class ConTextTabModel(PreTrainedModel):
 
-    def __init__(self, config: TabStarConfig):
-        super().__init__(config)
-        self.model = RPT.from_pretrained("SAP/concontext-tab")
+class ConTextTabModel(RPT):
 
+    def __init__(self, model_size: ModelSize, regression_type: str, classification_type: str, num_regression_bins: int = 1):
+        super().__init__(model_size,
+                         regression_type=regression_type,
+                         classification_type=classification_type
+        )
 
-    def forward(self, x_txt: np.ndarray, x_num: np.ndarray, d_output: int) -> Tensor:
-        textual_embeddings = self.get_textual_embedding(x_txt)
-        if not isinstance(x_num, Tensor):
-            x_num = torch.tensor(x_num, dtype=textual_embeddings.dtype, device=textual_embeddings.device)
-        embeddings = self.numerical_fusion(textual_embeddings=textual_embeddings, x_num=x_num)
-        encoded = self.tabular_encoder(embeddings)
-        target_tokens = encoded[:, :d_output]
-        return target_tokens
+    ## aus contexttab repo
+    def forward(self, data: dict[str, torch.Tensor], labels=None, **kwargs):
+        input_embeds = self.embeddings(data, is_regression=True)
+        # (max_num_rows, max_num_columns, hidden_size)
 
-    def get_embedding(self, x_txt: np.array, text_batch_size: int) -> Tensor:
-        return embeddings
+        extended_attention_mask = self.build_context_attention_mask(data, input_embeds.device)
+        extended_attention_mask = extended_attention_mask.type(input_embeds.dtype)
+
+        # ToDo: If im original beachten und evtl. anpassen
+        for layer in self.in_context_encoder:
+            input_embeds = layer(input_embeds, extended_attention_mask)
+        encoder_outputs = input_embeds
+
+        # encoder_outputs has shape (num_rows, num_columns, hidden_size)
+        target_column_output = encoder_outputs[:, -1]  # (num_rows, hidden_size)
+
+        return target_column_output
 
 
 class ConTextTabEmbedding(AbstractEmbeddingGenerator):
     def __init__(self, device: str | None = None):
-        """
-        Initializes an instance of the class with specified attributes.
-
-        Attributes:
-        device (str | None): Specifies the device to be used. Defaults to the output of
-            the get_device() method if not provided.
-        preprocess_pipeline: Placeholder for preprocessing pipeline. This attribute
-            is initially set to None.
-        use_amp (bool): Indicates whether Automatic Mixed Precision (AMP) should be
-            used based on the device type ('cuda' enables AMP).
-        tabstar_row_embedder: The TabStar row embedding model instance, moved to
-            the specified device.
-
-        Args:
-        device (str | None): The device to use, such as 'cuda' or 'cpu'.
-        """
-        super().__init__(name="TabStar")
-        self.preprocess_pipeline = None
+        super().__init__(name="ConTextTab")
         self.device = device if device is not None else get_device()
-        self.use_amp = bool(self.device.type == "cuda")
-        self.tabstar_row_embedder = self._get_model().to(self.device)
+        self.MAX_NUM_COLUMNS = 500
+        self.max_context_size = 8192
+        self.seed = 42
+        self.regression_type = "l2"
+        self.classification_type = "cross-entropy"
+        self.num_regression_bins = 1
+
+        self.contexttab_embedder = self._get_model().to(self.device)
+        self.tokenizer = Tokenizer(
+            regression_type=self.regression_type,
+            classification_type=self.classification_type,
+            random_seed=self.seed,
+            num_regression_bins=self.num_regression_bins,
+            is_valid=True)
+
 
     def _get_model(self):
-        """
-        Loads the TabStar embedding model and its configuration. The method handles
-        downloading the model weights from the Hugging Face Hub and initializes the
-        model with the relevant configuration.
-
-        Returns:
-            TabStarModel: An instance of the TabStar embedding model.
-
-        Raises:
-            OSError: If there is an issue while downloading or loading the weights.
-        """
-        model_ckpt_path = hf_hub_download(
-            repo_id="alana89/TabSTAR",
-            filename="model.safetensors"
+        model_size = ModelSize.base
+        load_dotenv()
+        hf_token = os.getenv("HF_TOKEN")
+        checkpoint_path = hf_hub_download(
+            repo_id="SAP/sap-rpt-1-oss",
+            filename='2025-11-04_sap-rpt-one-oss.pt',
+            token=hf_token
         )
-        config_class = TabStarConfig()
-        tabstar_embedding_model = TabStarModel(config=config_class)
-        weights = safetensors.torch.load_file(model_ckpt_path)
-        tabstar_embedding_model.load_state_dict(weights, strict=False)
-        tabstar_embedding_model.eval()
+        # Der Checkpoint scheint für einfache Regression (1 Bin) ausgelegt zu sein
+        model = ConTextTabModel(model_size, regression_type=self.regression_type,
+                             classification_type=self.classification_type,
+                             num_regression_bins=self.num_regression_bins)
+    
 
-        return tabstar_embedding_model
+        state_dict = torch.load(checkpoint_path, map_location=self.device)
+        if "state_dict" in state_dict:
+            state_dict = state_dict["state_dict"]
+        
+        state_dict = {k.removeprefix('module.'): v for k, v in state_dict.items()}
+        
+        model.load_state_dict(state_dict, strict=False)
+        model.to(self.device).eval()
 
-    def _preprocess_data(self, X: np.ndarray, train: bool = True, outlier: bool = False,
-                         **kwargs) -> TabSTARData:
-        """
-        Preprocesses the input data for the model. This includes handling outliers and
-        filtering irrelevant data based on the configured preprocessing pipeline. If
-        training data is provided, the pipeline is fitted; otherwise, the previously
-        fitted pipeline is used to transform data.
+        return model
 
-        Parameters:
-        X : np.ndarray
-            Input feature data represented as a NumPy array.
-        train : bool, optional
-            Flag to indicate whether the data is for training. Defaults to True.
-        outlier : bool, optional
-            Flag to specify if outlier handling should be applied. Defaults to False.
-        **kwargs :
-            Additional keyword arguments for preprocessing.
+    def _preprocess_data(self, X: pd.DataFrame, train: bool = True, outlier: bool = False,
+                         **kwargs):
+        #ToDo: Bagging?
+        if not isinstance(X, DataFrame):
+        #ToDo: Handle column names
+            X = DataFrame(X)
+        y = Series(np.zeros(len(X)), name="target", index=X.index)
 
-        Raises:
-        ValueError
-            If `train` is False and the preprocessing pipeline is not yet fitted.
+        df = pd.concat([X, y.to_frame()], axis=1)
 
-        Returns:
-        TabSTARData
-            Preprocessed data ready for model usage.
-        """
-        X = DataFrame(X)
-        X.columns = [str(col) for col in X.columns]
-        y = Series(np.zeros(X.shape[0]))
-        if train:
-            self.preprocess_pipeline = TabSTARVerbalizer(is_cls=False)
-            self.preprocess_pipeline.fit(X,y)
-            X_preprocessed = self.preprocess_pipeline.transform(X,y=None)
-        else:
-            if self.preprocess_pipeline is None:
-                raise ValueError("Preprocessing pipeline is not fitted")
-            else:
-                X_preprocessed = self.preprocess_pipeline.transform(X,y=None)
+        # There is no bagging, but we still have to sample because there are too many points
+        if len(df) > self.max_context_size:
+            df = df.sample(self.max_context_size, replace=False, random_state=self.seed)
 
-        return X_preprocessed
+        # Remove constant columns
+        X = df.iloc[:, :-1]
+        y = df.iloc[:, -1:]
+        constant_cols = list(X.columns[X.nunique() == 1])
+        if constant_cols:
+            X = X.drop(columns=constant_cols)
+            df = pd.concat([X, y], axis=1)
 
-    def _fit_model(self, X_preprocessed: np.ndarray,
-                   y_preprocessed: np.ndarray | None = None, train: bool = True,
+        # If number of columns exceed maximum
+        if df.shape[1] > self.MAX_NUM_COLUMNS:
+            X = df.iloc[:, :-1]
+            y = df.iloc[:, -1:]
+            X = X.sample(n=self.MAX_NUM_COLUMNS - 1, axis=1, random_state=self.seed, replace=False)
+            df = pd.concat([X, y], axis=1)
+
+        df = df.iloc[:len(df)]
+        X = df.iloc[:, :-1]
+        y = df.iloc[:, -1:]
+
+        # The tokenizer fails if y_query is empty because StandardScaler requires at least one sample.
+        # If we are just generating embeddings for the input X, we can use X itself as the query.
+        X_query = X.copy() #pd.DataFrame(columns=X.columns)
+        y_query = y.copy() #pd.DataFrame(columns=y.columns)
+
+        data, labels, label_classes = self.tokenizer(X, y, X_query, y_query, "regression")
+        # Pass the same series twice (y_train and y_test) to satisfy the API requirement
+        _, target_mean, target_std = self.tokenizer.standard_scale_column(y, y)
+
+        return {
+            'data': data,
+            'num_rows': df.shape[0],
+            'num_cols': df.shape[1],
+            'labels': None,
+            'is_regression': torch.tensor(True),
+            'label_classes': np.asarray(label_classes),
+            'target_mean': target_mean,
+            'target_std': target_std
+        }
+
+    def _fit_model(self, X_preprocessed: dict,
+                   y_preprocessed: dict | None = None, train: bool = True,
                    **kwargs) -> None:
         self._is_fitted = True
 
@@ -140,86 +155,19 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
             outlier: bool = False,
             **kwargs
     ) -> Tuple[np.ndarray, np.ndarray | None]:
-        """
-        Computes embeddings for preprocessed training and optionally testing data.
-
-        This method is responsible for generating embeddings for given training and
-        testing preprocessed datasets using a tabular embedding model. It optionally
-        handles outlier detection mode and leverages GPU acceleration mechanisms if
-        enabled. During training mode, embeddings for both training and testing data
-        will be computed and returned. In outlier detection mode, only embeddings for
-        training data are computed, returning solely this result with no test embeddings.
-        The model must be fitted prior to invoking this method; otherwise, a ValueError
-        will be raised.
-
-        Parameters:
-            X_train_preprocessed: np.ndarray
-                Preprocessed training data.
-            X_test_preprocessed: np.ndarray | None, default=None
-                Preprocessed testing data. Can be None if outlier mode is enabled.
-            outlier: bool, default=False
-                Flag indicating whether the computation is for outlier detection.
-            **kwargs
-                Additional keyword arguments to pass to utility functions.
-
-        Returns:
-            Tuple[np.ndarray, np.ndarray | None]
-                A tuple containing the training and testing data embeddings. Testing
-                data embeddings will be None if `outlier` is True.
-
-        Raises:
-            ValueError:
-                If the model has not been fitted before calling this method.
-        """
-        self.tabstar_row_embedder.eval()
-        embeddings_list = []
 
         if outlier:
-            dataloader = get_dataloader(X_train_preprocessed, is_train=False, batch_size=128)
-            for data in dataloader:
-                with torch.no_grad(), torch.autocast(device_type=self.device.type, enabled=self.use_amp):
-                    batch_predictions = self.tabstar_row_embedder(x_txt=data.x_txt, x_num=data.x_num, d_output=data.d_output)
-#                    batch_predictions_numpy = batch_predictions.detach().cpu().squeeze().numpy()
-                    batch_predictions_numpy = batch_predictions.detach().cpu().numpy()
-
-                    if batch_predictions_numpy.ndim == 1:
-                        batch_predictions_numpy = batch_predictions_numpy.reshape(1, -1)
-                    elif batch_predictions_numpy.ndim > 2:
-                        # Remove unnecessary dimensions but keep batch and feature dimensions
-                        batch_predictions_numpy = batch_predictions_numpy.reshape(batch_predictions_numpy.shape[0], -1)
-
-                    embeddings_list.append(batch_predictions_numpy)
-
-            embeddings = np.concatenate(embeddings_list, axis=0)
+            embeddings = self.contexttab_embedder(X_train_preprocessed)
 
             return embeddings, None
 
-        if self._is_fitted:
-            dataloader_train = get_dataloader(X_train_preprocessed, is_train=False, batch_size=128)
-            for data in dataloader_train:
-                with torch.no_grad(), torch.autocast(device_type=self.device.type, enabled=self.use_amp):
-                    batch_predictions = self.tabstar_row_embedder(x_txt=data.x_txt, x_num=data.x_num,
-                                                                  d_output=data.d_output)
-                    batch_predictions_numpy = batch_predictions.detach().cpu().squeeze().numpy()
-                    embeddings_list.append(batch_predictions_numpy)
-
-            embeddings_train = np.concatenate(embeddings_list, axis=0)
-
-            embeddings_list = []
-            dataloader_test = get_dataloader(X_test_preprocessed, is_train=False, batch_size=128)
-            for data in dataloader_test:
-                with torch.no_grad(), torch.autocast(device_type=self.device.type, enabled=self.use_amp):
-                    batch_predictions = self.tabstar_row_embedder(x_txt=data.x_txt, x_num=data.x_num,
-                                                                  d_output=data.d_output)
-                    batch_predictions_numpy = batch_predictions.detach().cpu().squeeze().numpy()
-                    embeddings_list.append(batch_predictions_numpy)
-
-            embeddings_test = np.concatenate(embeddings_list, axis=0)
+        else:
+            embeddings_train = self.contexttab_embedder(X_train_preprocessed)
+            X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
+            embeddings = self.contexttab_embedder(X_train_test_stack)
+            embeddings_test = embeddings[len(X_train_preprocessed):]
 
             return embeddings_train, embeddings_test
-        else:
-            raise ValueError("Model is not fitted")
-
 
     def _reset_embedding_model(self, *args, **kwargs):
         """
@@ -234,8 +182,8 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
             kwargs (Any): Additional keyword arguments.
         """
         # Move model to CPU before deleting references
-        if self.tabstar_row_embedder is not None:
-            self.tabstar_row_embedder.cpu()
+        if self.contexttab_embedder is not None:
+            self.contexttab_embedder.cpu()
 
         # Clear preprocessing pipeline
         self.preprocess_pipeline = None
@@ -255,5 +203,5 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
             torch.mps.empty_cache()
 
         # Move model back to the device for next use
-        if self.tabstar_row_embedder is not None:
-            self.tabstar_row_embedder.to(self.device)
+        if self.contexttab_embedder is not None:
+            self.contexttab_embedder.to(self.device)
