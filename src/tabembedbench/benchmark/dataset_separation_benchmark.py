@@ -1,4 +1,6 @@
+import json
 from functools import partial
+from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import numpy as np
@@ -13,9 +15,142 @@ from tabembedbench.constants import (
     CLASSIFICATION_TASKS,
     SUPERVISED_BINARY_CLASSIFICATION,
     SUPERVISED_MULTICLASSIFICATION,
+    TABARENA_TABPFN_SUBSET,
 )
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
+
+
+def get_list_of_dataset_collections(
+    max_num_samples: int,
+    max_num_features: int,
+    max_num_per_collections: int = 10,
+    num_collections: int = 20,
+    tabarena_version: str = "tabarena-v0.1",
+    use_tabpfn_subset: bool = False,
+    random_seed: Optional[int] = None,
+) -> Dict[str, str | List[int]]:
+    """
+    Generates a list of dataset collections based on specified constraints.
+
+    This function filters and groups dataset tasks from OpenML to create collections
+    that adhere to the provided constraints on the number of samples and features.
+    Each collection contains a group of task identifiers selected randomly.
+
+    Args:
+        max_num_samples (int): The maximum number of samples allowed for the dataset tasks
+            in the collections.
+        max_num_features (int): The maximum number of features allowed for the dataset tasks
+            in the collections.
+        max_num_per_collections (int, optional): The maximum number of dataset tasks to be
+            included in a single collection. Defaults to 10.
+        num_collections (int, optional): The total number of collections to generate.
+            Defaults to 20.
+        tabarena_version (str, optional): The version of the TabArena suite to be used for
+            obtaining dataset tasks. Defaults to "tabarena-v0.1".
+        use_tabpfn_subset (bool, optional): Whether to use a predefined subset of task IDs
+            labeled as TABARENA_TABPFN_SUBSET. Defaults to False.
+        random_seed (Optional[int], optional): The random seed for reproducibility of
+            the random task selection process. Defaults to None.
+
+    Returns:
+        Dict[str, str | List[int]]: A dictionary with dataset collection names as keys and each item
+            represents a dataset collection with the following keys:
+            - "selected_task_ids_str" (str): A string representation of the selected task IDs.
+            - "selected_task_ids" (List[int]): A list of selected task IDs in the collection.
+    """
+    task_ids = (
+        TABARENA_TABPFN_SUBSET
+        if use_tabpfn_subset
+        else openml.study.get_suite(tabarena_version).tasks
+    )
+
+    for task_id in task_ids:
+        task = openml.tasks.get_task(task_id)
+        dataset = task.get_dataset()
+
+        if (
+            dataset.qualities["NumberOfInstances"] > max_num_samples
+            or dataset.qualities["NumberOfFeatures"] > max_num_features
+        ):
+            task_ids.remove(task_id)
+
+    rng = np.random.default_rng(random_seed)
+
+    collections = {}
+
+    for idx in range(num_collections):
+        collection_size = rng.integers(2, max_num_per_collections)
+
+        selected_task_ids = rng.choice(
+            task_ids,
+            size=collection_size,
+            replace=False,
+        ).tolist()
+
+        selected_task_ids_str = "_".join(
+            [str(task_id) for task_id in selected_task_ids]
+        )
+
+        name = "collection_" + str(idx)
+
+        collections[name] = {
+            "selected_task_ids_str": selected_task_ids_str,
+            "selected_task_ids": list(selected_task_ids),
+        }
+
+    return collections
+
+
+def save_dataset_collections(
+    dataset_collections: Dict[str, str | List[int]],
+    output_file_name: str,
+    output_dir: str | Path,
+) -> None:
+    """
+    Saves the given dataset collections to a JSON file in the specified directory.
+
+    This function serializes the dataset collections into a JSON-formatted file
+    and saves it with the specified file name in the provided output directory.
+
+    Args:
+        dataset_collections (Dict[str, str | List[int]]): Dictionary containing dataset keys and their
+            corresponding values, which can be strings or lists of integers.
+        output_file_name (str): The name of the output file (without the extension) where the data
+            will be saved.
+        output_dir (str | Path): The directory path where the JSON file should be saved.
+
+    """
+    output_path = (Path(output_dir) / output_file_name).with_suffix(".json")
+
+    with open(str(output_path), "w") as f:
+        json.dump(dataset_collections, f)
+
+
+def load_dataset_collections_json(
+    json_file_path: str | Path,
+) -> Dict[str, str | List[int]]:
+    """
+    Loads dataset collections from a JSON file and returns them as a dictionary.
+
+    This function reads a JSON file containing dataset collections and parses it into
+    a dictionary. The dictionary keys represent the dataset collection names, and the
+    values correspond to either string information or a list of integers, depending on
+    the content of the JSON file.
+
+    Args:
+        json_file_path (str | Path): Path to the JSON file containing dataset collections.
+
+    Returns:
+        Dict[str, str | List[int]]: A dictionary with dataset collection names as keys and
+        their corresponding data (either a string or a list of integers) as values.
+    """
+    json_file_path = Path(json_file_path)
+
+    with open(str(json_file_path), "r") as f:
+        dataset_collections = json.load(f)
+
+    return dataset_collections
 
 
 class DatasetSeparationBenchmark(AbstractBenchmark):
@@ -131,7 +266,7 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
                 "num_features": max_features,
                 "num_samples": max_samples,
             },
-            "dataset_collections": list_dataset_configurations,
+            "dataset_collection": list_dataset_configurations,
         }
 
     def _get_default_metrics(
@@ -174,17 +309,17 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
 
         return test_prediction
 
-    def _prepare_dataset_collection(
+    def _get_embeddings_from_dataset_collection(
         self,
         embedding_model: AbstractEmbeddingGenerator,
-        dataset_collections: list[dict],
+        dataset_collection: list[dict],
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         train_embeddings = []
         test_embeddings = []
         train_labels = []
         test_labels = []
 
-        for dataset_config in dataset_collections:
+        for dataset_config in dataset_collection:
             # Generate embeddings for the current dataset in the collection
             train_emb, test_emb, _ = self._generate_embeddings(
                 embedding_model, dataset_config
@@ -217,21 +352,22 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
         self,
         embedding_model: AbstractEmbeddingGenerator,
         evaluators: list[AbstractEvaluator],
-        dataset_configurations: len[dict],
+        dataset_configurations: list[dict],
     ) -> None:
-        dataset_collection_name = dataset_configurations["name"]
-        dataset_collections = dataset_configurations["dataset_collections"]
+        dataset_collection = dataset_configurations["dataset_collection"]
 
-        logger_prefix = f"Collection: {dataset_collection_name} - Embedding Model: {embedding_model.name}"
+        logger_prefix = f"Collection: {dataset_configurations['name']} - Embedding Model: {embedding_model.name}"
 
         task_type = (
             SUPERVISED_MULTICLASSIFICATION
-            if len(dataset_collections) > 2
+            if len(dataset_collection) > 2
             else SUPERVISED_BINARY_CLASSIFICATION
         )
 
         train_embeddings, train_labels, test_embeddings, test_labels = (
-            self._prepare_dataset_collection(embedding_model, dataset_collections)
+            self._get_embeddings_from_dataset_collection(
+                embedding_model, dataset_collection
+            )
         )
 
         dataset_collection_configuration = {
@@ -240,7 +376,8 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
         }
 
         result_row_dict = {
-            "collection": dataset_collection_name,
+            "collection": dataset_configurations["name"],
+            "task_ids": dataset_configurations["selected_tasks_str"],
         }
 
         for evaluator in evaluators:
