@@ -31,6 +31,7 @@ dependencies = [
     "tabstar>=1.1.10",
     "pydantic>=2.12.5",
     "tqdm>=4.67.1",
+    "umap-learn>=0.5.9.post2",
 ]
 
 [tool.uv]
