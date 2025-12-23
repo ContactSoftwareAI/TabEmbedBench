@@ -29,6 +29,7 @@ dependencies = [
     "black>=25.12.0",
     "basedpyright>=1.36.1",
     "tabstar>=1.1.10",
+    "pydantic>=2.12.5",
 ]
 
 [tool.uv]

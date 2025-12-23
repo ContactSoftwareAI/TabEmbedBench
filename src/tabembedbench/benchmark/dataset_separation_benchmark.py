@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import numpy as np
 import openml
+from pydantic import BaseModel, RootModel, ValidationError
 from sklearn.metrics import (
     log_loss,
     roc_auc_score,
@@ -19,6 +20,15 @@ from tabembedbench.constants import (
 )
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
+
+
+class DatasetCollection(BaseModel):
+    selected_task_ids_str: str
+    selected_task_ids: List[int]
+
+
+class DatasetCollections(RootModel):
+    root: Dict[str, DatasetCollection]
 
 
 def get_list_of_dataset_collections(
@@ -129,7 +139,7 @@ def save_dataset_collections(
 
 def load_dataset_collections_json(
     json_file_path: str | Path,
-) -> Dict[str, str | List[int]]:
+) -> DatasetCollections:
     """
     Loads dataset collections from a JSON file and returns them as a dictionary.
 
@@ -142,15 +152,26 @@ def load_dataset_collections_json(
         json_file_path (str | Path): Path to the JSON file containing dataset collections.
 
     Returns:
-        Dict[str, str | List[int]]: A dictionary with dataset collection names as keys and
+        DatasetCollections: A dictionary with dataset collection names as keys and
         their corresponding data (either a string or a list of integers) as values.
     """
     json_file_path = Path(json_file_path)
 
-    with open(str(json_file_path), "r") as f:
-        dataset_collections = json.load(f)
+    if not json_file_path.exists():
+        raise FileNotFoundError(f"The file {json_file_path} does not exist.")
 
-    return dataset_collections
+    try:
+        with open(str(json_file_path), "r") as f:
+            data = json.load(f)
+
+        dataset_collections = DatasetCollections.model_validate(data)
+
+        return dataset_collections.model_dump()
+
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON format in {json_file_path}: {e}")
+    except ValidationError as e:
+        raise ValueError(f"Schema validation failed for {json_file_path}:\n{e}")
 
 
 class DatasetSeparationBenchmark(AbstractBenchmark):
