@@ -3,12 +3,14 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
 import numpy as np
 import polars as pl
 from numpy import ndarray
+from tqdm import tqdm
 
+from tabembedbench.constants import TIMESTAMP
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
 from tabembedbench.utils.logging_utils import get_benchmark_logger
@@ -38,7 +40,9 @@ class AbstractBenchmark(ABC):
         save_result_dataframe: bool = True,
         upper_bound_num_samples: int = 10000,
         upper_bound_num_features: int = 500,
-        benchmark_metrics: dict | None = None,
+        benchmark_metrics: (
+            Dict[str, Dict[str, Callable[[np.ndarray, np.ndarray], float]]] | None
+        ) = None,
     ):
         """Initializes an instance of the benchmarking class with specified configurations, logging,
         and optional parameters for task execution.
@@ -57,7 +61,7 @@ class AbstractBenchmark(ABC):
                 task execution. Defaults to 10000.
             upper_bound_num_features (int, optional): Maximum number of features allowed during
                 task execution. Defaults to 500.
-            benchmark_metrics (Dict | None, optional): Dictionary of metrics to evaluate task
+            benchmark_metrics (Dict[str, Dict[str, Callable[[np.ndarray, np.ndarray], float]]] | None, optional): Dictionary of metrics to evaluate task
                 performance. If None, default metrics are used. Defaults to None.
         """
         self.logger = get_benchmark_logger(name)
@@ -70,7 +74,7 @@ class AbstractBenchmark(ABC):
         result_dir.mkdir(parents=True, exist_ok=True)
         self.result_dir = result_dir
 
-        self.timestamp = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.timestamp = timestamp or TIMESTAMP
         self.save_result_dataframe = save_result_dataframe
         self.upper_bound_num_samples = upper_bound_num_samples
         self.upper_bound_num_features = upper_bound_num_features
@@ -158,7 +162,7 @@ class AbstractBenchmark(ABC):
     @abstractmethod
     def _get_default_metrics(
         self,
-    ) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
+    ) -> Dict[str, Dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
         """Get the default metrics for the benchmark."""
         raise NotImplementedError
 
@@ -464,8 +468,15 @@ class AbstractBenchmark(ABC):
         self.logger.info(f"Starting {self.name} benchmark...")
 
         datasets = self._load_datasets(**kwargs)
-        # TODO: Counter machen.
-        for dataset in datasets:
+
+        datasets_to_process = (
+            datasets.values() if isinstance(datasets, dict) else datasets
+        )
+
+        for dataset in tqdm(
+            datasets_to_process,
+            desc=f"Running {self.name} benchmark. Processing datasets...",
+        ):
             self._process_dataset(dataset, embedding_models, evaluators, **kwargs)
 
         self.logger.info(f"{self.name} benchmark completed.")
