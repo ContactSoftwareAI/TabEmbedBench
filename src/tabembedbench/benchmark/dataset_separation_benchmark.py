@@ -138,6 +138,9 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
         self,
     ) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
         return {
+            SUPERVISED_BINARY_CLASSIFICATION: {
+                "auc_score": roc_auc_score,
+            },
             SUPERVISED_MULTICLASSIFICATION: {
                 "auc_score_ovr": partial(roc_auc_score, multi_class="ovr"),
                 "auc_score_ovo": partial(roc_auc_score, multi_class="ovo"),
