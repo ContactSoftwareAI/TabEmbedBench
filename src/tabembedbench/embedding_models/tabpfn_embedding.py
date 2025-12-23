@@ -4,12 +4,11 @@ import warnings
 import numpy as np
 import pandas as pd
 import polars as pl
-from tabicl.sklearn.preprocessing import TransformToNumerical
 from tabpfn import TabPFNClassifier, TabPFNRegressor
 from tabpfn.constants import ModelVersion
 from tabpfn.utils import infer_categorical_features
 
-from tabembedbench.benchmark.constants import (
+from tabembedbench.constants import (
     CLASSIFICATION_TASKS,
     SUPERVISED_BINARY_CLASSIFICATION,
     TABARENA_TASKS,

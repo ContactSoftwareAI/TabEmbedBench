@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Tuple
 
 import numpy as np
 import openml
@@ -19,7 +19,7 @@ from sklearn.metrics import (
 from sklearn.preprocessing import LabelEncoder
 
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
-from tabembedbench.benchmark.constants import (
+from tabembedbench.constants import (
     SUPERVISED_BINARY_CLASSIFICATION,
     SUPERVISED_MULTICLASSIFICATION,
     SUPERVISED_REGRESSION,
