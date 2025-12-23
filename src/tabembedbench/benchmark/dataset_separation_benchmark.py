@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import numpy as np
 import openml
@@ -9,33 +9,35 @@ from sklearn.metrics import (
 )
 
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
-from tabembedbench.benchmark.constants import SUPERVISED_MULTICLASSIFICATION
-from tabembedbench.constants import SUPERVISED_BINARY_CLASSIFICATION
+from tabembedbench.constants import (
+    CLASSIFICATION_TASKS,
+    SUPERVISED_BINARY_CLASSIFICATION,
+    SUPERVISED_MULTICLASSIFICATION,
+)
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
-from tabembedbench.utils.torch_utils import log_gpu_memory
-from tabembedbench.utils.tracking_utils import MemoryTracker
 
 
 class DatasetSeparationBenchmark(AbstractBenchmark):
     def __init__(
         self,
-        list_dataset_collections: list[dict[str, Any]],
-        random_seed: int = 42,
+        list_dataset_collections: Dict[str, str | List[int]],
+        random_seed: Optional[int] = None,
     ):
         super().__init__(
             name="Dataset Separation Benchmark",
-            task_type=[SUPERVISED_MULTICLASSIFICATION],
+            task_type=CLASSIFICATION_TASKS,
         )
         self.list_dataset_collections = list_dataset_collections
         self.random_seed = random_seed
         self.rng = np.random.default_rng(self.random_seed)
 
-    def _load_datasets(self, **kwargs) -> list[dict[str, Any]]:
-        dataset_collections = []
-        for collection in self.list_dataset_collections:
+    def _load_datasets(self, **kwargs) -> Dict[str, Any]:
+        dataset_collections = {}
+        for collection_name, collection in self.list_dataset_collections.items():
+            selected_tasks_str = collection["selected_tasks_str"]
             collection_list = []
-            for index, task_id in enumerate(collection["task_ids"]):
+            for index, task_id in enumerate(collection["selected_task_ids"]):
                 task = openml.tasks.get_task(task_id)
                 dataset = task.get_dataset()
                 _, folds, _ = task.get_split_dimensions()
@@ -49,21 +51,27 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
                         "label": index,
                     }
                 )
-            dataset_collections.append(collection_list)
+            dataset_collections[collection_name] = {
+                "name": collection_name,
+                "selected_tasks_str": selected_tasks_str,
+                "collection": collection_list,
+            }
 
         return dataset_collections
 
     def _should_skip_dataset(self, dataset, **kwargs) -> tuple[bool, str]:
-        return True, ""
+        return False, ""
 
-    def _prepare_dataset(self, dataset_collection: list[dict]) -> Iterator[dict]:
+    def _prepare_dataset(
+        self, dataset_collection: Dict[str, str | List[int]]
+    ) -> Iterator[dict]:
         list_dataset_configurations = []
 
         max_features = 0
         max_samples = 0
 
         # TODO: iterate over more folds if interested.
-        for dataset_info in dataset_collection:
+        for dataset_info in dataset_collection["collection"]:
             task = dataset_info["task"]
             dataset = dataset_info["dataset"]
             label = dataset_info["label"]
@@ -117,7 +125,8 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
             )
 
         yield {
-            "name": "",
+            "name": dataset_collection["name"],
+            "selected_tasks_str": dataset_collection["selected_tasks_str"],
             "dataset_metadata": {
                 "num_features": max_features,
                 "num_samples": max_samples,
