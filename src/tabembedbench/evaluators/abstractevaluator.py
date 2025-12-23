@@ -212,6 +212,7 @@ class AbstractHPOEvaluator(AbstractEvaluator):
             "categorical": lambda name, cfg: trial.suggest_categorical(
                 name, cfg["choices"]
             ),
+            "constant": lambda name, cfg: cfg["value"],
             "int_sequence": lambda name, cfg: tuple(
                 trial.suggest_int(
                     f"{name}_{i}", cfg["low"], cfg["high"], log=cfg.get("log", False)
