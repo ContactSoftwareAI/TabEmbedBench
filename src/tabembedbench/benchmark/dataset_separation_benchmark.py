@@ -522,22 +522,3 @@ def run_dataseparation_benchmark(
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
-
-
-if __name__ == "__main__":
-    from tabembedbench.embedding_models import TabICLEmbedding
-    from tabembedbench.evaluators import KNNClassifierEvaluator
-
-    emb_models = [TabICLEmbedding()]
-
-    evaluators = [
-        KNNClassifierEvaluator(num_neighbors=5),
-    ]
-
-    run_dataseparation_benchmark(
-        embedding_models=emb_models,
-        evaluators=evaluators,
-        max_num_samples=1500,
-        max_num_features=200,
-        num_collections=2,
-    )
