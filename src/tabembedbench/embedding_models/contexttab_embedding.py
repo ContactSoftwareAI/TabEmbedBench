@@ -28,7 +28,20 @@ def to_device(x, device: Union[torch.device, int], dtype: Optional[torch.dtype] 
     return x
 
 class ConTextTabModel(RPT):
+    """
+    Represents a model that extends RPT for contextual tabular data processing.
 
+    This class is designed to handle regression and classification tasks using a transformer-based
+    framework. It processes tabular data by encoding it into contextual embeddings and applying
+    attention mechanisms through its in-context encoder layers. It produces a representation of
+    the target column for downstream tasks like regression or classification.
+
+    Attributes:
+        model_size: Specifies the size configuration of the model.
+        regression_type: Specifies the type of regression task being performed.
+        classification_type: Specifies the type of classification task being performed.
+        num_regression_bins: The number of bins for discretizing regression labels. Default is 1.
+    """
     def __init__(self, model_size: ModelSize, regression_type: str, classification_type: str, num_regression_bins: int = 1):
         super().__init__(model_size,
                          regression_type=regression_type,
@@ -38,6 +51,20 @@ class ConTextTabModel(RPT):
 
     ## aus contexttab repo
     def forward(self, data: dict[str, torch.Tensor], labels=None, **kwargs):
+        """
+        Processes input data through the forward pass of the model, applying embeddings,
+        in-context encoder layers, and attention mechanisms. Returns the outputs corresponding
+        to the target column.
+
+        Parameters:
+            data (dict[str, torch.Tensor]): Input data containing tensors required by the model.
+            labels (optional): Optional labels for supervision during training, if applicable.
+            **kwargs: Additional keyword arguments that might be needed during forward pass.
+
+        Returns:
+            torch.Tensor: Output tensor of shape (num_rows, hidden_size), corresponding to the
+            processed representation of the target column.
+        """
         data = to_device(data, self.device, raise_on_unexpected=False)
         input_embeds = self.embeddings(data, is_regression=True)
         # (max_num_rows, max_num_columns, hidden_size)
@@ -57,6 +84,40 @@ class ConTextTabModel(RPT):
 
 
 class ConTextTabEmbedding(AbstractEmbeddingGenerator):
+    """
+    Represents an embedding generator using the ConTextTab architecture.
+
+    This class is designed to generate embeddings for structured tabular data using the ConTextTab
+    model. It supports regression and classification tasks, while also providing preprocessing
+    capabilities to handle large datasets, constant columns, and feature selection. Additionally, it
+    includes integration with tokenizer components and model checkpoints for efficient embedding
+    generation and task handling.
+
+    Attributes:
+        device (str): The device on which the model operates (e.g., 'cuda' or 'cpu'). Defaults to
+            the device returned by the `get_device` function if not provided.
+        MAX_NUM_COLUMNS (int): The maximum number of columns allowed for input data. Any additional
+            columns are dropped during preprocessing.
+        max_context_size (int): The maximum number of samples allowed in the context.
+        seed (int): The random seed for reproducibility during sampling and preprocessing.
+        regression_type (str): The regression type used in the model ('l2' by default).
+        classification_type (str): The classification type used in the model ('cross-entropy' by default).
+        num_regression_bins (int): The number of bins for regression tasks. Defaults to 1.
+
+    Methods:
+        _preprocess_data(X: pd.DataFrame, train: bool = True, outlier: bool = False, **kwargs)
+            Preprocess data for modeling and tokenization, handling constraints on data size,
+            constant columns, and sampling.
+
+        _compute_embeddings(X_train_preprocessed: dict, X_test_preprocessed: dict | None = None,
+                            outlier: bool = False, **kwargs) -> Tuple[np.ndarray, np.ndarray | None]
+            Compute embeddings for train and test datasets using the contexttab embedder.
+
+        _fit_model(X_preprocessed: dict, y_preprocessed: dict | None = None, train: bool = True,
+                   **kwargs) -> None
+            Fit the model using preprocessed input data. Marks the model as fitted.
+
+    """
     def __init__(self, device: str | None = None):
         super().__init__(name="ConTextTab")
         self.device = device if device is not None else get_device()
@@ -104,6 +165,30 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
 
     def _preprocess_data(self, X: pd.DataFrame, train: bool = True, outlier: bool = False,
                          **kwargs):
+        """
+        Preprocess data for modeling and tokenization.
+
+        This method takes an input DataFrame, optionally processes it for training or outlier
+        detection, and prepares it for subsequent tokenization. The preprocessing includes
+        handling of constant columns, column count restrictions, sampling large DataFrames,
+        and generating necessary embeddings.
+
+        Parameters:
+            X (pd.DataFrame): The input data for preprocessing.
+            train (bool): A flag indicating whether the preprocessing is to be applied
+                for training purposes. Defaults to True.
+            outlier (bool): A flag indicating whether the preprocessing is aimed at
+                outlier detection. Defaults to False.
+            **kwargs: Additional arguments that may be passed to the method.
+
+        Returns:
+            dict: A dictionary containing the processed data and other properties such as
+                number of query samples.
+
+        Raises:
+            TypeError: If `X` is not of type `pd.DataFrame`.
+
+        """
         #ToDo: Bagging?
         if not isinstance(X, DataFrame):
         #ToDo: Handle column names
@@ -139,11 +224,12 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
 
         # The tokenizer fails if y_query is empty because StandardScaler requires at least one sample.
         # If we are just generating embeddings for the input X, we can use X itself as the query.
-        X_query = X.copy() #pd.DataFrame(columns=X.columns)
-        y_query = y.copy() #pd.DataFrame(columns=y.columns)
+        X_query = X.copy()
+        y_query = y.copy()
 
         data, labels, label_classes = self.tokenizer(X, y, X_query, y_query, "regression")
         # Pass the same series twice (y_train and y_test) to satisfy the API requirement
+        data['num_query_samples'] = len(X_query)
 
         return data
 
@@ -159,7 +245,32 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
             outlier: bool = False,
             **kwargs
     ) -> Tuple[np.ndarray, np.ndarray | None]:
+        """
+        Compute embeddings for train and test datasets using the contexttab embedder.
 
+        This method processes preprocessed input data and computes embeddings using a
+        pre-trained model. It can also handle separate outlier detection or combined
+        train-test embeddings based on the `outlier` flag.
+
+        Parameters:
+        X_train_preprocessed : dict
+            A dictionary of preprocessed training inputs. Tensor values in the dictionary
+            are transferred to the appropriate device (e.g., GPU or CPU) before use.
+        X_test_preprocessed : dict | None, optional
+            A dictionary of preprocessed testing inputs. Tensor values in the dictionary
+            are transferred to the appropriate device (e.g., GPU or CPU) before use. If None,
+            only training embeddings are computed.
+        outlier : bool, optional
+            A flag indicating whether to compute outlier embeddings for the training data.
+        **kwargs
+            Additional keyword arguments for embedding computation.
+
+        Returns:
+        Tuple[np.ndarray, np.ndarray | None]
+            A tuple containing two numpy arrays:
+            - The first array contains embeddings for the training data.
+            - The second array contains embeddings for the testing data or None if `X_test_preprocessed` is not provided.
+        """
         self.contexttab_embedder.eval()
         device_type = 'cuda' if 'cuda' in str(self.device) else 'cpu'
 
@@ -172,27 +283,31 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
         with torch.no_grad(), torch.autocast(device_type=device_type, enabled=(device_type == 'cuda')):
             if outlier:
                 embeddings = self.contexttab_embedder(X_train_preprocessed)
-
-                return embeddings, None
+                # Only return query embeddings (last N)
+                n_query = X_train_preprocessed['num_query_samples']
+                return embeddings[-n_query:].cpu().numpy(), None
 
             else:
-                embeddings_train = self.contexttab_embedder(X_train_preprocessed)
+                res_train = self.contexttab_embedder(X_train_preprocessed)
+                n_query_train = X_train_preprocessed['num_query_samples']
+                n_query_test = X_test_preprocessed['num_query_samples']
+                embeddings_train = res_train[-n_query_train:].cpu().numpy()
 
-                # Combine the preprocessed dictionaries correctly
                 combined_data = {}
                 for key in X_train_preprocessed.keys():
                     if key == 'column_embeddings':
                         combined_data[key] = X_train_preprocessed[key]
                     elif isinstance(X_train_preprocessed[key], torch.Tensor) and X_test_preprocessed is not None:
-                        combined_data[key] = torch.cat([X_train_preprocessed[key], X_test_preprocessed[key]], dim=0)
+                        # Concatenate context and query parts
+                        ctx_len = X_train_preprocessed[key].shape[0] - n_query_train
+                        context_part = X_train_preprocessed[key][:ctx_len]
+                        query_part = X_test_preprocessed[key][-n_query_test:]
+                        combined_data[key] = torch.cat([context_part, query_part], dim=0)
                     else:
                         combined_data[key] = X_train_preprocessed[key]
 
-                embeddings_all = self.contexttab_embedder(combined_data)
-
-                # Use the actual length of the data tensor to slice
-                train_len = X_train_preprocessed['target'].shape[0]
-                embeddings_test = embeddings_all[train_len:]
+                res_test = self.contexttab_embedder(combined_data)
+                embeddings_test = res_test[-n_query_test:].cpu().numpy()
 
                 return embeddings_train, embeddings_test
 
