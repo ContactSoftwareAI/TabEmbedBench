@@ -225,7 +225,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
 
     def get_scoring_metric(self) -> str:
         """Return the scoring metric for classification."""
-        return "neg_log_loss"
+        return "f1_weighted"
 
     def _get_model_predictions(self, model, embeddings: np.ndarray):
         """Get probability predictions from the model."""
