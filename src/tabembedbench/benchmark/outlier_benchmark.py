@@ -1,15 +1,14 @@
 """Simplified outlier detection benchmark using ADBench datasets."""
 
+import logging
+import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
-
-import zipfile
-
-import requests
+from typing import Callable, Iterator, Optional, Tuple
 
 import numpy as np
 import polars as pl
+import requests
 from sklearn.metrics import roc_auc_score
 
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
@@ -17,6 +16,10 @@ from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+TASK_TYPE = "Outlier Detection"
+
+NPZ_FILE_PATTERN = "*.npz"
 
 ADBENCH_CLASSICAL_DATASETS = [
     "10_cover.npz",
@@ -98,6 +101,7 @@ class OutlierBenchmark(AbstractBenchmark):
         exclude_image_datasets: bool = True,
         result_dir: str | Path = "result_outlier",
         timestamp: str = TIMESTAMP,
+        logging_level: int = logging.INFO,
         save_result_dataframe: bool = True,
         upper_bound_num_samples: int = 10000,
         upper_bound_num_features: int = 500,
@@ -115,10 +119,11 @@ class OutlierBenchmark(AbstractBenchmark):
             upper_bound_num_features: Maximum number of features to process.
         """
         super().__init__(
-            logger_name="TabEmbedBench_Outlier",
-            task_type="Outlier Detection",
+            name="TabEmbedBench_Outlier",
+            task_type=[TASK_TYPE],
             result_dir=result_dir,
             timestamp=timestamp,
+            logging_level=logging_level,
             save_result_dataframe=save_result_dataframe,
             upper_bound_num_samples=upper_bound_num_samples,
             upper_bound_num_features=upper_bound_num_features,
@@ -132,11 +137,11 @@ class OutlierBenchmark(AbstractBenchmark):
 
         if (
             not dataset_paths.exists()
-            or len(list(dataset_paths.glob("*.npz"))) < EXPECTED_DATASET_COUNT
+            or len(list(dataset_paths.glob(NPZ_FILE_PATTERN))) < EXPECTED_DATASET_COUNT
         ):
             found_files = [
                 file_path.stem
-                for file_path in list(dataset_paths.glob("*.npz"))
+                for file_path in dataset_paths.glob(NPZ_FILE_PATTERN)
                 if file_path.stem in ADBENCH_CLASSICAL_DATASETS
             ]
             if len(found_files) == 0:
@@ -168,9 +173,7 @@ class OutlierBenchmark(AbstractBenchmark):
         """
         return list(self.dataset_paths.glob("*.npz"))
 
-    def _should_skip_dataset(
-        self, dataset_file: Path, **kwargs
-    ) -> tuple[bool, str | None]:
+    def _should_skip_dataset(self, dataset_file: Path, **kwargs) -> Tuple[bool, str]:
         """Check if a dataset should be skipped.
 
         Args:
@@ -180,28 +183,31 @@ class OutlierBenchmark(AbstractBenchmark):
         Returns:
             Tuple of (should_skip, reason).
         """
-        # Check if in exclusion list
-        if dataset_file.name in self.exclude_datasets:
-            return True, f"Dataset {dataset_file.name} is in exclusion list"
-
         # Load dataset to check size constraints
         with np.load(dataset_file) as dataset:
             num_samples = dataset["X"].shape[0]
             num_features = dataset["X"].shape[1]
             dataset_name = dataset_file.stem
 
-        # Check size constraints
-        should_skip, reason = self._check_dataset_size_constraints(
-            num_samples, num_features, dataset_name
+        skip_reasons: list[str] = []
+
+        skip_reasons.extend(
+            self._check_dataset_size_constraints(
+                num_samples, num_features, dataset_name
+            )
         )
 
-        if not should_skip:
-            self.logger.info(
-                f"Running experiments on {dataset_name}. "
-                f"Samples: {num_samples}, Features: {num_features}"
-            )
+        # Check if in exclusion list
+        if dataset_file.name in self.exclude_datasets:
+            skip_reasons.append("Excluded by user")
 
-        return should_skip, reason
+        if skip_reasons:
+            reason = " | ".join(skip_reasons)
+            return True, f"Dataset: {dataset_name} - Skipping dataset: {reason}"
+
+        msg = f"Dataset: {dataset_name} - Starting experiments... "
+
+        return False, msg
 
     def _prepare_dataset(self, dataset_file: Path, **kwargs) -> Iterator[dict]:
         """Prepare data from an ADBench dataset file.
@@ -226,88 +232,84 @@ class OutlierBenchmark(AbstractBenchmark):
 
         # Yield single split for outlier detection
         yield {
-            "X": X,
-            "X_train": None,
-            "X_test": None,
-            "y": y,
-            "y_train": None,
-            "y_test": None,
-            "dataset_name": dataset_name,
-            "dataset_size": num_samples,
-            "num_features": num_features,
-            "metadata": {
+            "X_train": X,
+            "y_true": y,
+            "task_type": TASK_TYPE,
+            "dataset_metadata": {
+                "dataset_name": dataset_name,
+                "num_samples": num_samples,
+                "num_features": num_features,
+                "outlier_ratio": outlier_ratio,
+                "task_type": TASK_TYPE,
+            },
+            "feature_metadata": {
                 "outlier_ratio": outlier_ratio,
             },
         }
 
-    def _evaluate(
+    def _get_default_metrics(
         self,
-        embeddings: tuple,
+    ) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
+        """
+        Retrieves a dictionary of default metrics for evaluation purposes.
+
+        The method provides a mapping between metric names and their corresponding
+        evaluation functions. Each metric function is expected to be callable and
+        accept arguments appropriate for the respective metric.
+
+        Returns:
+            dict: A dictionary where keys are metric categories, and values are
+            dictionaries containing metric names mapped to their evaluation
+            functions.
+        """
+        return {
+            "Outlier Detection": {
+                "auc_score": roc_auc_score,
+            }
+        }
+
+    def _get_evaluator_prediction(
+        self,
+        embeddings: Tuple[np.ndarray, np.ndarray, float],
         evaluator: AbstractEvaluator,
-        data_split: dict,
-    ) -> dict:
+        dataset_configurations: dict,
+    ) -> np.ndarray:
         """Evaluate embeddings for outlier detection.
 
         Args:
             embeddings: Tuple of (embeddings, test_embeddings, compute_time).
             evaluator: The evaluator to use.
-            data_split: Dictionary with data and metadata.
+            dataset_configurations: Dictionary with data and metadata.
 
         Returns:
             Dictionary containing evaluation results.
         """
-        train_embeddings, test_embeddings, compute_time = embeddings
-        y = data_split["y"]
-        outlier_ratio = data_split["metadata"]["outlier_ratio"]
+        train_embeddings, _, _ = embeddings
 
         # Get prediction from evaluator
         prediction, _ = evaluator.get_prediction(train_embeddings)
 
-        # Compute AUC score
-        score_auc = roc_auc_score(y, prediction)
-
-        # Build result dictionary with all metadata
-        result_dict = {
-            "dataset_name": [data_split["dataset_name"]],
-            "dataset_size": [data_split["dataset_size"]],
-            "num_features": [data_split["num_features"]],
-            "embed_dim": [train_embeddings.shape[-1]],
-            "time_to_compute_embedding": [compute_time],
-            "algorithm": [evaluator._name],
-            "auc_score": [score_auc],
-            "outlier_ratio": [outlier_ratio],
-            "task": ["Outlier Detection"],
-        }
-
-        # Add evaluator parameters
-        evaluator_params = evaluator.get_parameters()
-        for key, value in evaluator_params.items():
-            result_dict[f"algorithm_{key}"] = [value]
-
-        return result_dict
-
-    def _get_benchmark_name(self) -> str:
-        """Get the benchmark name for result saving.
-
-        Returns:
-            String identifier for the benchmark.
-        """
-        return "ADBench_Tabular"
+        return prediction
 
     def download_adbench_tabular_datasets(
         self,
         save_path: str | Path | None = None,
         files_to_download: list[str] = None,
     ) -> None:
-        """Downloads tabular datasets for ADBench from the specified GitHub repository and saves them to the
-        specified path. If no path is provided, it defaults to './data/adbench_tabular_datasets'. If the
-        directory does not exist, it is created.
+        """
+        Downloads and extracts tabular datasets from the ADBench repository.
+
+        This function downloads a zip file containing the datasets from the ADBench
+        repository, extracts only the required Classical datasets, and saves them
+        to the specified directory.
 
         Args:
-            save_path (Optional[str]): The directory where the ADBench tabular datasets should be saved. If
-                None, the default path './data/adbench_tabular_datasets' will be used.
-            missing_files (Optional[list[str]]): List of filenames that should be downloaded. If None, all datasets should be loaded.
+            save_path (str | Path | None): The directory where the datasets will
+                be saved. If not provided, defaults to "./data/adbench_tabular_datasets".
+            files_to_download (list[str] | None): List of filenames to be downloaded.
+                Only files specified in this list are extracted from the zip.
         """
+
         save_path = save_path or "./data/adbench_tabular_datasets"
         save_path = Path(save_path)
 

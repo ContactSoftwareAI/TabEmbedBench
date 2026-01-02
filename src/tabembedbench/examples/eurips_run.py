@@ -6,16 +6,13 @@ datasets. It supports classification, regression, and outlier detection tasks.
 """
 
 import logging
+
 import click
-from tabembedbench.utils.eda_utils import (
-    create_outlier_plots,
-    create_tabarena_plots,
-)
 
 from tabembedbench.benchmark.run_benchmark import (
-    run_benchmark,
-    DatasetConfig,
     BenchmarkConfig,
+    DatasetConfig,
+    run_benchmark,
 )
 from tabembedbench.embedding_models import (
     TabICLEmbedding,
@@ -23,15 +20,19 @@ from tabembedbench.embedding_models import (
     TabPFNEmbedding,
     TabStarEmbedding,
 )
-from tabembedbench.evaluators.outlier import (
-    IsolationForestEvaluator,
-    LocalOutlierFactorEvaluator,
-    DeepSVDDEvaluator,
-)
-from tabembedbench.evaluators.mlp_classifier import MLPClassifierEvaluator
-from tabembedbench.evaluators.mlp_regressor import MLPRegressorEvaluator
 from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
 from tabembedbench.evaluators.knn_regressor import KNNRegressorEvaluator
+from tabembedbench.evaluators.mlp_classifier import MLPClassifierEvaluator
+from tabembedbench.evaluators.mlp_regressor import MLPRegressorEvaluator
+from tabembedbench.evaluators.outlier import (
+    DeepSVDDEvaluator,
+    IsolationForestEvaluator,
+    LocalOutlierFactorEvaluator,
+)
+from tabembedbench.utils.eda_utils import (
+    create_outlier_plots,
+    create_tabarena_plots,
+)
 
 logger = logging.getLogger("EuRIPS_Run_Benchmark")
 
@@ -55,17 +56,17 @@ def get_embedding_models(debug=False):
 
     tablevector = TableVectorizerEmbedding()
 
-    tabpfn_embedder = TabPFNEmbedding(
-        num_estimators=5,
-    )
+    # tabpfn_embedder = TabPFNEmbedding(
+    #     num_estimators=5,
+    # )
 
-    tabstar_embedder = TabStarEmbedding()
+    # tabstar_embedder = TabStarEmbedding()
 
     embedding_models = [
-        #tabicl_row_embedder,
-        #tabpfn_embedder,
-        tabstar_embedder,
-        #tablevector,
+        tabicl_row_embedder,
+        # tabpfn_embedder,
+        # tabstar_embedder,
+        tablevector,
     ]
 
     return embedding_models
@@ -240,24 +241,6 @@ def run_main(
         dataset_config=dataset_config,
         benchmark_config=benchmark_config,
     )
-
-    if not result_outlier.is_empty():
-        create_outlier_plots(
-            result_outlier,
-            data_path=result_dir,
-            models_to_keep=models_to_keep,
-            algorithm_order=order_evaluators_outlier,
-            bin_edges=bin_edges,
-        )
-
-    if not result_tabarena.is_empty():
-        create_tabarena_plots(
-            result_tabarena,
-            data_path=result_dir,
-            models_to_keep=models_to_keep,
-            algorithm_order_classification=order_evaluators_classification,
-            algorithm_order_regression=order_evaluators_regression,
-        )
 
 
 @click.command()

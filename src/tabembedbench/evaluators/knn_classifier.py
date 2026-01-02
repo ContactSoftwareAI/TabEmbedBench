@@ -37,7 +37,7 @@ class KNNClassifierEvaluator(AbstractEvaluator):
             other_model_params (dict, optional): Additional parameters to pass to
                 KNeighborsClassifier. Defaults to {}.
         """
-        super().__init__(name="KNNClassifier", task_type="Supervised Classification")
+        super().__init__(name="KNNClassifier", task_type=["Supervised Binary Classification", "Supervised Multiclass Classification"])
         self.num_neighbors = num_neighbors
 
         self.model_params = dict(other_model_params.items())

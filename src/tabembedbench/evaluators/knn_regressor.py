@@ -39,14 +39,16 @@ class KNNRegressorEvaluator(AbstractEvaluator):
         """
         super().__init__(name="KNNRegressor", task_type="Supervised Regression")
         self.num_neighbors = num_neighbors
+        self.weights = weights
+        self.metric = metric
 
         self.model_params = dict(other_model_params.items())
 
-        self.model_params["weights"] = weights
-        self.model_params["metric"] = metric
-
         self.knn_regressor = KNeighborsRegressor(
-            n_neighbors=self.num_neighbors, **self.model_params
+            n_neighbors=self.num_neighbors,
+            weights=weights,
+            metric=metric,
+            **self.model_params,
         )
 
     def get_prediction(

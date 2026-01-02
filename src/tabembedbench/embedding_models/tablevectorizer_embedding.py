@@ -112,7 +112,7 @@ class TableVectorizerEmbedding(AbstractEmbeddingGenerator):
         Raises:
             ValueError: If the model has not been fitted.
         """
-        if outlier:
+        if X_test_preprocessed is None:
             embeddings = self.tablevectorizer.transform(X_train_preprocessed)
             return embeddings.to_numpy(), None
         if self._is_fitted:
