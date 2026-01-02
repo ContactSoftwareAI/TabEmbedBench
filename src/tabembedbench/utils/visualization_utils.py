@@ -3,6 +3,8 @@ from typing import Literal, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 import seaborn as sns
 import umap
 from sklearn.decomposition import PCA, KernelPCA
@@ -223,5 +225,93 @@ def create_embedding_plots_3d(
         save_path = Path(save_path) if isinstance(save_path, str) else save_path
         save_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+    return fig
+
+
+def create_interactive_embedding_plot_3d(
+    embeddings: np.ndarray,
+    labels: np.ndarray,
+    title: str,
+    method: Literal["umap", "pca", "kpca", "tsne", "pca_then_umap"] = "pca",
+    save_path: Optional[str | Path] = None,
+    **reduction_kwargs,
+):
+    """
+    Create an interactive 3D scatter plot of embeddings using Plotly.
+
+    Features:
+    - Full 3D rotation and zoom
+    - Hover to see label information
+    - Smooth animations
+    - Download as PNG
+
+    Args:
+        embeddings: High-dimensional embedding array (n_samples, n_features)
+        labels: Label array (n_samples,) - can be int or str
+        title: Title for the plot
+        method: Dimensionality reduction method
+        palette: Plotly color palette name
+        save_path: Path to save the HTML file (optional)
+        **reduction_kwargs: Additional arguments for the reduction method
+
+    Returns:
+        Plotly figure object
+
+    Raises:
+        ImportError: If Plotly is not installed
+    """
+    # Reduce to 3D
+    reduced = reduce_embeddings(
+        embeddings, method=method, n_components=3, **reduction_kwargs
+    )
+
+    # Get unique labels and create color mapping
+    unique_labels = np.unique(labels)
+    colors = px.colors.qualitative.Set2
+    color_map = {
+        str(label): colors[idx % len(colors)] for idx, label in enumerate(unique_labels)
+    }
+
+    # Create 3D scatter plot using go.Scatter3d (no pandas needed)
+    fig = go.Figure()
+
+    for label in unique_labels:
+        mask = labels == label
+        fig.add_trace(
+            go.Scatter3d(
+                x=reduced[mask, 0],
+                y=reduced[mask, 1],
+                z=reduced[mask, 2],
+                mode="markers",
+                name=str(label),
+                marker=dict(
+                    size=5,
+                    opacity=0.7,
+                    color=color_map[str(label)],
+                ),
+                text=[str(label)] * np.sum(mask),
+                hovertemplate="<b>%{text}</b><br>Component 1: %{x:.3f}<br>Component 2: %{y:.3f}<br>Component 3: %{z:.3f}<extra></extra>",
+            )
+        )
+
+    fig.update_layout(
+        title=title,
+        scene=dict(
+            xaxis_title=f"{method.upper()} Component 1",
+            yaxis_title=f"{method.upper()} Component 2",
+            zaxis_title=f"{method.upper()} Component 3",
+        ),
+        hovermode="closest",
+        width=1200,
+        height=900,
+        font=dict(size=12),
+        showlegend=True,
+    )
+
+    if save_path:
+        save_path = Path(save_path) if isinstance(save_path, str) else save_path
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.write_html(str(save_path))
 
     return fig

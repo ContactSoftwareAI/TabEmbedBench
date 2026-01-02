@@ -32,6 +32,7 @@ dependencies = [
     "pydantic>=2.12.5",
     "tqdm>=4.67.1",
     "umap-learn>=0.5.9.post2",
+    "plotly>=6.5.0",
 ]
 
 [tool.uv]

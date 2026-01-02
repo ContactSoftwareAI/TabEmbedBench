@@ -22,6 +22,7 @@ from tabembedbench.constants import (
 )
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
+from tabembedbench.utils.visualization_utils import create_interactive_embedding_plot_3d
 
 
 class DatasetCollection(BaseModel):
@@ -187,6 +188,32 @@ def load_dataset_collections_json(
 
 
 class DatasetSeparationBenchmark(AbstractBenchmark):
+    """
+    Handles the benchmarking process for testing dataset separation of different embedding models, utilizing dataset
+    collections from OpenML and applying machine learning tasks for comparative studies.
+
+    This class enables loading, preprocessing, and evaluating collections of datasets
+    using user-defined metrics and embedding models. It supports configuration of logging,
+    caching, random seed management, and result saving.
+
+    A dataset configuration dictionary is a representation of a dataset for the task, containing
+    information about the dataset collection, including train/test splits for each dataset which is part of the collection, label encoding,
+    metadata about the dataset, and feature information (such as categorical indices and column names).
+
+    Attributes:
+        list_dataset_collections (Dict[str, str | List[int]]): Dictionary containing
+            collections of datasets to be used in the benchmarking process, where each
+            key represents a collection and the value includes task IDs and additional
+            metadata.
+        random_seed (Optional[int]): Seed for the random number generator used for
+            reproducibility.
+        rng (numpy.random.Generator): Instance of the random number generator for
+            random operations.
+        create_embedding_plots (bool): Indicates whether to create plots of embeddings
+            for visualization purposes.
+        openml_cache_dir (Path): Directory path where OpenML datasets are cached for reuse.
+    """
+
     def __init__(
         self,
         list_dataset_collections: Dict[str, str | List[int]],
@@ -257,6 +284,23 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
     def _prepare_dataset(
         self, dataset_collection: Dict[str, str | List[int]]
     ) -> Iterator[dict]:
+        """
+        Prepares and yields a dataset collection for processing, including train/test splits,
+        label encoding, and metadata.
+
+        Args:
+            dataset_collection (Dict[str, str | List[int]]): A dictionary containing information about
+                the dataset collection, with attributes such as the name of the collection,
+                the selected tasks as a string, and a list of dataset configurations. Each
+                dataset configuration includes details such as the associated task, dataset
+                object, and label for encoding.
+
+        Yields:
+            Iterator[dict]: An iterator that yields dictionaries containing structured
+                information about the dataset collection, including train/test splits, label
+                encoding, metadata about the dataset, and feature information (such as
+                categorical indices and column names).
+        """
         list_dataset_configurations = []
 
         max_features = 0
@@ -446,8 +490,6 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
             )
         )
 
-        # TODO: Visulaization of embeddings
-
         dataset_collection_configuration = {
             "y_train": train_labels,
             "task_type": task_type,
@@ -499,6 +541,7 @@ def run_dataseparation_benchmark(
     use_tabpfn_subset: bool = False,
     result_dir: str | Path = "result_dataset_separation",
     save_result_dataframe: bool = True,
+    create_embedding_plots: bool = False,
     dataset_configurations_json_path: str | Path = None,
     openml_cache_dir: str | Path | None = None,
 ) -> pl.DataFrame:
@@ -519,6 +562,7 @@ def run_dataseparation_benchmark(
         result_dir=result_dir,
         save_result_dataframe=save_result_dataframe,
         openml_cache_dir=openml_cache_dir,
+        create_embedding_plots=create_embedding_plots,
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
