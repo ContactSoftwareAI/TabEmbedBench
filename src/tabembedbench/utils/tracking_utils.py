@@ -5,6 +5,7 @@ from typing import Any, Dict, Tuple
 
 import polars as pl
 import torch
+from google.cloud import storage
 
 
 def save_result_df(
