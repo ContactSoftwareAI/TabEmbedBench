@@ -8,3 +8,4 @@ from tabembedbench.embedding_models.tabpfn_embedding import (
     TabPFNWrapper,
 )
 from tabembedbench.embedding_models.tabstar_embedding import TabStarEmbedding
+from tabembedbench.embedding_models.contexttab_embedding import ConTextTabEmbedding
