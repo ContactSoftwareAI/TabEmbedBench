@@ -114,7 +114,8 @@ class KNNClassifierEvaluator(AbstractEvaluator):
 
 class KNNClassifierEvaluatorHPO(AbstractHPOEvaluator):
     def get_scoring_metric(self) -> dict[str, str]:
-        pass
+        """Return the scoring metric for classification."""
+        return "f1_weighted"
 
     def _get_search_space(self) -> dict[str, optuna.search_space]:
         return {
@@ -127,4 +128,4 @@ class KNNClassifierEvaluatorHPO(AbstractHPOEvaluator):
         }
 
     def _get_model_predictions(self, model, embeddings: np.ndarray):
-        pass
+        return model.predict_proba(embeddings)
