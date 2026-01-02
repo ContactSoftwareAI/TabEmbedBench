@@ -61,13 +61,16 @@ def get_embedding_models(debug=False):
     #     num_estimators=5,
     # )
 
-    # tabstar_embedder = TabStarEmbedding()
+    tabstar_embedder = TabStarEmbedding()
+
+    context_tab_embedder = ConTextTabEmbedding()
 
     embedding_models = [
-        tabicl_row_embedder,
+        # tabicl_row_embedder,
         # tabpfn_embedder,
         # tabstar_embedder,
-        tablevector,
+        # tablevector,
+        context_tab_embedder,
     ]
 
     return embedding_models
