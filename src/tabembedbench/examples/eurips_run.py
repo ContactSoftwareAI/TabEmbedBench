@@ -19,6 +19,7 @@ from tabembedbench.embedding_models import (
     TableVectorizerEmbedding,
     TabPFNEmbedding,
     TabStarEmbedding,
+    ConTextTabEmbedding,
 )
 from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
 from tabembedbench.evaluators.knn_regressor import KNNRegressorEvaluator
@@ -60,13 +61,16 @@ def get_embedding_models(debug=False):
     #     num_estimators=5,
     # )
 
-    # tabstar_embedder = TabStarEmbedding()
+    tabstar_embedder = TabStarEmbedding()
+
+    context_tab_embedder = ConTextTabEmbedding()
 
     embedding_models = [
-        tabicl_row_embedder,
+        # tabicl_row_embedder,
         # tabpfn_embedder,
         # tabstar_embedder,
-        tablevector,
+        # tablevector,
+        context_tab_embedder,
     ]
 
     return embedding_models
@@ -248,7 +252,7 @@ def run_main(
 @click.option("--max-samples", default=10000, help="Upper bound for dataset size")
 @click.option("--max-features", default=200, help="Upper bound for number of features")
 @click.option(
-    "--run-outlier/--no-run-outlier", default=False, help="Run outlier detection"
+    "--run-outlier/--no-run-outlier", default=True, help="Run outlier detection"
 )
 @click.option(
     "--run-supervised/--no-run-supervised",
