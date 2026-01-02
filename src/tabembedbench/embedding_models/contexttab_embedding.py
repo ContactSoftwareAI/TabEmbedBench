@@ -39,10 +39,10 @@ class ConTextTabModel(RPT):
     ## aus contexttab repo
     def forward(self, data: dict[str, torch.Tensor], labels=None, **kwargs):
         data = to_device(data, self.device, raise_on_unexpected=False)
-        input_embeds = self.embeddings(data['data'], is_regression=True)
+        input_embeds = self.embeddings(data, is_regression=True)
         # (max_num_rows, max_num_columns, hidden_size)
 
-        extended_attention_mask = self.build_context_attention_mask(data['data'], input_embeds.device)
+        extended_attention_mask = self.build_context_attention_mask(data, input_embeds.device)
         extended_attention_mask = extended_attention_mask.type(input_embeds.dtype)
 
         # ToDo: If im original beachten und evtl. anpassen
@@ -144,18 +144,8 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
 
         data, labels, label_classes = self.tokenizer(X, y, X_query, y_query, "regression")
         # Pass the same series twice (y_train and y_test) to satisfy the API requirement
-        _, target_mean, target_std = self.tokenizer.standard_scale_column(y, y)
 
-        return {
-            'data': data,
-            'num_rows': df.shape[0],
-            'num_cols': df.shape[1],
-            'labels': None,
-            'is_regression': torch.tensor(True),
-            'label_classes': np.asarray(label_classes),
-            'target_mean': target_mean,
-            'target_std': target_std
-        }
+        return data
 
     def _fit_model(self, X_preprocessed: dict,
                    y_preprocessed: dict | None = None, train: bool = True,
@@ -164,14 +154,21 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
 
     def _compute_embeddings(
             self,
-            X_train_preprocessed: np.ndarray,
-            X_test_preprocessed: np.ndarray | None = None,
+            X_train_preprocessed: dict,
+            X_test_preprocessed: dict | None = None,
             outlier: bool = False,
             **kwargs
     ) -> Tuple[np.ndarray, np.ndarray | None]:
 
         self.contexttab_embedder.eval()
         device_type = 'cuda' if 'cuda' in str(self.device) else 'cpu'
+
+        X_train_preprocessed = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+                                for k, v in X_train_preprocessed.items()}
+        if X_test_preprocessed is not None:
+            X_test_preprocessed = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+                                   for k, v in X_test_preprocessed.items()}
+
         with torch.no_grad(), torch.autocast(device_type=device_type, enabled=(device_type == 'cuda')):
             if outlier:
                 embeddings = self.contexttab_embedder(X_train_preprocessed)
@@ -181,19 +178,21 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
             else:
                 embeddings_train = self.contexttab_embedder(X_train_preprocessed)
 
-                #ToDo: Adapt other values such as num rows
-                combined_data = X_train_preprocessed.copy()
-                combined_data['data'] = torch.cat([
-                    X_train_preprocessed['data'],
-                    X_test_preprocessed['data']
-                ], dim=0)
+                # Combine the preprocessed dictionaries correctly
+                combined_data = {}
+                for key in X_train_preprocessed.keys():
+                    if key == 'column_embeddings':
+                        combined_data[key] = X_train_preprocessed[key]
+                    elif isinstance(X_train_preprocessed[key], torch.Tensor) and X_test_preprocessed is not None:
+                        combined_data[key] = torch.cat([X_train_preprocessed[key], X_test_preprocessed[key]], dim=0)
+                    else:
+                        combined_data[key] = X_train_preprocessed[key]
 
                 embeddings_all = self.contexttab_embedder(combined_data)
-                embeddings_test = embeddings_all[len(X_train_preprocessed['data']):]
 
-                #X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
-                #embeddings = self.contexttab_embedder(X_train_test_stack)
-                #embeddings_test = embeddings[len(X_train_preprocessed):]
+                # Use the actual length of the data tensor to slice
+                train_len = X_train_preprocessed['target'].shape[0]
+                embeddings_test = embeddings_all[train_len:]
 
                 return embeddings_train, embeddings_test
 
