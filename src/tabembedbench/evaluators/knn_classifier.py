@@ -1,7 +1,8 @@
 import numpy as np
+import optuna
 from sklearn.neighbors import KNeighborsClassifier
 
-from tabembedbench.evaluators import AbstractEvaluator
+from tabembedbench.evaluators import AbstractEvaluator, AbstractHPOEvaluator
 
 
 class KNNClassifierEvaluator(AbstractEvaluator):
@@ -37,7 +38,13 @@ class KNNClassifierEvaluator(AbstractEvaluator):
             other_model_params (dict, optional): Additional parameters to pass to
                 KNeighborsClassifier. Defaults to {}.
         """
-        super().__init__(name="KNNClassifier", task_type=["Supervised Binary Classification", "Supervised Multiclass Classification"])
+        super().__init__(
+            name="KNNClassifier",
+            task_type=[
+                "Supervised Binary Classification",
+                "Supervised Multiclass Classification",
+            ],
+        )
         self.num_neighbors = num_neighbors
 
         self.model_params = dict(other_model_params.items())
@@ -103,3 +110,22 @@ class KNNClassifierEvaluator(AbstractEvaluator):
         params["num_neighbors"] = self.num_neighbors
 
         return params
+
+
+class KNNClassifierEvaluatorHPO(AbstractHPOEvaluator):
+    def get_scoring_metric(self) -> dict[str, str]:
+        """Return the scoring metric for classification."""
+        return "f1_weighted"
+
+    def _get_search_space(self) -> dict[str, optuna.search_space]:
+        return {
+            "n_neighbors": {"type": "int", "low": 5, "high": 100, "step": 5},
+            "weights": {"type": "categorical", "choices": ["uniform", "distance"]},
+            "metric": {
+                "type": "categorical",
+                "choices": ["euclidean", "manhattan", "cosine"],
+            },
+        }
+
+    def _get_model_predictions(self, model, embeddings: np.ndarray):
+        return model.predict_proba(embeddings)

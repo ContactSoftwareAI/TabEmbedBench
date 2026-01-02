@@ -1,12 +1,18 @@
-from typing import Optional
 import warnings
+from typing import Optional
+
 import numpy as np
 import optuna
 from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.utils._tags import Tags, TargetTags
-from sklearn.preprocessing import StandardScaler
 from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.utils._tags import Tags, TargetTags
 
+from tabembedbench.constants import (
+    MAX_BEST_MODEL_ITERATIONS,
+    MAX_HPO_ITERATIONS,
+    SUPERVISED_REGRESSION,
+)
 from tabembedbench.evaluators.abstractevaluator import AbstractHPOEvaluator
 from tabembedbench.utils.torch_utils import get_device
 
@@ -42,7 +48,6 @@ class SklearnMLPRegressorWrapper(BaseEstimator, RegressorMixin):
 
         self.scaler = StandardScaler()
         self.model = None
-        self.is_fitted_ = False
 
     def __sklearn_tags__(self):
         """Implement sklearn tags for compatibility with newer sklearn versions."""
@@ -121,7 +126,7 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
     ):
         super().__init__(
             name="MLPRegressor",
-            task_type="Supervised Regression",
+            task_type=[SUPERVISED_REGRESSION],
             n_trials=n_trials,
             cv_folds=cv_folds,
             random_state=random_state,
@@ -132,8 +137,14 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
     def _get_search_space(self) -> dict:
         """Define the hyperparameter search space for sklearn MLP regressor."""
         return {
-            "n_layers": {"type": "int", "low": 1, "high": 3},
-            "hidden_dim_base": {"type": "int", "low": 32, "high": 512, "log": True},
+            "n_layers": {"type": "int", "low": 1, "high": 10},
+            "hidden_layer_sizes": {
+                "type": "int_sequence",
+                "length_param": "n_layers",
+                "low": 32,
+                "high": 512,
+                "log": True,
+            },
             "alpha": {"type": "float", "low": 1e-5, "high": 1e-1, "log": True},
             "learning_rate_init": {
                 "type": "float",
@@ -141,81 +152,19 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
                 "high": 1e-2,
                 "log": True,
             },
-            "batch_size": {"type": "categorical", "choices": [16, 32, 64, 128, 256]},
-            "max_iter": {"type": "int", "low": 50, "high": 200},
+            "batch_size": {
+                "type": "categorical",
+                "choices": [16, 32, 64, 128, 256, 512],
+            },
+            "max_iter": {
+                "type": "constant",
+                "value": MAX_HPO_ITERATIONS,
+            },
             "activation": {
                 "type": "categorical",
                 "choices": ["relu", "tanh", "identity"],
             },
         }
-
-    def create_model(self, trial: optuna.Trial):
-        """Create sklearn MLP model with hyperparameters suggested by Optuna."""
-        search_space = self._get_search_space()
-
-        # Number of hidden layers
-        n_layers = trial.suggest_int(
-            "n_layers",
-            search_space["n_layers"]["low"],
-            search_space["n_layers"]["high"],
-        )
-
-        # Hidden layer dimensions (tuple for sklearn)
-        hidden_layer_sizes = tuple(
-            trial.suggest_int(
-                f"hidden_dim_{i}",
-                search_space["hidden_dim_base"]["low"],
-                search_space["hidden_dim_base"]["high"],
-                log=search_space["hidden_dim_base"]["log"],
-            )
-            for i in range(n_layers)
-        )
-
-        # Alpha (L2 regularization)
-        alpha = trial.suggest_float(
-            "alpha",
-            search_space["alpha"]["low"],
-            search_space["alpha"]["high"],
-            log=search_space["alpha"]["log"],
-        )
-
-        # Learning rate
-        learning_rate_init = trial.suggest_float(
-            "learning_rate_init",
-            search_space["learning_rate_init"]["low"],
-            search_space["learning_rate_init"]["high"],
-            log=search_space["learning_rate_init"]["log"],
-        )
-
-        # Batch size
-        batch_size = trial.suggest_categorical(
-            "batch_size", search_space["batch_size"]["choices"]
-        )
-
-        # Max iterations
-        max_iter = trial.suggest_int(
-            "max_iter",
-            search_space["max_iter"]["low"],
-            search_space["max_iter"]["high"],
-        )
-
-        # Activation function
-        activation = trial.suggest_categorical(
-            "activation", search_space["activation"]["choices"]
-        )
-
-        return SklearnMLPRegressorWrapper(
-            hidden_layer_sizes=hidden_layer_sizes,
-            activation=activation,
-            alpha=alpha,
-            batch_size=batch_size,
-            learning_rate_init=learning_rate_init,
-            max_iter=max_iter,
-            early_stopping=True,
-            validation_fraction=0.1,
-            n_iter_no_change=10,
-            random_state=self.random_state,
-        )
 
     def get_scoring_metric(self) -> str:
         """Return the scoring metric for regression."""
@@ -230,6 +179,7 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
         embeddings: np.ndarray,
         y: np.ndarray | None = None,
         train: bool = True,
+        **kwargs,
     ) -> tuple:
         """Get predictions from the MLP regressor."""
         if train:
@@ -239,4 +189,8 @@ class MLPRegressorEvaluator(AbstractHPOEvaluator):
             # Set input dimension based on data
             self.input_dim = embeddings.shape[1]
 
-        return super().get_prediction(embeddings, y, train)
+        additional_parameters = {
+            "max_iter": MAX_BEST_MODEL_ITERATIONS,
+        }
+
+        return super().get_prediction(embeddings, y, train, **additional_parameters)
