@@ -1,10 +1,12 @@
-import numpy as np
-import pandas as pd
 import os
 import pickle
-from sklearn.base import TransformerMixin
+
+import numpy as np
+import pandas as pd
 from scipy.stats import qmc
-from tabembedbench.utils.google_embeddings import embed_text
+from sklearn.base import TransformerMixin
+
+# from tabembedbench.utils.google_embeddings import embed_text
 
 
 class SphereModel(TransformerMixin):
@@ -23,9 +25,7 @@ class SphereModel(TransformerMixin):
         n_cols (int | None): Number of columns in the fitted data.
     """
 
-    def __init__(
-        self, embed_dim: int
-    ) -> None:
+    def __init__(self, embed_dim: int) -> None:
         """Initialize the sphere-based embedding generator.
 
         Args:
@@ -33,7 +33,7 @@ class SphereModel(TransformerMixin):
         """
         super()
         self.embed_dim = embed_dim
-        #self.point_generator = SobolPointGenerator(d_internal=self.embed_dim-1)
+        # self.point_generator = SobolPointGenerator(d_internal=self.embed_dim-1)
         self.categorical_column_names = None
         self.text_column_names = None
         self.column_properties = {}
@@ -73,27 +73,36 @@ class SphereModel(TransformerMixin):
                 category_embeddings = {}
 
                 for category in unique_categories:
-                    category_embeddings[category] = new_point_on_unit_sphere(self.embed_dim)
-                    #category_embeddings[category] = new_point(self.embed_dim)
+                    category_embeddings[category] = new_point_on_unit_sphere(
+                        self.embed_dim
+                    )
+                    # category_embeddings[category] = new_point(self.embed_dim)
 
                 self.column_properties[col] = category_embeddings
             elif col in self.text_column_names:
                 pos = self.text_column_names.index(col)
-                if pos<len(text_column_paths) or not text_column_paths[pos].endswith(".pkl"):
-                    self.column_properties[col] = {'path': text_column_paths[pos]}
+                if pos < len(text_column_paths) or not text_column_paths[pos].endswith(
+                    ".pkl"
+                ):
+                    self.column_properties[col] = {"path": text_column_paths[pos]}
                 else:
-                    self.column_properties[col] = {'path': 'None'}
+                    self.column_properties[col] = {"path": "None"}
             else:
                 point = new_point_on_unit_sphere(self.embed_dim)
                 vec = np.zeros(self.embed_dim)
                 for j in range(int(np.floor(self.embed_dim / 2))):
-                    vec[2*j] = point[2*j+1]
-                    vec[2*j+1] = -point[2*j]
+                    vec[2 * j] = point[2 * j + 1]
+                    vec[2 * j + 1] = -point[2 * j]
                 vec /= np.linalg.norm(vec)
                 col_min = np.nanmin(column_data)
                 col_max = np.nanmax(column_data)
-                #self.column_properties.append([point,vec,col_min, col_max])
-                self.column_properties[col] = {'point': point, 'vec': vec, 'min_value': col_min, 'max_value': col_max}
+                # self.column_properties.append([point,vec,col_min, col_max])
+                self.column_properties[col] = {
+                    "point": point,
+                    "vec": vec,
+                    "min_value": col_min,
+                    "max_value": col_max,
+                }
 
     def transform(self, data: pd.DataFrame) -> np.ndarray:
         """Transforms input data into embeddings using appropriate methods for categorical, text and
@@ -124,21 +133,21 @@ class SphereModel(TransformerMixin):
 
             if col in self.categorical_column_names:
                 col_embedding = self._embed_categorical_column(column_data, col)
-            elif col in self.text_column_names:
-                col_embedding = self._embed_text_column(column_data, col)
+            # elif col in self.text_column_names:
+            #     col_embedding = self._embed_text_column(column_data, col)
             else:
-                col_embedding = self._embed_numerical_column(column_data.to_numpy(), col)
+                col_embedding = self._embed_numerical_column(
+                    column_data.to_numpy(), col
+                )
 
             column_embeddings.append(col_embedding)
 
-        row_embeddings = np.mean(np.stack(np.array(column_embeddings),axis=0),axis=0)
-        #row_embeddings = np.concatenate(column_embeddings,axis=1)
+        row_embeddings = np.mean(np.stack(np.array(column_embeddings), axis=0), axis=0)
+        # row_embeddings = np.concatenate(column_embeddings,axis=1)
 
         return row_embeddings
 
-    def _embed_numerical_column(
-        self, column_data: np.ndarray, col: str
-    ) -> np.ndarray:
+    def _embed_numerical_column(self, column_data: np.ndarray, col: str) -> np.ndarray:
         """Embed a numerical column into the embedding space.
 
         Normalizes values to a radius between 0.5 and 1.5, then places points
@@ -151,34 +160,36 @@ class SphereModel(TransformerMixin):
         Returns:
             np.ndarray: Embedded values of shape (len(column_data), embed_dim).
         """
-        point = self.column_properties[col]['point'].reshape([1,self.embed_dim])
-        vec = self.column_properties[col]['vec'].reshape([1,self.embed_dim])
-        col_min = self.column_properties[col]['min_value']
-        col_max = self.column_properties[col]['max_value']
+        point = self.column_properties[col]["point"].reshape([1, self.embed_dim])
+        vec = self.column_properties[col]["vec"].reshape([1, self.embed_dim])
+        col_min = self.column_properties[col]["min_value"]
+        col_max = self.column_properties[col]["max_value"]
         col_range = col_max - col_min
 
-        embeddings = np.empty((len(column_data), self.embed_dim),dtype=float)
-#       mit Sigmoid auf Großkreis:
-#        for i, value in enumerate(column_data):
-#            if value < col_min:
-#                alpha = 0.2*np.pi*sig(16*(value-col_min)/col_range)
-#            elif value > col_max:
-#                alpha = 0.2*np.pi*(sig(16*(value-col_max)/col_range)+4)
-#            else:
-#                alpha = np.pi*(0.8*(value-col_min)/col_range+0.1)
-#            embeddings[i, :] = np.sin(alpha) * point + np.cos(alpha) * vec
-#       ohne Sigmoid auf Großkreis:
-        alpha = (np.pi * (0.8 * (column_data - col_min) / col_range + 0.1)).reshape([len(column_data),1])
+        embeddings = np.empty((len(column_data), self.embed_dim), dtype=float)
+        #       mit Sigmoid auf Großkreis:
+        #        for i, value in enumerate(column_data):
+        #            if value < col_min:
+        #                alpha = 0.2*np.pi*sig(16*(value-col_min)/col_range)
+        #            elif value > col_max:
+        #                alpha = 0.2*np.pi*(sig(16*(value-col_max)/col_range)+4)
+        #            else:
+        #                alpha = np.pi*(0.8*(value-col_min)/col_range+0.1)
+        #            embeddings[i, :] = np.sin(alpha) * point + np.cos(alpha) * vec
+        #       ohne Sigmoid auf Großkreis:
+        alpha = (np.pi * (0.8 * (column_data - col_min) / col_range + 0.1)).reshape(
+            [len(column_data), 1]
+        )
         embeddings = np.sin(alpha) * point + np.cos(alpha) * vec
-#       auf Gerade:
-#        embeddings = (0.5 + (column_data.reshape([len(column_data),1]) - col_min) / col_range) * point
-        embeddings[np.argwhere(np.isnan(column_data))] = np.zeros(self.embed_dim,dtype=float)
+        #       auf Gerade:
+        #        embeddings = (0.5 + (column_data.reshape([len(column_data),1]) - col_min) / col_range) * point
+        embeddings[np.argwhere(np.isnan(column_data))] = np.zeros(
+            self.embed_dim, dtype=float
+        )
 
-        return np.array(embeddings,dtype=float)
+        return np.array(embeddings, dtype=float)
 
-    def _embed_categorical_column(
-        self, column_data: pd.Series, col: str
-    ) -> np.ndarray:
+    def _embed_categorical_column(self, column_data: pd.Series, col: str) -> np.ndarray:
         """
         Embed a categorical column into the embedding space.
 
@@ -204,61 +215,62 @@ class SphereModel(TransformerMixin):
         unique_categories = column_data.dropna().unique()
         for value in unique_categories:
             if value not in unique_category_embeddings.keys():
-                unique_category_embeddings[value] = new_point_on_unit_sphere(self.embed_dim)
-                #unique_category_embeddings[value] = new_point(self.embed_dim)
+                unique_category_embeddings[value] = new_point_on_unit_sphere(
+                    self.embed_dim
+                )
+                # unique_category_embeddings[value] = new_point(self.embed_dim)
 
-        embeddings = np.empty((len(column_data), self.embed_dim),dtype=float)
+        embeddings = np.empty((len(column_data), self.embed_dim), dtype=float)
         for i, value in enumerate(column_data):
             if pd.isna(value):
-                embeddings[i, :] = np.zeros(self.embed_dim,dtype=float)
+                embeddings[i, :] = np.zeros(self.embed_dim, dtype=float)
             else:
                 embeddings[i, :] = unique_category_embeddings[value]
 
-        return np.array(embeddings,dtype=float)
+        return np.array(embeddings, dtype=float)
 
-
-    def _embed_text_column(
-        self, column_data: pd.Series, col: str
-    ) -> np.ndarray:
-        """
-        Embed a text column into the embedding space using an LLM.
-
-        Args:
-            column_data (pd.Series): The text data for the column.
-            col (str): Name of the column being processed.
-
-        Returns:
-            np.ndarray: Embedded values of shape (len(column_data), embed_dim).
-        """
-        embeddings = np.zeros((len(column_data), self.embed_dim),dtype=float)
-        result_map = {}
-        precomputed_embeddings = {}
-        unique_elements = column_data.dropna().unique()
-        elements_to_process_list = unique_elements.tolist()
-        if os.path.exists(self.column_properties[col]['path']):
-            precomputed_embeddings = pickle.load(open(self.column_properties[col]['path'],'rb'))
-            elements_to_process_list = [item for item in elements_to_process_list if item not in precomputed_embeddings]
-        if elements_to_process_list:
-            success = False
-            batchsize = 128
-            while not success and batchsize >= 1:
-                try:
-                    text_embeddings = embed_text(elements_to_process_list, batchsize=batchsize)
-                    success = True
-                except Exception as e:
-                    print(f"An error occurred during text embedding for batchsize {batchsize}: {e}")
-                    print("reducing batchsize")
-                    batchsize = int(batchsize/2)
-            if success:
-                result_map = dict(zip(elements_to_process_list, text_embeddings))
-                precomputed_embeddings.update(result_map)
-                if self.column_properties[col]['path'] != "None":
-                    pickle.dump(precomputed_embeddings,open(self.column_properties[col]['path'],'wb'))
-                processed_values = column_data.map(precomputed_embeddings)
-                update_mask = processed_values.notna().to_numpy()
-                embeddings[update_mask] = np.stack(processed_values[update_mask].to_list())
-
-        return np.array(embeddings,dtype=float)
+    # def _embed_text_column(
+    #     self, column_data: pd.Series, col: str
+    # ) -> np.ndarray:
+    #     """
+    #     Embed a text column into the embedding space using an LLM.
+    #
+    #     Args:
+    #         column_data (pd.Series): The text data for the column.
+    #         col (str): Name of the column being processed.
+    #
+    #     Returns:
+    #         np.ndarray: Embedded values of shape (len(column_data), embed_dim).
+    #     """
+    #     embeddings = np.zeros((len(column_data), self.embed_dim),dtype=float)
+    #     result_map = {}
+    #     precomputed_embeddings = {}
+    #     unique_elements = column_data.dropna().unique()
+    #     elements_to_process_list = unique_elements.tolist()
+    #     if os.path.exists(self.column_properties[col]['path']):
+    #         precomputed_embeddings = pickle.load(open(self.column_properties[col]['path'],'rb'))
+    #         elements_to_process_list = [item for item in elements_to_process_list if item not in precomputed_embeddings]
+    #     if elements_to_process_list:
+    #         success = False
+    #         batchsize = 128
+    #         while not success and batchsize >= 1:
+    #             try:
+    #                 text_embeddings = embed_text(elements_to_process_list, batchsize=batchsize)
+    #                 success = True
+    #             except Exception as e:
+    #                 print(f"An error occurred during text embedding for batchsize {batchsize}: {e}")
+    #                 print("reducing batchsize")
+    #                 batchsize = int(batchsize/2)
+    #         if success:
+    #             result_map = dict(zip(elements_to_process_list, text_embeddings))
+    #             precomputed_embeddings.update(result_map)
+    #             if self.column_properties[col]['path'] != "None":
+    #                 pickle.dump(precomputed_embeddings,open(self.column_properties[col]['path'],'wb'))
+    #             processed_values = column_data.map(precomputed_embeddings)
+    #             update_mask = processed_values.notna().to_numpy()
+    #             embeddings[update_mask] = np.stack(processed_values[update_mask].to_list())
+    #
+    #     return np.array(embeddings,dtype=float)
 
 
 def new_point_on_unit_sphere(d: int):
@@ -272,15 +284,14 @@ def new_point_on_unit_sphere(d: int):
     while norm < 1e-10:
         candidate_point = np.float32(np.random.randn(d))
         norm = np.linalg.norm(candidate_point)
-    return candidate_point/norm
+    return candidate_point / norm
 
 
 def new_point(d: int):
     return np.float32(np.random.randn(d))
 
-def random_points_on_unit_sphere(num_points: int,
-                                 d: int,
-                                 previous_points=[]):
+
+def random_points_on_unit_sphere(num_points: int, d: int, previous_points=[]):
     """
     Generation of num_points on a d-dimensional unit sphere which are separated from each other and from
     all given previous_points.
@@ -320,7 +331,9 @@ def random_points_on_unit_sphere(num_points: int,
                 attempts_at_current_goal += 1
                 if attempts_at_current_goal >= attempts_before_reducing_separation:
                     current_separation_goal *= separation_reduction_factor
-                    current_separation_goal = max(current_separation_goal, min_final_separation_allowed)
+                    current_separation_goal = max(
+                        current_separation_goal, min_final_separation_allowed
+                    )
 
                     attempts_at_current_goal = 0
 
@@ -331,6 +344,7 @@ class SobolPointGenerator:
     """
     Iterative generation of Sobol points in a d_internal-dimensional unit cube
     """
+
     def __init__(self, d_internal: int, scramble: bool = True):
         """
         Initialisation of the Sobol generator.
@@ -342,10 +356,12 @@ class SobolPointGenerator:
         if d_internal < 1:
             raise ValueError("d_internal must be at least 1.")
         if d_internal > qmc.Sobol.MAXDIM:
-            print(f"Warning: d_internal ({d_internal}) exceeds the maximal dimension für Sobol "
-                  f"({qmc.Sobol.MAXDIM}). This can lead to bad quality.")
+            print(
+                f"Warning: d_internal ({d_internal}) exceeds the maximal dimension für Sobol "
+                f"({qmc.Sobol.MAXDIM}). This can lead to bad quality."
+            )
         self.d_internal = d_internal
-        self.sampler = qmc.Sobol(d=d_internal, scramble=scramble, seed = 42)
+        self.sampler = qmc.Sobol(d=d_internal, scramble=scramble, seed=42)
 
     def get_point(self) -> np.ndarray:
         """
@@ -358,8 +374,7 @@ class SobolPointGenerator:
         return point
 
 
-def new_point_on_unit_sphere_sobol(generator: SobolPointGenerator,
-                                   d: int):
+def new_point_on_unit_sphere_sobol(generator: SobolPointGenerator, d: int):
     """
     Generation of a new Sobol point on the d-dimensional unit sphere by generating a Sobol point
     in a (d-1)-dimensional unit cube and transfering these angular coordinates to cartesian ones.
@@ -370,17 +385,17 @@ def new_point_on_unit_sphere_sobol(generator: SobolPointGenerator,
     """
     p = generator.get_point()
     angles = [2 * np.pi * p[0]]
-    for j in range(1, d-1):
+    for j in range(1, d - 1):
         angles.append(np.acos(2 * p[j] - 1))
     cartesian_coords = np.zeros(d)
     cartesian_coords[0] = np.cos(angles[0])
     prod_sin = np.sin(angles[0])
-    for i in range(1, d-1):
+    for i in range(1, d - 1):
         cartesian_coords[i] = prod_sin * np.cos(angles[i])
         prod_sin *= np.sin(angles[i])
-    cartesian_coords[d-1] = prod_sin
+    cartesian_coords[d - 1] = prod_sin
     return cartesian_coords
 
 
 def sig(x):
-    return 1/(1 + np.exp(-x))
+    return 1 / (1 + np.exp(-x))
