@@ -204,10 +204,10 @@ class AbstractHPOEvaluator(AbstractEvaluator):
 
         suggestion_methods = {
             "int": lambda name, cfg: trial.suggest_int(
-                name,
-                cfg["low"],
-                cfg["high"],
-                cfg.get("step", 1),
+                name=name,
+                low=cfg["low"],
+                high=cfg["high"],
+                step=cfg.get("step", 1),
                 log=cfg.get("log", False),
             ),
             "float": lambda name, cfg: trial.suggest_float(
