@@ -1,5 +1,4 @@
 import numpy as np
-import optuna
 from sklearn.linear_model import LogisticRegression
 
 from tabembedbench.constants import CLASSIFIER_OPTIMIZATION_METRIC
