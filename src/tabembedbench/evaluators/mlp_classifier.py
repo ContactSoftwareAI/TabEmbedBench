@@ -1,8 +1,6 @@
 import warnings
-from typing import Optional
 
 import numpy as np
-import optuna
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
@@ -15,7 +13,6 @@ from tabembedbench.constants import (
     MAX_HPO_ITERATIONS,
 )
 from tabembedbench.evaluators.abstractevaluator import AbstractHPOEvaluator
-from tabembedbench.utils.torch_utils import get_device
 
 
 class SklearnMLPClassifierWrapper(BaseEstimator, ClassifierMixin):
