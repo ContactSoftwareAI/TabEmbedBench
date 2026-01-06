@@ -2,6 +2,7 @@ import numpy as np
 import optuna
 from sklearn.neighbors import KNeighborsClassifier
 
+from tabembedbench.constants import CLASSIFIER_OPTIMIZATION_METRIC
 from tabembedbench.evaluators import AbstractEvaluator, AbstractHPOEvaluator
 
 
@@ -130,9 +131,9 @@ class KNNClassifierEvaluatorHPO(AbstractHPOEvaluator):
 
     model_class = KNeighborsClassifier
 
-    def get_scoring_metric(self) -> dict[str, str]:
+    def get_scoring_metric(self) -> str:
         """Return the scoring metric for classification."""
-        return "f1_weighted"
+        return CLASSIFIER_OPTIMIZATION_METRIC
 
     def _get_search_space(self) -> dict[str, dict]:
         """

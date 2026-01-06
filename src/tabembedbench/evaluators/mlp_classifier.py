@@ -10,6 +10,7 @@ from sklearn.utils._tags import Tags, TargetTags
 
 from tabembedbench.constants import (
     CLASSIFICATION_TASKS,
+    CLASSIFIER_OPTIMIZATION_METRIC,
     MAX_BEST_MODEL_ITERATIONS,
     MAX_HPO_ITERATIONS,
 )
@@ -225,7 +226,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
 
     def get_scoring_metric(self) -> str:
         """Return the scoring metric for classification."""
-        return "f1_weighted"
+        return CLASSIFIER_OPTIMIZATION_METRIC
 
     def _get_model_predictions(self, model, embeddings: np.ndarray):
         """Get probability predictions from the model."""

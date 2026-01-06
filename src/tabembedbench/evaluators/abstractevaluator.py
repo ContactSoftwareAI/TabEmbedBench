@@ -153,11 +153,11 @@ class AbstractHPOEvaluator(AbstractEvaluator):
 
     # ========== Abstract Methods (Subclasses must implement) ==========
     @abstractmethod
-    def get_scoring_metric(self) -> dict[str, str]:
+    def get_scoring_metric(self) -> str:
         """Get the scoring metric for cross-validation.
 
         Returns:
-            dict[str, str]: Dictionary mapping metric name to sklearn scoring string.
+            str: The sklearn scoring string.
         """
         pass
 
@@ -211,7 +211,7 @@ class AbstractHPOEvaluator(AbstractEvaluator):
                 log=cfg.get("log", False),
             ),
             "float": lambda name, cfg: trial.suggest_float(
-                name, cfg["low"], cfg["high"], log=cfg.get("log", False)
+                name, cfg["low"], cfg["high"], log=cfg.gefrt("log", False)
             ),
             "categorical": lambda name, cfg: trial.suggest_categorical(
                 name, cfg["choices"]
