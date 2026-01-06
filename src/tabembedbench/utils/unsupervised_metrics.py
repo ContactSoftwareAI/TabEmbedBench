@@ -86,7 +86,7 @@ def calculate_alpha_req(embeddings: np.ndarray, epsilon: float = 1e-7) -> float:
     if embeddings.ndim != 2:
         raise ValueError("Embeddings should be a 2D array.")
 
-    num_samples, num_features = embeddings.shape
+    num_samples, _ = embeddings.shape
 
     singular_values = np.linalg.svd(embeddings, compute_uv=False)
     eigenvalues = (singular_values**2) / num_samples
