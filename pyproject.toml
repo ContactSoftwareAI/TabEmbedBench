@@ -35,6 +35,8 @@ dependencies = [
     "plotly>=6.5.0",
     "google-cloud-storage>=3.7.0",
     "sap-rpt-oss",
+    "gcsfs>=2025.12.0",
+    "pyrefly>=0.47.0",
 ]
 
 [tool.uv]
