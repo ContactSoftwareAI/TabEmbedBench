@@ -196,10 +196,6 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
     using user-defined metrics and embedding models. It supports configuration of logging,
     caching, random seed management, and result saving.
 
-    A dataset configuration dictionary is a representation of a dataset for the task, containing
-    information about the dataset collection, including train/test splits for each dataset which is part of the collection, label encoding,
-    metadata about the dataset, and feature information (such as categorical indices and column names).
-
     Attributes:
         list_dataset_collections (Dict[str, str | List[int]]): Dictionary containing
             collections of datasets to be used in the benchmarking process, where each
@@ -252,6 +248,29 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
         self.openml_cache_dir = openml_cache_dir
 
     def _load_datasets(self, **kwargs) -> Dict[str, Any]:
+        """
+        Loads dataset collections and their associated tasks. This method retrieves tasks
+        based on predefined collections, extracts datasets and their splits, and organizes
+        them into a structured format.
+
+        Args:
+            **kwargs: Arbitrary keyword arguments. These arguments are not used in the
+                current implementation but can be passed for future extensions.
+
+        Returns:
+            Dict[str, Any]: A dictionary where the key is the name of each dataset
+            collection and the value is a dictionary containing:
+                - `name` (str): The name of the dataset collection.
+                - `selected_tasks_str` (str): A string containing the selected task IDs
+                  for the collection.
+                - `collection` (list[dict]): A list of dictionaries. Each dictionary corresponds
+                  to a task and includes:
+                    - `task_id` (int): The ID of the task.
+                    - `task` (openml.tasks.Task): The OpenML task object.
+                    - `dataset` (openml.datasets.Dataset): The dataset associated with the task.
+                    - `folds` (int): The number of folds in the dataset split.
+                    - `label` (int): The index of the task for ordering.
+        """
         dataset_collections = {}
         for collection_name, collection in self.list_dataset_collections.items():
             selected_tasks_str = collection["selected_task_ids_str"]
@@ -374,6 +393,20 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
     def _get_default_metrics(
         self,
     ) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
+        """
+        Returns the default metrics configuration for different supervised learning tasks.
+
+        The metrics include pre-configured scoring functions for binary classification
+        and multiclass classification tasks. Each metric is represented by a callable
+        function, which accepts two numpy arrays as inputs: the true labels and predicted
+        labels, respectively.
+
+        Returns:
+            dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]: A dictionary
+            where keys represent supervised learning task types (e.g., binary or
+            multiclass classification), and the values are dictionaries mapping metric
+            names to their respective scoring functions.
+        """
         return {
             SUPERVISED_BINARY_CLASSIFICATION: {
                 "auc_score": roc_auc_score,
