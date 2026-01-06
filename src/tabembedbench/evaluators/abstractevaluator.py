@@ -162,7 +162,7 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         pass
 
     @abstractmethod
-    def _get_search_space(self) -> dict[str, optuna.search_space]:
+    def _get_search_space(self) -> dict[str, dict]:
         """Get the search space for hyperparameter optimization.
 
         Returns:

@@ -20,7 +20,7 @@ class LogisticRegressionEvaluator(AbstractHPOEvaluator):
         """
         return CLASSIFIER_OPTIMIZATION_METRIC
 
-    def _get_search_space(self) -> dict[str, optuna.search_space]:
+    def _get_search_space(self) -> dict[str, dict]:
         """Get the hyperparameter search space for Logistic Regression.
 
         Defines the optimization search space for:
