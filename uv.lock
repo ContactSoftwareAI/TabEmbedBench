@@ -925,6 +925,15 @@ wheels = [
 ]
 
 [[package]]
+name = "iniconfig"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730", size = 20503, upload-time = "2025-10-18T21:55:43.219Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
+]
+
+[[package]]
 name = "itsdangerous"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1786,6 +1795,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pluggy"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
 name = "polars"
 version = "1.35.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2208,19 +2226,19 @@ wheels = [
 ]
 
 [[package]]
-name = "pyrefly"
-version = "0.47.0"
+name = "pytest"
+version = "9.0.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/27/fd/7eb31cb162dcbccdff6583c728b38b9fcbd632f982fad72c4c10853ea3e2/pyrefly-0.47.0.tar.gz", hash = "sha256:e732b281ce6fc127b2031f5ec2ae141299ee621de55e7091f3667f33c97b3bb3", size = 4781099, upload-time = "2026-01-05T13:19:05.129Z" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "iniconfig", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pluggy", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pygments", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d1/db/7ef3487e0fb0049ddb5ce41d3a49c235bf9ad299b6a25d5780a89f19230f/pytest-9.0.2.tar.gz", hash = "sha256:75186651a92bd89611d1d9fc20f0b4345fd827c41ccd5c299a868a05d70edf11", size = 1568901, upload-time = "2025-12-06T21:30:51.014Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f0/71/d2389376ade8817189a121015bb6330797f4dbd60ebb11b14344d7eb5fb5/pyrefly-0.47.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:d3b3e72c98101860f85d5b48fca7841b42dd1506ed10403212766494db623708", size = 11677906, upload-time = "2026-01-05T13:18:45.723Z" },
-    { url = "https://files.pythonhosted.org/packages/36/56/8be088cbd52fb1d04ebda2f191c71422fbd50aa777f95359a623153d4681/pyrefly-0.47.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:7ff9b7028d9040e13f57fab850c0f69441f507b4fd274f8f9baf5699db7c5b2e", size = 11283972, upload-time = "2026-01-05T13:18:47.876Z" },
-    { url = "https://files.pythonhosted.org/packages/02/ae/90547a0198535d16eb4c639a860e5e08b3dc3ccc8abdbf46f7e2eae98deb/pyrefly-0.47.0-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:91c2ce4b67f9b2759895368fe5d87049a4b69692470715590db4aaee13622bf5", size = 31551972, upload-time = "2026-01-05T13:18:50.451Z" },
-    { url = "https://files.pythonhosted.org/packages/56/fb/2a9b621f411c4b22211f6a8283153dfe06bffcc1e2b77589f55d22adc4ff/pyrefly-0.47.0-py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:1398652b7df45a1da4502df3342b3ee7b03ab8312af204f60f1dfa5358c26f95", size = 33762016, upload-time = "2026-01-05T13:18:53.575Z" },
-    { url = "https://files.pythonhosted.org/packages/1f/db/921dbc67a8d0c5b3919891bd8b0f5b0e4618642aa4fedd068d407b38a044/pyrefly-0.47.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e1c0a7cc57eb06055adffe2c215f4a32ebb25b47229783ef466917bf42f512e5", size = 34818294, upload-time = "2026-01-05T13:18:56.347Z" },
-    { url = "https://files.pythonhosted.org/packages/2a/7d/1c97707eebcc059ddb1ff0ba82d91b7515edca1f0108ddfa85e668483a23/pyrefly-0.47.0-py3-none-win32.whl", hash = "sha256:fad61ce868667b9a2cd9b612b43c8221110c6221400db56c01e7457f18fe92dc", size = 10747277, upload-time = "2026-01-05T13:18:58.883Z" },
-    { url = "https://files.pythonhosted.org/packages/7a/57/201f2bcbb5893471d7295184880cd3700cde170913471bcd6360bea6321f/pyrefly-0.47.0-py3-none-win_amd64.whl", hash = "sha256:9ff04b85de4d75a5dd47decbd31dfbead959f12d228d056b1f627d9da31f9d76", size = 11442228, upload-time = "2026-01-05T13:19:00.894Z" },
-    { url = "https://files.pythonhosted.org/packages/b7/d6/f365d429ac871ab7bc8f9e31e3f4133d4b80529ac140939b5d37ddd9f27e/pyrefly-0.47.0-py3-none-win_arm64.whl", hash = "sha256:501e1fb1f90d4b04b44bf4874972804758b49e1880f4dde6b6750050f80a563b", size = 10989586, upload-time = "2026-01-05T13:19:02.996Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/ab/b3226f0bd7cdcf710fbede2b3548584366da3b19b5021e74f5bde2a8fa3f/pytest-9.0.2-py3-none-any.whl", hash = "sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b", size = 374801, upload-time = "2025-12-06T21:30:49.154Z" },
 ]
 
 [[package]]
@@ -2665,10 +2683,10 @@ dependencies = [
     { name = "polars", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pyod", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "pyrefly", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "python-dotenv", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "sap-rpt-oss", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "scikit-learn", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "scipy", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "seaborn", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "skrub", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "tabicl", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -2683,7 +2701,11 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "basedpyright", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "black", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pytest", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "ruff", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "ty", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [package.metadata]
@@ -2704,10 +2726,10 @@ requires-dist = [
     { name = "polars", specifier = ">=1.32.2" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pyod", specifier = ">=2.0.5" },
-    { name = "pyrefly", specifier = ">=0.47.0" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
     { name = "sap-rpt-oss", git = "https://github.com/SAP-samples/sap-rpt-1-oss" },
     { name = "scikit-learn", specifier = ">=1.6.1" },
+    { name = "scipy" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "skrub", specifier = ">=0.6.1" },
     { name = "tabicl", specifier = ">=0.1.4" },
@@ -2721,7 +2743,13 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "ruff", specifier = ">=0.12.8" }]
+dev = [
+    { name = "basedpyright" },
+    { name = "black" },
+    { name = "pytest" },
+    { name = "ruff" },
+    { name = "ty" },
+]
 
 [[package]]
 name = "tabicl"
