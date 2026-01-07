@@ -1,3 +1,5 @@
+import os
+from io import BytesIO
 from pathlib import Path
 from typing import Literal, Optional, Tuple
 
@@ -7,8 +9,68 @@ import plotly.express as px
 import plotly.graph_objects as go
 import seaborn as sns
 import umap
+from google.cloud import storage
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.manifold import TSNE
+
+
+def save_plot_to_gcs(
+    fig,
+    gcs_path: str,
+    bucket_name: Optional[str] = None,
+    credentials_path: Optional[str] = None,
+    is_plotly: bool = False,
+) -> str:
+    """
+    Save a matplotlib or Plotly figure to Google Cloud Storage.
+
+    Args:
+        fig: Matplotlib figure or Plotly figure object
+        gcs_path: Path in GCS (e.g., "plots/embedding_plot.png")
+        bucket_name: GCS bucket name. If None, uses GCS_BUCKET_NAME env var
+        credentials_path: Path to service account JSON. If None, uses GOOGLE_APPLICATION_CREDENTIALS env var
+        is_plotly: True if fig is a Plotly figure, False if Matplotlib
+
+    Returns:
+        Full GCS URI (gs://bucket/path)
+
+    Raises:
+        ValueError: If bucket_name not provided and GCS_BUCKET_NAME not set
+        Exception: If authentication fails
+    """
+    bucket_name = bucket_name or os.getenv("GCS_BUCKET_NAME")
+    if not bucket_name:
+        raise ValueError(
+            "bucket_name required or set GCS_BUCKET_NAME environment variable"
+        )
+
+    # Initialize GCS client
+    if credentials_path:
+        storage_client = storage.Client(
+            credentials=storage.credentials.service_account.Credentials.from_service_account_file(
+                credentials_path
+            )
+        )
+    else:
+        storage_client = storage.Client()
+
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(gcs_path)
+
+    # Save to BytesIO buffer
+    buffer = BytesIO()
+
+    if is_plotly:
+        fig.write_image(buffer, format="png")
+    else:
+        fig.savefig(buffer, format="png", dpi=300, bbox_inches="tight")
+
+    buffer.seek(0)
+    blob.upload_from_file(buffer, content_type="image/png")
+
+    gcs_uri = f"gs://{bucket_name}/{gcs_path}"
+
+    return gcs_uri
 
 
 def reduce_embeddings(
