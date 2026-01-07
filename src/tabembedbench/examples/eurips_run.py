@@ -17,22 +17,20 @@ from tabembedbench.benchmark.run_benchmark import (
 from tabembedbench.embedding_models import (
     TabICLEmbedding,
     TableVectorizerEmbedding,
-    TabPFNEmbedding,
-    TabStarEmbedding,
 )
-from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
-from tabembedbench.evaluators.knn_regressor import KNNRegressorEvaluator
-from tabembedbench.evaluators.mlp_classifier import MLPClassifierEvaluator
-from tabembedbench.evaluators.mlp_regressor import MLPRegressorEvaluator
+from tabembedbench.evaluators.classification.knn_classifier import (
+    KNNClassifierEvaluator,
+)
+from tabembedbench.evaluators.classification.mlp_classifier import (
+    MLPClassifierEvaluator,
+)
 from tabembedbench.evaluators.outlier import (
     DeepSVDDEvaluator,
     IsolationForestEvaluator,
     LocalOutlierFactorEvaluator,
 )
-from tabembedbench.utils.eda_utils import (
-    create_outlier_plots,
-    create_tabarena_plots,
-)
+from tabembedbench.evaluators.regression.knn_regressor import KNNRegressorEvaluator
+from tabembedbench.evaluators.regression.mlp_regressor import MLPRegressorEvaluator
 
 logger = logging.getLogger("EuRIPS_Run_Benchmark")
 
