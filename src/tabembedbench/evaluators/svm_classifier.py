@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn.svm import SVC
 
-from tabembedbench.constants import CLASSIFIER_OPTIMIZATION_METRIC
+from tabembedbench.constants import CLASSIFICATION_TASKS, CLASSIFIER_OPTIMIZATION_METRIC
 from tabembedbench.evaluators.abstractevaluator import AbstractHPOEvaluator
 
 
@@ -19,6 +19,13 @@ class SupportVectorClassification(AbstractHPOEvaluator):
     """
 
     model_class = SVC
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(
+            name="Support Vector Classification",
+            task_type=CLASSIFICATION_TASKS,
+            **kwargs,
+        )
 
     def get_scoring_metric(self) -> str:
         """

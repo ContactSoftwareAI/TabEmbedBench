@@ -2,7 +2,7 @@ import numpy as np
 import optuna
 from sklearn.neighbors import KNeighborsClassifier
 
-from tabembedbench.constants import CLASSIFIER_OPTIMIZATION_METRIC
+from tabembedbench.constants import CLASSIFICATION_TASKS, CLASSIFIER_OPTIMIZATION_METRIC
 from tabembedbench.evaluators import AbstractEvaluator, AbstractHPOEvaluator
 
 
@@ -130,6 +130,13 @@ class KNNClassifierEvaluatorHPO(AbstractHPOEvaluator):
     """
 
     model_class = KNeighborsClassifier
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(
+            name="K-Nearest Neighbors Classifier",
+            task_type=CLASSIFICATION_TASKS,
+            **kwargs,
+        )
 
     def get_scoring_metric(self) -> str:
         """Return the scoring metric for classification."""

@@ -1,12 +1,19 @@
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 
-from tabembedbench.constants import CLASSIFIER_OPTIMIZATION_METRIC
+from tabembedbench.constants import CLASSIFICATION_TASKS, CLASSIFIER_OPTIMIZATION_METRIC
 from tabembedbench.evaluators.abstractevaluator import AbstractHPOEvaluator
 
 
 class LogisticRegressionEvaluator(AbstractHPOEvaluator):
     model_class = LogisticRegression
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(
+            name="Logistic Regression",
+            task_type=CLASSIFICATION_TASKS,
+            **kwargs,
+        )
 
     def get_scoring_metric(self) -> str:
         """Get the scoring metric for cross-validation.
