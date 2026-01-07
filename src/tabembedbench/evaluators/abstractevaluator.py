@@ -211,7 +211,7 @@ class AbstractHPOEvaluator(AbstractEvaluator):
                 log=cfg.get("log", False),
             ),
             "float": lambda name, cfg: trial.suggest_float(
-                name, cfg["low"], cfg["high"], log=cfg.gefrt("log", False)
+                name, cfg["low"], cfg["high"], log=cfg.get("log", False)
             ),
             "categorical": lambda name, cfg: trial.suggest_categorical(
                 name, cfg["choices"]
