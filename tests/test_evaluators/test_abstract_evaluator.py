@@ -183,16 +183,16 @@ class TestAbstractHPOEvaluatorDiscovery:
         """Verify that all discovered classes have no abstract methods."""
         for cls in CONCRETE_HPO_EVALUATORS:
             abstract_methods = getattr(cls, "__abstractmethods__", set())
-            assert not abstract_methods, (
-                f"{cls.__name__} has abstract methods: {abstract_methods}"
-            )
+            assert (
+                not abstract_methods
+            ), f"{cls.__name__} has abstract methods: {abstract_methods}"
 
     def test_all_discovered_classes_inherit_from_abstract_hpo_evaluator(self):
         """Verify that all discovered classes inherit from AbstractHPOEvaluator."""
         for cls in CONCRETE_HPO_EVALUATORS:
-            assert issubclass(cls, AbstractHPOEvaluator), (
-                f"{cls.__name__} does not inherit from AbstractHPOEvaluator"
-            )
+            assert issubclass(
+                cls, AbstractHPOEvaluator
+            ), f"{cls.__name__} does not inherit from AbstractHPOEvaluator"
 
 
 class TestAbstractHPOEvaluatorContract:
@@ -237,9 +237,9 @@ class TestAbstractHPOEvaluatorContract:
 
         # Verify each parameter in search space has required structure
         for param_name, config in search_space.items():
-            assert isinstance(param_name, str), (
-                f"Parameter name must be string: {param_name}"
-            )
+            assert isinstance(
+                param_name, str
+            ), f"Parameter name must be string: {param_name}"
             assert isinstance(config, dict), f"Config for {param_name} must be dict"
             assert "type" in config, f"Config for {param_name} must have 'type' key"
 
@@ -284,9 +284,9 @@ class TestAbstractHPOEvaluatorContract:
         """Test that the evaluator has a model_class defined."""
         # model_class should be defined either on the class or instance
         model_class = hpo_evaluator_instance.model_class
-        assert model_class is not None, (
-            f"{hpo_evaluator_instance.__class__.__name__} must define model_class"
-        )
+        assert (
+            model_class is not None
+        ), f"{hpo_evaluator_instance.__class__.__name__} must define model_class"
 
     def test_get_task_returns_task_type(self, hpo_evaluator_instance):
         """Test that get_task returns the task type."""
