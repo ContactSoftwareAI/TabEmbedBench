@@ -140,12 +140,15 @@ def sample_classification_data():
     Returns:
         Tuple of (embeddings, labels) suitable for classification tasks.
     """
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     n_samples = 100
     n_features = 10
-    embeddings = np.random.randn(n_samples, n_features)
+    embeddings = rng.standard_normal(size=(n_samples, n_features))
+
+    assert np.all(np.isfinite(embeddings))
+
     # Binary classification labels
-    labels = np.random.randint(0, 2, n_samples)
+    labels = rng.integers(low=0, high=n_features, size=n_samples)
     return embeddings, labels
 
 
@@ -156,12 +159,13 @@ def sample_regression_data():
     Returns:
         Tuple of (embeddings, targets) suitable for regression tasks.
     """
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     n_samples = 100
     n_features = 10
-    embeddings = np.random.randn(n_samples, n_features)
+    embeddings = rng.standard_normal(size=(n_samples, n_features))
+
     # Continuous regression targets
-    targets = np.random.randn(n_samples)
+    targets = rng.standard_normal(size=(n_samples,))
     return embeddings, targets
 
 
@@ -300,7 +304,8 @@ class TestAbstractHPOEvaluatorContract:
 
     def test_get_prediction_requires_y_for_training(self, hpo_evaluator_instance):
         """Test that get_prediction raises ValueError when y is None during training."""
-        embeddings = np.random.randn(10, 5)
+        rng = np.random.default_rng(42)
+        embeddings = rng.standard_normal(size=(10, 5))
         with pytest.raises(ValueError, match="y must be provided"):
             hpo_evaluator_instance.get_prediction(embeddings, y=None, train=True)
 
@@ -308,14 +313,16 @@ class TestAbstractHPOEvaluatorContract:
         self, hpo_evaluator_instance
     ):
         """Test that get_prediction raises ValueError when no model is trained for inference."""
-        embeddings = np.random.randn(10, 5)
+        rng = np.random.default_rng(42)
+        embeddings = rng.standard_normal(size=(10, 5))
         with pytest.raises(ValueError, match="No trained model"):
             hpo_evaluator_instance.get_prediction(embeddings, y=None, train=False)
 
     def test_fit_best_model_requires_optimization(self, hpo_evaluator_instance):
         """Test that fit_best_model raises ValueError if optimization hasn't been run."""
-        embeddings = np.random.randn(10, 5)
-        labels = np.random.randint(0, 2, 10)
+        rng = np.random.default_rng(42)
+        embeddings = rng.standard_normal(size=(10, 5))
+        labels = rng.integers(low=0, high=2, size=(10,))
         with pytest.raises(ValueError, match="No best parameters"):
             hpo_evaluator_instance.fit_best_model(embeddings, labels)
 
@@ -327,6 +334,12 @@ class TestAbstractHPOEvaluatorContract:
         assert history is None
 
 
+@pytest.mark.filterwarnings("ignore:invalid value encountered in matmul:RuntimeWarning")
+@pytest.mark.filterwarnings(
+    "ignore:divide by zero encountered in matmul:RuntimeWarning"
+)
+@pytest.mark.filterwarnings("ignore:overflow encountered in matmul:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:Got `batch_size` less than 1:UserWarning")
 class TestAbstractHPOEvaluatorIntegration:
     """Integration tests that verify the full HPO pipeline works correctly.
 
