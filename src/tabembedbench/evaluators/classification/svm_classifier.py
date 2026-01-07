@@ -53,6 +53,7 @@ class SVMClassifierEvaluator(AbstractHPOEvaluator):
             "kernel": {"type": "constant", "value": "rbf"},
             "gamma": {"type": "float", "low": 1e-3, "high": 10, "log": True},
             "degree": {"type": "int", "low": 2, "high": 5},
+            "probability": {"type": "constant", "value": True},
         }
 
     def _get_model_predictions(self, model, embeddings: np.ndarray) -> np.ndarray:

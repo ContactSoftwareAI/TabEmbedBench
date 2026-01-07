@@ -117,6 +117,8 @@ class SklearnMLPRegressorWrapper(BaseEstimator, RegressorMixin):
 class MLPRegressorEvaluator(AbstractHPOEvaluator):
     """MLP Regressor evaluator with Optuna hyperparameter optimization using sklearn."""
 
+    model_class = SklearnMLPRegressorWrapper
+
     def __init__(
         self,
         n_trials: int = 10,
