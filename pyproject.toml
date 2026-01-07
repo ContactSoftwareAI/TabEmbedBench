@@ -102,6 +102,10 @@ convention = "google"
 [tool.ruff.lint.isort]
 known-third-party = []
 
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+testpaths = ["tests"]
+
 [dependency-groups]
 dev = [
     "basedpyright",

@@ -4,5 +4,5 @@ def pytest_addoption(parser):
         "--evaluator-class",
         action="store",
         default=None,
-        help="Specific evaluator class name to test (e.g., KNNRegressor)",
+        help="Specific evaluator class name to test (e.g., LogisticRegressionEvaluator)",
     )

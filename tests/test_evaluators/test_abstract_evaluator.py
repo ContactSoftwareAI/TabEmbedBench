@@ -18,8 +18,18 @@ from tabembedbench.evaluators import AbstractHPOEvaluator
 
 
 def get_all_concrete_subclasses(base_class: type) -> list[type]:
-    """Recursively find all concrete subclasses of a base class.
-    ...existing docstring...
+    """
+    Recursively retrieves all concrete (non-abstract) subclasses of a given base class.
+
+    This function traverses the inheritance hierarchy of the specified base class to
+    identify and return all subclasses that do not define any abstract methods, meaning
+    they are concrete implementations.
+
+    Args:
+        base_class (type): The base class from which the traversal begins.
+
+    Returns:
+        list[type]: A list of all concrete subclasses derived from the base class.
     """
     concrete_classes = []
 
@@ -68,32 +78,57 @@ def get_target_evaluator_classes(request) -> list[type]:
     return matching_classes
 
 
-@pytest.fixture(
-    params=CONCRETE_HPO_EVALUATORS,
-    ids=lambda cls: cls.__name__,
-)
-def hpo_evaluator_instance(request):
-    """Fixture that provides instances of AbstractHPOEvaluator implementations.
-
-    By default, parametrizes over ALL concrete implementations.
-    Use `--evaluator-class=ClassName` to test only a specific implementation.
-
-    Example:
-        pytest test_abstract_evaluator.py                                    # All evaluators
-        pytest test_abstract_evaluator.py --evaluator-class=KNNRegressor    # Only KNNRegressor
-    """
-    # Get the target classes based on command-line option
-    target_classes = get_target_evaluator_classes(request)
-
-    # Use the first (or only) class in the target list
-    evaluator_class = request.param
-
-    # If a specific class was requested, skip if this isn't it
-    if len(target_classes) == 1 and evaluator_class not in target_classes:
-        pytest.skip(
-            f"Skipping {evaluator_class.__name__}, testing only {target_classes[0].__name__}"
+def pytest_generate_tests(metafunc):
+    """Dynamic parametrization to filter evaluators before they reach the fixture."""
+    if "hpo_evaluator_instance" in metafunc.fixturenames:
+        evaluator_class_name = metafunc.config.getoption(
+            "--evaluator-class", default=None
         )
 
+        if evaluator_class_name:
+            matching_classes = [
+                cls
+                for cls in CONCRETE_HPO_EVALUATORS
+                if cls.__name__ == evaluator_class_name
+            ]
+            if not matching_classes:
+                available = [cls.__name__ for cls in CONCRETE_HPO_EVALUATORS]
+                pytest.exit(
+                    f"Evaluator class '{evaluator_class_name}' not found. Available: {available}"
+                )
+
+            metafunc.parametrize(
+                "hpo_evaluator_instance",
+                matching_classes,
+                ids=lambda cls: cls.__name__,
+                indirect=True,
+            )
+        else:
+            metafunc.parametrize(
+                "hpo_evaluator_instance",
+                CONCRETE_HPO_EVALUATORS,
+                ids=lambda cls: cls.__name__,
+                indirect=True,
+            )
+
+
+@pytest.fixture
+def hpo_evaluator_instance(request):
+    """
+    Fixture to provide an instance of the Hyperparameter Optimizer (HPO) evaluator
+    for parameterized testing. This fixture allows testing various implementations
+    of HPO evaluators with minimal settings for efficient unit tests.
+
+    Args:
+        request: A pytest fixture that provides the parameterized evaluator class
+            to be tested.
+
+    Returns:
+        An instance of the parameterized HPO evaluator class initialized with
+        minimal required settings: 1 trial, 2 cross-validation folds, random state
+        of 42 for reproducibility, and verbose output set to False.
+    """
+    evaluator_class = request.param
     # Instantiate with minimal settings for fast testing
     return evaluator_class(n_trials=1, cv_folds=2, random_state=42, verbose=False)
 
