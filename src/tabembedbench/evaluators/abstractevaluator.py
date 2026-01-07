@@ -153,16 +153,16 @@ class AbstractHPOEvaluator(AbstractEvaluator):
 
     # ========== Abstract Methods (Subclasses must implement) ==========
     @abstractmethod
-    def get_scoring_metric(self) -> dict[str, str]:
+    def get_scoring_metric(self) -> str:
         """Get the scoring metric for cross-validation.
 
         Returns:
-            dict[str, str]: Dictionary mapping metric name to sklearn scoring string.
+            str: The sklearn scoring string.
         """
         pass
 
     @abstractmethod
-    def _get_search_space(self) -> dict[str, optuna.search_space]:
+    def _get_search_space(self) -> dict[str, dict]:
         """Get the search space for hyperparameter optimization.
 
         Returns:
@@ -204,14 +204,14 @@ class AbstractHPOEvaluator(AbstractEvaluator):
 
         suggestion_methods = {
             "int": lambda name, cfg: trial.suggest_int(
-                name,
-                cfg["low"],
-                cfg["high"],
-                cfg.get("step", 1),
+                name=name,
+                low=cfg["low"],
+                high=cfg["high"],
+                step=cfg.get("step", 1),
                 log=cfg.get("log", False),
             ),
             "float": lambda name, cfg: trial.suggest_float(
-                name, cfg["low"], cfg["high"], log=cfg.get("log", False)
+                name, cfg["low"], cfg["high"], log=cfg.gefrt("log", False)
             ),
             "categorical": lambda name, cfg: trial.suggest_categorical(
                 name, cfg["choices"]

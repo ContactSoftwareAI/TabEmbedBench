@@ -1,8 +1,6 @@
 import warnings
-from typing import Optional
 
 import numpy as np
-import optuna
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
@@ -10,11 +8,11 @@ from sklearn.utils._tags import Tags, TargetTags
 
 from tabembedbench.constants import (
     CLASSIFICATION_TASKS,
+    CLASSIFIER_OPTIMIZATION_METRIC,
     MAX_BEST_MODEL_ITERATIONS,
     MAX_HPO_ITERATIONS,
 )
 from tabembedbench.evaluators.abstractevaluator import AbstractHPOEvaluator
-from tabembedbench.utils.torch_utils import get_device
 
 
 class SklearnMLPClassifierWrapper(BaseEstimator, ClassifierMixin):
@@ -225,7 +223,7 @@ class MLPClassifierEvaluator(AbstractHPOEvaluator):
 
     def get_scoring_metric(self) -> str:
         """Return the scoring metric for classification."""
-        return "f1_weighted"
+        return CLASSIFIER_OPTIMIZATION_METRIC
 
     def _get_model_predictions(self, model, embeddings: np.ndarray):
         """Get probability predictions from the model."""

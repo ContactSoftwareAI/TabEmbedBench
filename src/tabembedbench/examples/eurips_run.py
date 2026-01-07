@@ -21,19 +21,19 @@ from tabembedbench.embedding_models import (
     TabStarEmbedding,
     ConTextTabEmbedding,
 )
-from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
-from tabembedbench.evaluators.knn_regressor import KNNRegressorEvaluator
-from tabembedbench.evaluators.mlp_classifier import MLPClassifierEvaluator
-from tabembedbench.evaluators.mlp_regressor import MLPRegressorEvaluator
+from tabembedbench.evaluators.classification.knn_classifier import (
+    KNNClassifierEvaluator,
+)
+from tabembedbench.evaluators.classification.mlp_classifier import (
+    MLPClassifierEvaluator,
+)
 from tabembedbench.evaluators.outlier import (
     DeepSVDDEvaluator,
     IsolationForestEvaluator,
     LocalOutlierFactorEvaluator,
 )
-from tabembedbench.utils.eda_utils import (
-    create_outlier_plots,
-    create_tabarena_plots,
-)
+from tabembedbench.evaluators.regression.knn_regressor import KNNRegressorEvaluator
+from tabembedbench.evaluators.regression.mlp_regressor import MLPRegressorEvaluator
 
 logger = logging.getLogger("EuRIPS_Run_Benchmark")
 
@@ -61,16 +61,13 @@ def get_embedding_models(debug=False):
     #     num_estimators=5,
     # )
 
-    tabstar_embedder = TabStarEmbedding()
-
-    context_tab_embedder = ConTextTabEmbedding()
+    # tabstar_embedder = TabStarEmbedding()
 
     embedding_models = [
-        # tabicl_row_embedder,
+        tabicl_row_embedder,
         # tabpfn_embedder,
         # tabstar_embedder,
-        # tablevector,
-        context_tab_embedder,
+        tablevector,
     ]
 
     return embedding_models
