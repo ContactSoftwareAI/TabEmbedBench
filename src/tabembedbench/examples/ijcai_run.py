@@ -1,4 +1,4 @@
-"""EuRIPS benchmark runner for evaluating tabular embedding models.
+"""IJCAI benchmark runner for evaluating tabular embedding models.
 
 This module provides functionality to run comprehensive benchmarks on various
 tabular embedding models using multiple evaluation algorithms across different
@@ -21,6 +21,7 @@ from tabembedbench.embedding_models import (
     TabICLEmbedding,
     TableVectorizerEmbedding,
     TabPFNEmbedding,
+    SphereBasedEmbedding,
 )
 from tabembedbench.evaluators.outlier import (
     IsolationForestEvaluator,
@@ -54,14 +55,19 @@ def get_embedding_models(debug=False):
 
     tablevector = TableVectorizerEmbedding()
 
-    tabpfn_embedder = TabPFNEmbedding(
-        num_estimators=5,
-    )
+    tabpfn_embedder = TabPFNEmbedding(num_estimators=5)
+
+    sphere_model_64 = SphereBasedEmbedding(embed_dim=64)
+    sphere_model_192 = SphereBasedEmbedding(embed_dim=192)
+    sphere_model_512 = SphereBasedEmbedding(embed_dim=512)
 
     embedding_models = [
         tabicl_row_embedder,
         tabpfn_embedder,
         tablevector,
+        sphere_model_64,
+        sphere_model_192,
+        sphere_model_512,
     ]
 
     return embedding_models
@@ -245,7 +251,7 @@ def run_main(
 
 @click.command()
 @click.option("--debug", is_flag=True, help="Run in debug mode ")
-@click.option("--max-samples", default=10000, help="Upper bound for dataset size")
+@click.option("--max-samples", default=15000, help="Upper bound for dataset size")
 @click.option("--max-features", default=200, help="Upper bound for number of features")
 @click.option(
     "--run-outlier/--no-run-outlier", default=True, help="Run outlier detection"
