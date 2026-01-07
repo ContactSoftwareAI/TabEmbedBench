@@ -5,7 +5,7 @@ from tabembedbench.constants import CLASSIFICATION_TASKS, CLASSIFIER_OPTIMIZATIO
 from tabembedbench.evaluators.abstractevaluator import AbstractHPOEvaluator
 
 
-class SupportVectorClassification(AbstractHPOEvaluator):
+class SVMClassifierEvaluator(AbstractHPOEvaluator):
     """
     Defines a support vector machine classifier for hyperparameter optimization and evaluation.
 
