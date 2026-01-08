@@ -7,6 +7,8 @@ from tabembedbench.embedding_models.tablevectorizer_embedding import (
 )
 from tabembedbench.embedding_models.tabpfn_embedding import (
     TabPFNEmbedding,
+    TabPFNEmbeddingConstantVector,
+    TabPFNEmbeddingRandomVector,
     TabPFNWrapper,
 )
 from tabembedbench.embedding_models.tabstar_embedding import TabStarEmbedding

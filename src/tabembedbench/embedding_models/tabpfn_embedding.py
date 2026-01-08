@@ -1,9 +1,11 @@
 import gc
 import warnings
+from typing import Optional
 
 import numpy as np
 import pandas as pd
 import polars as pl
+import torch
 from tabpfn import TabPFNClassifier, TabPFNRegressor
 from tabpfn.constants import ModelVersion
 from tabpfn.utils import infer_categorical_features
@@ -84,9 +86,12 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
 
         self.emb_agg = emb_agg
         self.estimator_agg = estimator_agg
-
-        self.tabpfn_clf = TabPFNClassifier.create_default_for_version(ModelVersion.V2)
-        self.tabpfn_reg = TabPFNRegressor.create_default_for_version(ModelVersion.V2)
+        self.tabpfn_clf = TabPFNClassifier.create_default_for_version(
+            ModelVersion.V2, **self._init_tabpfn_configs
+        )
+        self.tabpfn_reg = TabPFNRegressor.create_default_for_version(
+            ModelVersion.V2, **self._init_tabpfn_configs
+        )
 
         self.transform_to_numerical = None
 
@@ -172,29 +177,30 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
                 - train_embeddings: Embeddings for training data
                 - test_embeddings: Embeddings for test data, or None if outlier is True.
         """
+        size_X_train = X_train_preprocessed.shape[0]
         if outlier:
-            X_embeddings = self._compute_embeddings_per_columns(X_train_preprocessed)
+            X_embeddings = self._compute_embeddings_internal(
+                X_train_preprocessed, train=True, train_size=size_X_train
+            )
 
             return X_embeddings, None
-        X_train_embeddings = self._compute_embeddings_per_columns(X_train_preprocessed)
-
-        size_X_train = X_train_preprocessed.shape[0]
+        X_train_embeddings = self._compute_embeddings_internal(
+            X_train_preprocessed, train=True, train_size=size_X_train
+        )
 
         X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
 
-        X_embeddings = self._compute_embeddings_per_columns(X_train_test_stack)
+        X_embeddings = self._compute_embeddings_internal(
+            X_train_test_stack, train=False, train_size=size_X_train
+        )
 
         X_test_embeddings = X_embeddings[size_X_train:]
 
         return X_train_embeddings, X_test_embeddings
 
-    def _compute_embeddings_with_random_vector(
-        self, X_train: np.ndarray, X_test: np.ndarray | None
+    def _compute_embeddings_internal(
+        self, X: np.ndarray, train_size: int, train: bool = True
     ) -> np.ndarray:
-        """Compute embeddings with random vector."""
-        pass
-
-    def _compute_embeddings_per_columns(self, X: np.ndarray) -> np.ndarray:
         """Compute embeddings by treating each column as a prediction target.
 
         This method implements the core column-wise embedding strategy. For each column:
@@ -308,21 +314,141 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
 
         # Clear GPU cache if using CUDA or MPS
         if self.device == "cuda":
-            import torch
-
             torch.cuda.empty_cache()
         elif self.device == "mps":
-            import torch
-
             torch.mps.empty_cache()
 
         # Reinitialize models
-        self.tabpfn_clf = TabPFNClassifier.create_default_for_version(ModelVersion.V2)
-        self.tabpfn_reg = TabPFNRegressor.create_default_for_version(ModelVersion.V2)
+        self.tabpfn_clf = TabPFNClassifier.create_default_for_version(
+            ModelVersion.V2, **self._init_tabpfn_configs
+        )
+        self.tabpfn_reg = TabPFNRegressor.create_default_for_version(
+            ModelVersion.V2, **self._init_tabpfn_configs
+        )
         self.num_features = None
         self.categorical_indices = None
         self._is_fitted = False
         self.transform_to_numerical = None
+
+
+class TabPFNEmbeddingConstantVector(TabPFNEmbedding):
+    def __init__(self, num_estimators: int = 1):
+        super().__init__(
+            num_estimators=num_estimators,
+        )
+        self.name = "TabPFN with Constant Vector"
+
+    def _compute_embeddings_internal(
+        self, X: np.ndarray, train_size: int, train: bool = True
+    ) -> np.ndarray:
+        num_samples = X.shape[0]
+
+        target_label = np.zeros(shape=(num_samples,))
+
+        model = self.tabpfn_clf
+        model.fit(X, target_label)
+
+        embeddings = model.get_embeddings(X)
+
+        if self.num_estimators > 1:
+            if self.estimator_agg == "mean":
+                embeddings = np.mean(embeddings, axis=0)
+            elif self.estimator_agg == "first_element":
+                embeddings = np.squeeze(embeddings[0, :])
+            else:
+                raise NotImplementedError
+        else:
+            embeddings = np.squeeze(embeddings)
+
+        return embeddings
+
+
+class TabPFNEmbeddingRandomVector(TabPFNEmbedding):
+    DISCRETE_DISTRIBUTION = ["integers", "binomial", "poisson", "geometric"]
+
+    def __init__(
+        self,
+        num_estimators: int = 1,
+        random_state=None,
+        epsilon: float = 1e-7,
+        num_targets: int = 1,
+        distribution: str = "standard_normal",
+        distribution_params: Optional[dict] = None,
+    ):
+        super().__init__(
+            num_estimators=num_estimators,
+        )
+        self.epsilon = epsilon
+        self.distribution = distribution
+        self.distribution_params = distribution_params
+        self.name = f"TabPFN with Random Vector ({distribution})"
+        self.random_state = random_state
+        self.rng = np.random.default_rng(random_state)
+        self.num_targets = num_targets
+        self.random_train_targets = None
+        self.is_discrete = self.distribution in self.DISCRETE_DISTRIBUTION
+
+    def _generate_random_targets(self, size: tuple[int, int]) -> np.ndarray:
+        try:
+            dist_func = getattr(self.rng, self.distribution)
+
+            return dist_func(size=size, **self.distribution_params)
+        except AttributeError:
+            raise ValueError(
+                f"NumPy Generator has no distribution '{self.distribution}'."
+            )
+
+    def _compute_embeddings_internal(
+        self, X: np.ndarray, train_size: int, train: bool = True
+    ) -> np.ndarray:
+        num_samples = X.shape[0]
+
+        if train:
+            target_label = self._generate_random_targets(
+                size=(num_samples, self.num_targets)
+            )
+            self.random_train_targets = target_label
+
+        target_label = self._generate_random_targets(
+            size=(num_samples, self.num_targets)
+        )
+        target_label[:train_size] = self.random_train_targets
+
+        target_embeddings = []
+        model = self.tabpfn_clf if self.is_discrete else self.tabpfn_reg
+
+        for i in range(self.num_targets):
+            target = target_label[:, i]
+            model.fit(X, target)
+
+            tmp_embeddings = model.get_embeddings(X)
+
+            if self.num_estimators > 1:
+                if self.estimator_agg == "mean":
+                    tmp_embeddings = np.mean(tmp_embeddings, axis=0)
+                elif self.estimator_agg == "first_element":
+                    tmp_embeddings = np.squeeze(tmp_embeddings[0, :])
+                else:
+                    raise NotImplementedError
+            else:
+                tmp_embeddings = np.squeeze(tmp_embeddings)
+
+            target_embeddings.append(tmp_embeddings)
+
+        concat_embeddings = np.concatenate(target_embeddings, axis=1).reshape(
+            target_embeddings[0].shape[0], -1
+        )
+
+        if self.emb_agg == "concat":
+            return concat_embeddings
+        if self.emb_agg == "mean":
+            reshaped_embeddings = concat_embeddings.reshape(
+                *concat_embeddings.shape[:-1], self.num_targets, self.tabpfn_dim
+            )
+            embeddings = np.mean(reshaped_embeddings, axis=-2)
+
+            return embeddings
+        raise NotImplementedError
 
 
 class TabPFNWrapper(TabPFNEmbedding):
