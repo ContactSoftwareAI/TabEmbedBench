@@ -377,7 +377,7 @@ class TabPFNEmbeddingConstantVector(TabPFNEmbedding):
         test_targets = np.zeros((test_size,))
 
         X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
-        targets_stack = np.vstack([train_targets, test_targets])
+        targets_stack = np.concatenate([train_targets, test_targets])
 
         X_train_test_embedded = self._compute_embeddings_internal(
             X_train_test_stack, targets_stack
@@ -511,6 +511,11 @@ class TabPFNEmbeddingRandomVector(TabPFNEmbedding):
 
             return embeddings
         raise NotImplementedError
+
+    def _reset_embedding_model(self):
+        super()._reset_embedding_model()
+        self.rng = np.random.default_rng(self.random_state)
+        self.random_train_targets = None
 
 
 class TabPFNEmbeddingClusterLabels(TabPFNEmbedding):
@@ -859,6 +864,11 @@ class TabPFNEmbeddingClusterLabels(TabPFNEmbedding):
             return embeddings
         else:
             raise NotImplementedError(f"Aggregation '{self.emb_agg}' not implemented")
+
+    def _reset_embedding_model(self):
+        super()._reset_embedding_model()
+        self.actual_mode_ = None
+        self.n_clusters_ = None
 
 
 class TabPFNWrapper(TabPFNEmbedding):
