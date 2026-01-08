@@ -75,6 +75,8 @@ class AbstractBenchmark(ABC):
         result_dir = Path(result_dir) if isinstance(result_dir, str) else result_dir
         result_dir.mkdir(parents=True, exist_ok=True)
         self.result_dir = result_dir
+        self.embeddings_metadata_dir = result_dir / "embeddings"
+        self.embeddings_metadata_dir.mkdir(parents=True, exist_ok=True)
 
         self.timestamp = timestamp or TIMESTAMP
         self.save_result_dataframe = save_result_dataframe
@@ -590,7 +592,7 @@ class AbstractBenchmark(ABC):
         if self.save_result_dataframe and not self.embedding_df.is_empty():
             save_dataframe(
                 dataframe=self.embedding_df,
-                output_path=self.result_dir,
+                output_path=self.embeddings_metadata_dir,
                 dataframe_name=f"embedding_{dataframe_name}",
                 timestamp=self.timestamp,
             )
