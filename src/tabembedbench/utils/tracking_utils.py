@@ -41,7 +41,7 @@ def save_dataframe(
         return None
     output_path = Path(output_path)
 
-    output_file = Path(output_path / f"results_{dataframe_name}_{timestamp}")
+    output_file = Path(output_path / f"{dataframe_name}_{timestamp}")
 
     parquet_file = output_file.with_suffix(".parquet")
     csv_file = output_file.with_suffix(".csv")
