@@ -448,7 +448,7 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
         self,
         embedding_model: AbstractEmbeddingGenerator,
         dataset_collection: list[dict],
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
         """
         Aggregates embeddings and labels from a collection of datasets and returns
         them as shuffled training and testing sets. Embeddings and labels from each
@@ -466,6 +466,7 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
                 - numpy.ndarray: Shuffled training labels.
                 - numpy.ndarray: Combined test embeddings.
                 - numpy.ndarray: Combined test labels.
+                - dict: Metadata for the process
         """
         train_embeddings = []
         test_embeddings = []
@@ -494,11 +495,14 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
         indices = np.arange(len(combined_train_embeddings))
         self.rng.shuffle(indices)
 
+        embedding_metadata = {}
+
         return (
             combined_train_embeddings[indices],
             combined_train_labels[indices],
             combined_test_embeddings,
             combined_test_labels,
+            embedding_metadata,
         )
 
     def _process_embedding_model_pipeline(
@@ -517,16 +521,30 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
             else SUPERVISED_BINARY_CLASSIFICATION
         )
 
-        train_embeddings, train_labels, test_embeddings, test_labels = (
-            self._get_embeddings_from_dataset_collection(
-                embedding_model, dataset_collection
-            )
+        (
+            train_embeddings,
+            train_labels,
+            test_embeddings,
+            test_labels,
+            embedding_metadata,
+        ) = self._get_embeddings_from_dataset_collection(
+            embedding_model, dataset_collection
+        )
+
+        self._embedding_utils(
+            (train_embeddings, test_embeddings, embedding_metadata),
+            dataset_configurations,
         )
 
         dataset_collection_configuration = {
             "y_train": train_labels,
             "task_type": task_type,
         }
+
+        self._embedding_utils(
+            (train_embeddings, test_embeddings, embedding_metadata),
+            dataset_configurations,
+        )
 
         result_row_dict = {
             "collection": dataset_configurations["name"],
@@ -543,7 +561,7 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
                 f"{logger_prefix} - Evaluating embeddings with {evaluator.name}..."
             )
             prediction = self._get_evaluator_prediction(
-                (train_embeddings, test_embeddings, 0.0),
+                (train_embeddings, test_embeddings, embedding_metadata),
                 evaluator=evaluator,
                 dataset_configurations=dataset_collection_configuration,
             )
