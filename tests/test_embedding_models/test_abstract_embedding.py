@@ -219,16 +219,16 @@ class TestAbstractEmbeddingGeneratorDiscovery:
         """Verify that all discovered classes have no abstract methods."""
         for cls in CONCRETE_EMBEDDING_GENERATORS:
             abstract_methods = getattr(cls, "__abstractmethods__", set())
-            assert (
-                not abstract_methods
-            ), f"{cls.__name__} has abstract methods: {abstract_methods}"
+            assert not abstract_methods, (
+                f"{cls.__name__} has abstract methods: {abstract_methods}"
+            )
 
     def test_all_discovered_classes_inherit_from_abstract_embedding_generator(self):
         """Verify that all discovered classes inherit from AbstractEmbeddingGenerator."""
         for cls in CONCRETE_EMBEDDING_GENERATORS:
-            assert issubclass(
-                cls, AbstractEmbeddingGenerator
-            ), f"{cls.__name__} does not inherit from AbstractEmbeddingGenerator"
+            assert issubclass(cls, AbstractEmbeddingGenerator), (
+                f"{cls.__name__} does not inherit from AbstractEmbeddingGenerator"
+            )
 
     def test_discovered_classes_list(self):
         """Print discovered classes for debugging purposes."""
@@ -508,3 +508,32 @@ class TestAbstractEmbeddingGeneratorEdgeCases:
                 embedding_generator_instance.get_end_to_end_prediction(
                     X_train, y_train, X_test
                 )
+
+    def test_compute_embeddings_for_non_end_to_end_models(
+        self, embedding_generator_instance
+    ):
+        """Test that compute_embeddings works correctly for non-end-to-end models.
+
+        This test ensures that models which are not end-to-end can actually
+        generate embeddings. This catches issues like TabPFNEmbeddingConstantVectorRegression
+        which may throw errors during embedding computation.
+        """
+        if not embedding_generator_instance.is_end_to_end_model:
+            rng = np.random.default_rng(42)
+            X_train = rng.standard_normal(size=(50, 10))
+            X_test = rng.standard_normal(size=(20, 10))
+
+            # This should not raise any errors for properly implemented models
+            train_embeddings, test_embeddings, compute_time = (
+                embedding_generator_instance.generate_embeddings(X_train, X_test)
+            )
+
+            # Verify embeddings are returned with correct shapes
+            assert train_embeddings is not None
+            assert test_embeddings is not None
+            assert len(train_embeddings.shape) == 2
+            assert isinstance(train_embeddings, np.ndarray)
+            assert isinstance(test_embeddings, np.ndarray)
+            assert train_embeddings.shape[0] == X_train.shape[0]
+            assert test_embeddings.shape[0] == X_test.shape[0]
+            assert compute_time >= 0
