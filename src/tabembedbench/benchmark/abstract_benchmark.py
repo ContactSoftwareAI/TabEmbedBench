@@ -15,7 +15,8 @@ from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
 from tabembedbench.utils.logging_utils import get_benchmark_logger
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device, log_gpu_memory
-from tabembedbench.utils.tracking_utils import MemoryTracker, save_result_df
+from tabembedbench.utils.tracking_utils import MemoryTracker, save_dataframe
+from tabembedbench.utils.unsupervised_metrics import calculate_rank_me
 
 
 class NotEndToEndCompatibleError(Exception):
@@ -70,6 +71,7 @@ class AbstractBenchmark(ABC):
         self.task_type = task_type if isinstance(task_type, list) else [task_type]
         self.benchmark_metrics = benchmark_metrics or self._get_default_metrics()
         self._results_buffer: list[dict] = []
+        self._embedding_metadata_buffer: list[dict] = []
         result_dir = Path(result_dir) if isinstance(result_dir, str) else result_dir
         result_dir.mkdir(parents=True, exist_ok=True)
         self.result_dir = result_dir
@@ -108,6 +110,21 @@ class AbstractBenchmark(ABC):
         if not self._results_buffer:
             return pl.DataFrame()
         return pl.from_dicts(data=self._results_buffer)
+
+    @property
+    def embedding_df(self) -> pl.DataFrame:
+        """
+        Returns a Polars DataFrame representation of the embedding metadata.
+
+        This property retrieves and converts the `_embedding_metadata_buffer` attribute into
+        a Polars DataFrame. If the buffer is empty, an empty DataFrame is returned.
+
+        Returns:
+            pl.DataFrame: A Polars DataFrame containing the embedding metadata information.
+        """
+        if not self._embedding_metadata_buffer:
+            return pl.DataFrame()
+        return pl.from_dicts(data=self._embedding_metadata_buffer)
 
     # ========== Abstract Methods (Subclasses must implement) ==========
     @abstractmethod
@@ -195,7 +212,7 @@ class AbstractBenchmark(ABC):
         self,
         embedding_model: AbstractEmbeddingGenerator,
         dataset_configurations: dict,
-    ) -> tuple[np.ndarray, np.ndarray | None, float]:
+    ) -> tuple[np.ndarray, np.ndarray | None, dict]:
         """Generates embeddings for training and testing datasets using a provided embedding
         model. This function ensures that the embedding generation process is handled in a
         model-specific manner while accommodating configurations such as feature metadata.
@@ -227,6 +244,30 @@ class AbstractBenchmark(ABC):
             outlier=("Outlier Detection" in self.task_type),
             **feature_metadata,
         )
+
+    def _embedding_utils(
+        self,
+        embeddings: tuple[np.ndarray, np.ndarray, dict],
+        model_memory: dict,
+        dataset_configurations: dict,
+    ) -> None:
+        train_embeddings, test_embeddings, embedding_metadata = embeddings
+        dataset_metadata = dataset_configurations["dataset_metadata"]
+        embedding_metadata.update(model_memory)
+        embedding_metadata["dataset_name"] = dataset_metadata["dataset_name"]
+        embedding_metadata["train_rank_me_score"] = calculate_rank_me(
+            embeddings=train_embeddings
+        )
+        embedding_metadata["test_rank_me_score"] = (
+            calculate_rank_me(embeddings=test_embeddings)
+            if test_embeddings is not None
+            else None
+        )
+        self._embedding_metadata_buffer.append(embedding_metadata)
+        self._save_embedding_metadata(
+            dataframe_name=embedding_metadata.get("embedding_model", "Unknown")
+        )
+        return None
 
     def _compute_metrics(
         self, y_true: np.ndarray, y_pred: np.ndarray, task_type: str
@@ -291,9 +332,9 @@ class AbstractBenchmark(ABC):
             embeddings = self._generate_embeddings(
                 embedding_model, dataset_configurations
             )
-
             model_memory = model_memory_tracker.stop_tracking()
-            result_row_dict.update(model_memory)
+
+            self._embedding_utils(embeddings, model_memory, dataset_configurations)
         except Exception as e:
             self.logger.exception(f"{logger_prefix} - Error generating embeddings: {e}")
             raise
@@ -537,10 +578,20 @@ class AbstractBenchmark(ABC):
 
             sorted_df = self.result_df.select(non_algo_cols + algo_cols)
 
-            save_result_df(
-                result_df=sorted_df,
+            save_dataframe(
+                dataframe=sorted_df,
                 output_path=self.result_dir,
-                benchmark_name=self.name,
+                dataframe_name=f"result_{self.name}",
+                timestamp=self.timestamp,
+            )
+
+    def _save_embedding_metadata(self, dataframe_name: str) -> None:
+        """Save the current results to disk if enabled."""
+        if self.save_result_dataframe and not self.embedding_df.is_empty():
+            save_dataframe(
+                dataframe=self.embedding_df,
+                output_path=self.result_dir,
+                dataframe_name=f"embedding_{dataframe_name}",
                 timestamp=self.timestamp,
             )
 
