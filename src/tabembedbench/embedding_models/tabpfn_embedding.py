@@ -139,6 +139,12 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         if categorical_indices is not None:
             self.categorical_indices = categorical_indices
         else:
+            if not isinstance(X_preprocessed, np.ndarray):
+                if hasattr(X_preprocessed, "to_numpy"):
+                    X_preprocessed = X_preprocessed.to_numpy()
+                elif hasattr(X_preprocessed, "values"):
+                    X_preprocessed = X_preprocessed.values
+
             self.categorical_indices = infer_categorical_features(
                 X_preprocessed,
                 provided=None,
@@ -199,7 +205,7 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         return X_train_embeddings, X_test_embeddings
 
     def _compute_embeddings_internal(
-        self, X: np.ndarray, train_size: int, train: bool = True
+        self, X: NDArray, targets: NDArray | None = None
     ) -> np.ndarray:
         """Compute embeddings by treating each column as a prediction target.
 
@@ -338,15 +344,40 @@ class TabPFNEmbeddingConstantVector(TabPFNEmbedding):
         )
         self.name = "TabPFN with Constant Vector"
 
+    def _compute_embeddings(
+        self,
+        X_train_preprocessed: np.ndarray | pd.DataFrame,
+        X_test_preprocessed: np.ndarray | pd.DataFrame | None = None,
+        outlier: bool = False,
+        **kwargs,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        train_size = X_train_preprocessed.shape[0]
+        train_targets = np.zeros((train_size,))
+
+        X_train_embedded = self._compute_embeddings_internal(
+            X_train_preprocessed, train_targets
+        )
+
+        if X_test_preprocessed is None:
+            return X_train_embedded, None
+
+        test_size = X_test_preprocessed.shape[0]
+        test_targets = np.zeros((test_size,))
+
+        X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
+        targets_stack = np.vstack([train_targets, test_targets])
+
+        X_train_test_embedded = self._compute_embeddings_internal(
+            X_train_test_stack, targets_stack
+        )
+
+        return X_train_embedded, X_train_test_embedded[train_size:]
+
     def _compute_embeddings_internal(
-        self, X: np.ndarray, train_size: int, train: bool = True
+        self, X: NDArray, targets: NDArray | None = None
     ) -> np.ndarray:
-        num_samples = X.shape[0]
-
-        target_label = np.zeros(shape=(num_samples,))
-
         model = self.tabpfn_clf
-        model.fit(X, target_label)
+        model.fit(X, targets)
 
         embeddings = model.get_embeddings(X)
 
@@ -373,14 +404,14 @@ class TabPFNEmbeddingRandomVector(TabPFNEmbedding):
         epsilon: float = 1e-7,
         num_targets: int = 1,
         distribution: str = "standard_normal",
-        distribution_params: Optional[dict] = None,
+        dist_kwargs: Optional[dict] = None,
     ):
         super().__init__(
             num_estimators=num_estimators,
         )
         self.epsilon = epsilon
         self.distribution = distribution
-        self.distribution_params = distribution_params
+        self.dist_kwargs = dist_kwargs or {}
         self.name = f"TabPFN with Random Vector ({distribution})"
         self.random_state = random_state
         self.rng = np.random.default_rng(random_state)
@@ -392,33 +423,52 @@ class TabPFNEmbeddingRandomVector(TabPFNEmbedding):
         try:
             dist_func = getattr(self.rng, self.distribution)
 
-            return dist_func(size=size, **self.distribution_params)
+            return dist_func(size=size, **self.dist_kwargs)
         except AttributeError:
             raise ValueError(
                 f"NumPy Generator has no distribution '{self.distribution}'."
             )
 
-    def _compute_embeddings_internal(
-        self, X: np.ndarray, train_size: int, train: bool = True
-    ) -> np.ndarray:
-        num_samples = X.shape[0]
-
-        if train:
-            target_label = self._generate_random_targets(
-                size=(num_samples, self.num_targets)
-            )
-            self.random_train_targets = target_label
-
-        target_label = self._generate_random_targets(
-            size=(num_samples, self.num_targets)
+    def _compute_embeddings(
+        self,
+        X_train_preprocessed: np.ndarray | pd.DataFrame,
+        X_test_preprocessed: np.ndarray | pd.DataFrame | None = None,
+        outlier: bool = False,
+        **kwargs,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        train_size = X_train_preprocessed.shape[0]
+        train_targets = self._generate_random_targets(
+            size=(train_size, self.num_targets)
         )
-        target_label[:train_size] = self.random_train_targets
 
+        X_train_embedded = self._compute_embeddings_internal(
+            X_train_preprocessed, train_targets
+        )
+
+        if X_test_preprocessed is None:
+            return X_train_embedded, None
+
+        test_size = X_test_preprocessed.shape[0]
+        test_targets = self._generate_random_targets(size=(test_size, self.num_targets))
+
+        X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
+        targets_stack = np.vstack([train_targets, test_targets])
+
+        X_train_test_embedded = self._compute_embeddings_internal(
+            X_train_test_stack, targets_stack
+        )
+
+        return X_train_embedded, X_train_test_embedded[train_size:]
+
+    def _compute_embeddings_internal(
+        self, X: NDArray, targets: NDArray | None = None
+    ) -> np.ndarray:
         target_embeddings = []
+        num_targets = targets.shape[-1] if len(targets.shape) > 1 else 1
         model = self.tabpfn_clf if self.is_discrete else self.tabpfn_reg
 
-        for i in range(self.num_targets):
-            target = target_label[:, i]
+        for i in range(num_targets):
+            target = targets[:, i]
             model.fit(X, target)
 
             tmp_embeddings = model.get_embeddings(X)
