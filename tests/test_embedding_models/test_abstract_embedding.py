@@ -219,16 +219,16 @@ class TestAbstractEmbeddingGeneratorDiscovery:
         """Verify that all discovered classes have no abstract methods."""
         for cls in CONCRETE_EMBEDDING_GENERATORS:
             abstract_methods = getattr(cls, "__abstractmethods__", set())
-            assert (
-                not abstract_methods
-            ), f"{cls.__name__} has abstract methods: {abstract_methods}"
+            assert not abstract_methods, (
+                f"{cls.__name__} has abstract methods: {abstract_methods}"
+            )
 
     def test_all_discovered_classes_inherit_from_abstract_embedding_generator(self):
         """Verify that all discovered classes inherit from AbstractEmbeddingGenerator."""
         for cls in CONCRETE_EMBEDDING_GENERATORS:
-            assert issubclass(
-                cls, AbstractEmbeddingGenerator
-            ), f"{cls.__name__} does not inherit from AbstractEmbeddingGenerator"
+            assert issubclass(cls, AbstractEmbeddingGenerator), (
+                f"{cls.__name__} does not inherit from AbstractEmbeddingGenerator"
+            )
 
     def test_discovered_classes_list(self):
         """Print discovered classes for debugging purposes."""
@@ -524,7 +524,7 @@ class TestAbstractEmbeddingGeneratorEdgeCases:
             X_test = rng.standard_normal(size=(20, 10))
 
             # This should not raise any errors for properly implemented models
-            train_embeddings, test_embeddings, compute_time = (
+            train_embeddings, test_embeddings, embedding_metadata = (
                 embedding_generator_instance.generate_embeddings(X_train, X_test)
             )
 
@@ -536,4 +536,4 @@ class TestAbstractEmbeddingGeneratorEdgeCases:
             assert isinstance(test_embeddings, np.ndarray)
             assert train_embeddings.shape[0] == X_train.shape[0]
             assert test_embeddings.shape[0] == X_test.shape[0]
-            assert compute_time >= 0
+            assert isinstance(embedding_metadata, dict)
