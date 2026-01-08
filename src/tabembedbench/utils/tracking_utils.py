@@ -8,11 +8,13 @@ import polars as pl
 import torch
 
 
-def save_result_df(
-    result_df: pl.DataFrame,
+def save_dataframe(
+    dataframe: pl.DataFrame,
     output_path: str | Path,
-    benchmark_name: str,
+    dataframe_name: str,
     timestamp: str,
+    save_to_gcs: bool = False,
+    bucket_name: str = None,
 ):
     """
     Saves the provided Polars DataFrame to both Parquet and CSV formats in the
@@ -20,30 +22,39 @@ def save_result_df(
     using the provided benchmark name and timestamp.
 
     Args:
-        result_df (pl.DataFrame): The Polars DataFrame to be saved.
+        dataframe (pl.DataFrame): The Polars DataFrame to be saved.
         output_path (str | Path): The directory path where the results
             will be saved.
-        benchmark_name (str): A name identifier for the benchmark, used
+        dataframe_name (str): A name identifier for the benchmark, used
             to generate the output file name.
         timestamp (str): A timestamp identifier to include in the output
             file name.
     """
+    if save_to_gcs:
+        save_to_google_cloud_storage(
+            dataframe=dataframe,
+            output_path=output_path,
+            bucket_name=bucket_name,
+            dataframe_name=dataframe_name,
+            timestamp=timestamp,
+        )
+        return None
     output_path = Path(output_path)
 
-    output_file = Path(output_path / f"results_{benchmark_name}_{timestamp}")
+    output_file = Path(output_path / f"results_{dataframe_name}_{timestamp}")
 
     parquet_file = output_file.with_suffix(".parquet")
     csv_file = output_file.with_suffix(".csv")
 
-    result_df.write_parquet(parquet_file)
-    result_df.write_csv(csv_file)
+    dataframe.write_parquet(parquet_file)
+    dataframe.write_csv(csv_file)
 
 
 def save_to_google_cloud_storage(
-    result_df: pl.DataFrame,
-    output_path: str,
+    dataframe: pl.DataFrame,
+    output_path: str | Path,
     bucket_name: str,
-    benchmark_name: str,
+    dataframe_name: str,
     timestamp: str,
 ) -> None:
     """
@@ -56,17 +67,20 @@ def save_to_google_cloud_storage(
     logged.
 
     Args:
-        result_df: A Polars DataFrame to be written to Google Cloud Storage.
+        dataframe: A Polars DataFrame to be written to Google Cloud Storage.
         output_path: The relative directory path in the GCS bucket where the files
             will be stored.
         bucket_name: The name of the Google Cloud Storage bucket. If not provided,
             it will default to the value of the environment variable
             `GCS_BUCKET_NAME`.
-        benchmark_name: A unique identifier to include in the file names.
+        dataframe_name: A unique identifier to include in the file names.
         timestamp: A timestamp string to append to the file names.
 
     """
     try:
+        if isinstance(output_path, Path):
+            output_path = str(output_path)
+
         bucket_name = bucket_name or os.getenv("GCS_BUCKET_NAME")
 
         if not bucket_name:
@@ -74,11 +88,11 @@ def save_to_google_cloud_storage(
             return
 
         gcs_path = (
-            f"gs://{bucket_name}/{output_path}/result_{benchmark_name}_{timestamp}"
+            f"gs://{bucket_name}/{output_path}/result_{dataframe_name}_{timestamp}"
         )
 
-        result_df.write_parquet(gcs_path + ".parquet")
-        result_df.write_csv(gcs_path + ".csv")
+        dataframe.write_parquet(gcs_path + ".parquet")
+        dataframe.write_csv(gcs_path + ".csv")
     except Exception as e:
         logging.error(e)
 
