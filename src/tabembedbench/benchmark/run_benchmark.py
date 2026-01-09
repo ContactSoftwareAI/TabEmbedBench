@@ -124,7 +124,7 @@ def run_benchmark(
     # Setup logging
     if benchmark_config.save_logs:
         log_dir = result_dir / "logs"
-        log_dir.mkdir(exist_ok=True)
+        log_dir.mkdir(parents=True, exist_ok=True)
         setup_unified_logging(
             log_dir=log_dir,
             timestamp=timestamp,
