@@ -49,11 +49,11 @@ class LogisticRegressionHPOEvaluator(AbstractHPOEvaluator):
             },
             "penalty": {
                 "type": "categorical",
-                "choices": ["l2", "l1"],
+                "choices": ["l2"],
             },
             "solver": {
                 "type": "categorical",
-                "choices": ["lbfgs", "liblinear", "saga"],
+                "choices": ["lbfgs"],
             },
             "max_iter": {
                 "type": "int",

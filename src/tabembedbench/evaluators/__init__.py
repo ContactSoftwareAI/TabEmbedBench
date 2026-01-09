@@ -5,7 +5,7 @@ from tabembedbench.evaluators.abstractevaluator import (
 from tabembedbench.evaluators.classification import (
     KNNClassifierEvaluator,
     KNNClassifierEvaluatorHPO,
-    LogisticRegressionEvaluator,
+    LogisticRegressionHPOEvaluator,
     MLPClassifierEvaluator,
     SVMClassifierEvaluator,
 )

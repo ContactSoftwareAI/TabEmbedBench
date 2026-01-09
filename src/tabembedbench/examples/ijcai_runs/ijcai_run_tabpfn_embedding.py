@@ -17,16 +17,13 @@ from tabembedbench.benchmark.run_benchmark import (
     run_benchmark,
 )
 from tabembedbench.embedding_models import (
-    SphereBasedEmbedding,
-    TabICLEmbedding,
     TableVectorizerEmbedding,
     TabPFNEmbedding,
+    TabPFNEmbeddingClusterLabels,
     TabPFNEmbeddingConstantVector,
+    TabPFNEmbeddingRandomVector,
 )
-from tabembedbench.evaluators import (
-    LogisticRegressionHPOEvaluator,
-    SVMClassifierEvaluator,
-)
+from tabembedbench.evaluators import LogisticRegressionHPOEvaluator
 from tabembedbench.evaluators.classification import (
     KNNClassifierEvaluator,
     MLPClassifierEvaluator,
@@ -45,22 +42,22 @@ logger = logging.getLogger("IJCAI_Run_Benchmark")
 
 DEBUG = True
 GOOGLE_BUCKET = "bucket_tabdata/ijcai"
-DATA_DIR = "sphere_based_model"
+DATA_DIR = "tabpfn_embedding"
 
 
 DATASETCONFIG = DatasetConfig(
     adbench_dataset_path="/Users/lkl/PycharmProjects/TabEmbedBench/data/adbench_tabular_datasets",
     exclude_adbench_datasets=[],
-    upper_bound_dataset_size=1000,
-    upper_bound_num_features=200,
+    upper_bound_dataset_size=15000,
+    upper_bound_num_features=500,
 )
 
 
 BENCHMARK_CONFIG = BenchmarkConfig(
-    run_outlier=False,
+    run_outlier=True,
     run_tabarena=True,
     run_dataset_separation=False,
-    run_dataset_tabpfn_separation=False,
+    run_dataset_tabpfn_separation=True,
     data_dir=DATA_DIR,
     dataset_separation_configurations_json_path="/Users/lkl/PycharmProjects/TabEmbedBench/src/tabembedbench/examples/ijcai_runs/dataset_separation_tabarena.json",
     dataset_separation_configurations_tabpfn_subset_json_path="/Users/lkl/PycharmProjects/TabEmbedBench/src/tabembedbench/examples/ijcai_runs/dataset_separation_tabarena_tabpfn_subset.json",
@@ -81,20 +78,18 @@ def get_embedding_models(debug=False):
         list: List of embedding models
     """
     if debug:
-        return [
-            SphereBasedEmbedding(embed_dim=16),
-        ]
+        return [TableVectorizerEmbedding()]
 
-    sphere_model_64 = SphereBasedEmbedding(embed_dim=64)
-    sphere_model_192 = SphereBasedEmbedding(embed_dim=192)
-    sphere_model_256 = SphereBasedEmbedding(embed_dim=256)
-    sphere_model_512 = SphereBasedEmbedding(embed_dim=512)
+    tabpfn = TabPFNEmbedding()
+    tabpfn_cluster = TabPFNEmbeddingClusterLabels()
+    tabpfn_random = TabPFNEmbeddingRandomVector()
+    tabpfn_constant = TabPFNEmbeddingConstantVector()
 
     embedding_models = [
-        sphere_model_64,
-        sphere_model_192,
-        sphere_model_256,
-        sphere_model_512,
+        tabpfn,
+        tabpfn_cluster,
+        tabpfn_random,
+        tabpfn_constant,
     ]
 
     return embedding_models
