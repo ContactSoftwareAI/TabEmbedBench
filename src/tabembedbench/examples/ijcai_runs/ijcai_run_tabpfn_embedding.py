@@ -46,7 +46,7 @@ DATA_DIR = "tabpfn_embedding"
 
 
 DATASETCONFIG = DatasetConfig(
-    adbench_dataset_path="/Users/lkl/PycharmProjects/TabEmbedBench/data/adbench_tabular_datasets",
+    adbench_dataset_path="data/adbench_tabular_datasets",
     exclude_adbench_datasets=[],
     upper_bound_dataset_size=15000,
     upper_bound_num_features=500,
