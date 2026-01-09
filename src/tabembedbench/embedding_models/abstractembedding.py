@@ -129,7 +129,9 @@ class AbstractEmbeddingGenerator(ABC):
         X_train_preprocessed: np.ndarray,
         X_test_preprocessed: np.ndarray | None = None,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> (
+        np.ndarray | Tuple[np.ndarray, np.ndarray] | Tuple[np.ndarray, np.ndarray, dict]
+    ):
         """
         Compute embeddings for the provided preprocessed data.
 
@@ -292,7 +294,7 @@ class AbstractEmbeddingGenerator(ABC):
         X_test: np.ndarray | None = None,
         outlier: bool = False,
         **kwargs,
-    ) -> Tuple[np.ndarray, np.ndarray | None, float]:
+    ) -> Tuple[np.ndarray, np.ndarray | None, dict]:
         """Generates embeddings for the given training and optional testing
         data.
 
@@ -324,10 +326,16 @@ class AbstractEmbeddingGenerator(ABC):
             X_train, X_test, outlier=outlier, **kwargs
         )
         start_time = time.perf_counter()
-        train_embeddings, test_embeddings = self._compute_embeddings(
+        results = self._compute_embeddings(
             X_train_preprocessed, X_test_preprocessed, outlier=outlier, **kwargs
         )
         compute_embeddings_time = time.perf_counter() - start_time
+
+        if isinstance(results, tuple) and len(results) == 3:
+            train_embeddings, test_embeddings, model_specific_metadata = results
+        else:
+            train_embeddings, test_embeddings = results
+            model_specific_metadata = {}
 
         if not self._validate_embeddings(train_embeddings):
             raise ValueError("Train Embeddings contain NaN values.")
@@ -337,10 +345,18 @@ class AbstractEmbeddingGenerator(ABC):
 
         self._reset_embedding_model()
 
+        embedding_metadata = {
+            "embedding_model": self.name,
+            "compute_embeddings_time": compute_embeddings_time,
+        }
+
+        if model_specific_metadata:
+            embedding_metadata.update(model_specific_metadata)
+
         return (
             train_embeddings,
             test_embeddings,
-            compute_embeddings_time,
+            embedding_metadata,
         )
 
     def get_end_to_end_prediction(
