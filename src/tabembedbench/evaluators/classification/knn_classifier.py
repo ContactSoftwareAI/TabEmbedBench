@@ -133,7 +133,7 @@ class KNNClassifierEvaluatorHPO(AbstractHPOEvaluator):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(
-            name="K-Nearest Neighbors Classifier",
+            name="KNN_HPO",
             task_type=CLASSIFICATION_TASKS,
             **kwargs,
         )

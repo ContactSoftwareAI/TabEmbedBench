@@ -260,7 +260,6 @@ class AbstractBenchmark(ABC):
         train_embeddings, test_embeddings, embedding_metadata = embeddings
         dataset_metadata = dataset_configurations["dataset_metadata"]
         embedding_metadata.update(model_memory)
-        embedding_metadata["dataset_name"] = dataset_metadata["dataset_name"]
         embedding_metadata["train_rank_me_score"] = calculate_rank_me(
             embeddings=train_embeddings
         )
@@ -269,6 +268,7 @@ class AbstractBenchmark(ABC):
             if test_embeddings is not None
             else None
         )
+        embedding_metadata.update(dataset_metadata)
         self._embedding_metadata_buffer.append(embedding_metadata)
         self._save_embedding_metadata(
             dataframe_name=embedding_metadata.get("embedding_model", "Unknown")
@@ -325,8 +325,10 @@ class AbstractBenchmark(ABC):
         self.logger.info(f"{logger_prefix} - Start processing...")
         log_gpu_memory(self.logger)
 
-        result_row_dict = {"embedding_model": embedding_model.name}
-        result_row_dict.update(dataset_metadata)
+        result_row_dict = {
+            "embedding_model": embedding_model.name,
+            "dataset_name": dataset_metadata["dataset_name"],
+        }
 
         # Generate embeddings
         try:
@@ -599,7 +601,7 @@ class AbstractBenchmark(ABC):
             save_dataframe(
                 dataframe=self.embedding_df,
                 output_path=self.embeddings_metadata_dir,
-                dataframe_name=f"embedding_{dataframe_name}",
+                dataframe_name=f"{self.name}_embedding_{dataframe_name}",
                 timestamp=self.timestamp,
                 save_to_gcs=self.save_to_gcs,
                 bucket_name=self.bucket_name,

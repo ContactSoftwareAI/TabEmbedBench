@@ -5,7 +5,7 @@ from tabembedbench.constants import CLASSIFICATION_TASKS, CLASSIFIER_OPTIMIZATIO
 from tabembedbench.evaluators.abstractevaluator import AbstractHPOEvaluator
 
 
-class LogisticRegressionEvaluator(AbstractHPOEvaluator):
+class LogisticRegressionHPOEvaluator(AbstractHPOEvaluator):
     model_class = LogisticRegression
 
     def __init__(self, **kwargs) -> None:
@@ -49,11 +49,11 @@ class LogisticRegressionEvaluator(AbstractHPOEvaluator):
             },
             "penalty": {
                 "type": "categorical",
-                "choices": ["l2", "l1"],
+                "choices": ["l2"],
             },
             "solver": {
                 "type": "categorical",
-                "choices": ["lbfgs", "liblinear", "saga"],
+                "choices": ["lbfgs"],
             },
             "max_iter": {
                 "type": "int",
