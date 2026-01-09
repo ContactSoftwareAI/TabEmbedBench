@@ -143,9 +143,15 @@ def run_benchmark(
     logger.info(f"Using {len(models)} embedding model(s)")
     logger.info(f"Using {len(evaluators)} evaluator(s)")
 
-    google_bucket_path = (
-        f"{benchmark_config.gcs_bucket}/{benchmark_config.gcs_filepath}"
-    )
+    if (
+        benchmark_config.gcs_bucket is not None
+        and benchmark_config.gcs_filepath is not None
+    ):
+        google_bucket_path = (
+            f"{benchmark_config.gcs_bucket}/{benchmark_config.gcs_filepath}"
+        )
+    else:
+        google_bucket_path = None
 
     # Run outlier detection benchmark
     if benchmark_config.run_outlier:
