@@ -61,7 +61,7 @@ BENCHMARK_CONFIG = BenchmarkConfig(
     data_dir=DATA_DIR,
     dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
     dataset_separation_configurations_tabpfn_subset_json_path="dataset_separation_tabarena_tabpfn_subset.json",
-    google_bucket=GOOGLE_BUCKET,
+    gcs_filepath=GOOGLE_BUCKET,
 )
 
 
