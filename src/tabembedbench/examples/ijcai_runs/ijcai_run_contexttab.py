@@ -49,7 +49,7 @@ DEBUG = False
 DEBUG = False
 GOOGLE_BUCKET = "bucket_tabdata"
 GCS_DIR = "ijcai"
-DATA_DIR = "sphere_based_model"
+DATA_DIR = "contexttab"
 
 DATASETCONFIG = DatasetConfig(
     adbench_dataset_path="data/adbench_tabular_datasets",
