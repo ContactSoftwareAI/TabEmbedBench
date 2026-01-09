@@ -1,4 +1,4 @@
-"""EuRIPS benchmark runner for evaluating tabular embedding models.
+"""IJCAI benchmark runner for evaluating tabular embedding models.
 
 This module provides functionality to run comprehensive benchmarks on various
 tabular embedding models using multiple evaluation algorithms across different
@@ -6,34 +6,32 @@ datasets. It supports classification, regression, and outlier detection tasks.
 """
 
 import logging
-
 import click
+from tabembedbench.utils.eda_utils import (
+    create_outlier_plots,
+    create_tabarena_plots,
+)
 
 from tabembedbench.benchmark.run_benchmark import (
-    BenchmarkConfig,
-    DatasetConfig,
     run_benchmark,
+    DatasetConfig,
+    BenchmarkConfig,
 )
 from tabembedbench.embedding_models import (
     TabICLEmbedding,
     TableVectorizerEmbedding,
     TabPFNEmbedding,
-    TabStarEmbedding,
-    ConTextTabEmbedding,
+    SphereBasedEmbedding,
 )
-from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
-from tabembedbench.evaluators.knn_regressor import KNNRegressorEvaluator
-from tabembedbench.evaluators.mlp_classifier import MLPClassifierEvaluator
-from tabembedbench.evaluators.mlp_regressor import MLPRegressorEvaluator
 from tabembedbench.evaluators.outlier import (
-    DeepSVDDEvaluator,
     IsolationForestEvaluator,
     LocalOutlierFactorEvaluator,
+    DeepSVDDEvaluator,
 )
-from tabembedbench.utils.eda_utils import (
-    create_outlier_plots,
-    create_tabarena_plots,
-)
+from tabembedbench.evaluators.mlp_classifier import MLPClassifierEvaluator
+from tabembedbench.evaluators.mlp_regressor import MLPRegressorEvaluator
+from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
+from tabembedbench.evaluators.knn_regressor import KNNRegressorEvaluator
 
 logger = logging.getLogger("EuRIPS_Run_Benchmark")
 
@@ -57,20 +55,19 @@ def get_embedding_models(debug=False):
 
     tablevector = TableVectorizerEmbedding()
 
-    # tabpfn_embedder = TabPFNEmbedding(
-    #     num_estimators=5,
-    # )
+    tabpfn_embedder = TabPFNEmbedding(num_estimators=5)
 
-    tabstar_embedder = TabStarEmbedding()
-
-    context_tab_embedder = ConTextTabEmbedding()
+    sphere_model_64 = SphereBasedEmbedding(embed_dim=64)
+    sphere_model_192 = SphereBasedEmbedding(embed_dim=192)
+    sphere_model_512 = SphereBasedEmbedding(embed_dim=512)
 
     embedding_models = [
-        # tabicl_row_embedder,
-        # tabpfn_embedder,
-        # tabstar_embedder,
-        # tablevector,
-        context_tab_embedder,
+        tabicl_row_embedder,
+        tabpfn_embedder,
+        tablevector,
+        sphere_model_64,
+        sphere_model_192,
+        sphere_model_512,
     ]
 
     return embedding_models
@@ -168,7 +165,7 @@ def run_main(
     run_supervised,
     adbench_dataset_path,
     data_dir,
-    bin_edges,
+    bin_edges
 ):
     """
     Runs the main execution flow for the benchmark process, including data configuration,
@@ -201,25 +198,11 @@ def run_main(
     models_to_keep = [embedding_model._name for embedding_model in embedding_models]
 
     evaluators = get_evaluators(debug=debug)
-    order_evaluators_regression = [
-        evaluator._name
-        for evaluator in evaluators
-        if evaluator.task_type == "Supervised Regression"
-    ]
+    order_evaluators_regression = [evaluator._name for evaluator in evaluators if evaluator.task_type=="Supervised Regression"]
     order_evaluators_regression = list(dict.fromkeys(order_evaluators_regression))
-    order_evaluators_classification = [
-        evaluator._name
-        for evaluator in evaluators
-        if evaluator.task_type == "Supervised Classification"
-    ]
-    order_evaluators_classification = list(
-        dict.fromkeys(order_evaluators_classification)
-    )
-    order_evaluators_outlier = [
-        evaluator._name
-        for evaluator in evaluators
-        if evaluator.task_type == "Outlier Detection"
-    ]
+    order_evaluators_classification = [evaluator._name for evaluator in evaluators if evaluator.task_type=="Supervised Classification"]
+    order_evaluators_classification = list(dict.fromkeys(order_evaluators_classification))
+    order_evaluators_outlier = [evaluator._name for evaluator in evaluators if evaluator.task_type=="Outlier Detection"]
     order_evaluators_outlier = list(dict.fromkeys(order_evaluators_outlier))
 
     logger.info(f"Using {len(embedding_models)} embedding model(s)")
@@ -247,10 +230,28 @@ def run_main(
         benchmark_config=benchmark_config,
     )
 
+    if not result_outlier.is_empty():
+        create_outlier_plots(
+            result_outlier,
+            data_path=result_dir,
+            models_to_keep=models_to_keep,
+            algorithm_order=order_evaluators_outlier,
+            bin_edges=bin_edges,
+        )
+
+    if not result_tabarena.is_empty():
+        create_tabarena_plots(
+            result_tabarena,
+            data_path=result_dir,
+            models_to_keep=models_to_keep,
+            algorithm_order_classification=order_evaluators_classification,
+            algorithm_order_regression=order_evaluators_regression,
+        )
+
 
 @click.command()
 @click.option("--debug", is_flag=True, help="Run in debug mode ")
-@click.option("--max-samples", default=10000, help="Upper bound for dataset size")
+@click.option("--max-samples", default=15000, help="Upper bound for dataset size")
 @click.option("--max-features", default=200, help="Upper bound for number of features")
 @click.option(
     "--run-outlier/--no-run-outlier", default=True, help="Run outlier detection"
@@ -297,7 +298,7 @@ def main(
         run_supervised=run_supervised,
         adbench_dataset_path=adbench_data,
         data_dir=data_dir,
-        bin_edges=[0.05, 0.1],
+        bin_edges=[0.05,0.1]
     )
 
 
