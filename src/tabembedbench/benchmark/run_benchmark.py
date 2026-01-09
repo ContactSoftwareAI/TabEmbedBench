@@ -21,7 +21,7 @@ from tabembedbench.benchmark.outlier_benchmark import run_outlier_benchmark
 from tabembedbench.benchmark.tabarena_benchmark import run_tabarena_benchmark
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
-from tabembedbench.utils.logging_utils import setup_unified_logging
+from tabembedbench.utils.logging_utils import setup_unified_logging, upload_logs_to_gcs
 
 
 @dataclass
@@ -123,16 +123,15 @@ def run_benchmark(
     result_dir.mkdir(parents=True, exist_ok=True)
 
     # Setup logging
+    log_file_path = None
     if benchmark_config.save_logs:
         log_dir = result_dir / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
-        setup_unified_logging(
+        log_file_path = setup_unified_logging(
             log_dir=log_dir,
             timestamp=timestamp,
             logging_level=benchmark_config.logging_level,
             save_logs=benchmark_config.save_logs,
-            bucket_name=benchmark_config.gcs_bucket,
-            gcs_path=benchmark_config.gcs_filepath,
         )
 
     logger = logging.getLogger("TabEmbedBench_Main")
@@ -248,6 +247,14 @@ def run_benchmark(
             result_dataset_separation_df = pl.DataFrame()
     else:
         result_dataset_separation_df = pl.DataFrame()
+
+    if benchmark_config.gcs_bucket and log_file_path:
+        logger.info("Uploading logs to Google Cloud Storage...")
+        upload_logs_to_gcs(
+            local_log_file=log_file_path,
+            bucket_name=benchmark_config.gcs_bucket,
+            gcs_path=benchmark_config.gcs_filepath or "",
+        )
 
     logger.info(f"Benchmark completed at {datetime.now()}")
     return (

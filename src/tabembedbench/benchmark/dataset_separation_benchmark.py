@@ -226,7 +226,7 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
         google_bucket: str | None = None,
     ):
         super().__init__(
-            name="Dataset Separation Benchmark",
+            name="TabEmbedBench_DatasetSeparation",
             task_type=CLASSIFICATION_TASKS,
             result_dir=result_dir,
             timestamp=timestamp,

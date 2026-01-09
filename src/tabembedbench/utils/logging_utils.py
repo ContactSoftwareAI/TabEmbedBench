@@ -20,40 +20,12 @@ def neighbors_progress(self, message, *args, **kwargs):
 logging.Logger.neighbors_progress = neighbors_progress
 
 
-class GCSLogHandler(logging.Handler):
-    """Custom logging handler to upload logs to Google Cloud Storage."""
-
-    def __init__(self, bucket_name, gcs_path, local_file):
-        super().__init__()
-        self.bucket_name = bucket_name
-        self.gcs_path = gcs_path
-        self.local_file = local_file
-        self.client = storage.Client()
-
-    def emit(self, record):
-        # We rely on the FileHandler to write to the local file,
-        # then we can trigger an upload. For efficiency in benchmarks,
-        # it's often better to upload once at the end or periodically.
-        pass
-
-    def upload_to_gcs(self):
-        """Uploads the local log file to GCS."""
-        try:
-            bucket = self.client.bucket(self.bucket_name)
-            blob = bucket.blob(self.gcs_path)
-            blob.upload_from_filename(str(self.local_file))
-        except Exception as e:
-            print(f"Failed to upload logs to GCS: {e}")
-
-
 def setup_unified_logging(
     save_logs: bool = True,
     log_dir="log",
     timestamp=timestamp,
     logging_level=logging.INFO,
     capture_warnings=True,
-    bucket_name=None,
-    gcs_path=None,
 ):
     """
     Sets up unified logging for the application.
@@ -81,13 +53,6 @@ def setup_unified_logging(
 
         log_file = log_path / f"benchmark_complete_{timestamp}.log"
         handlers.append(logging.FileHandler(log_file))
-        if bucket_name:
-            log_path_str = str(log_path)
-            gcs_file_path = (
-                f"{gcs_path}/{log_path_str}/benchmark_complete_{timestamp}.log"
-            )
-            gcs_handler = GCSLogHandler(bucket_name, gcs_file_path, log_file)
-            handlers.append(gcs_handler)
 
     logging.basicConfig(
         level=logging.INFO,
@@ -106,12 +71,32 @@ def setup_unified_logging(
 
     outlier_logger = logging.getLogger("TabEmbedBench_Outlier")
     tabarena_logger = logging.getLogger("TabEmbedBench_TabArena")
+    dataset_separation = logging.getLogger("TabEmbedBench_DatasetSeparation")
     main_logger = logging.getLogger("TabEmbedBench_Main")
 
-    for logger in [outlier_logger, tabarena_logger, main_logger]:
+    for logger in [outlier_logger, tabarena_logger, dataset_separation, main_logger]:
         logger.setLevel(logging_level)
 
     return log_file
+
+
+def upload_logs_to_gcs(local_log_file: Path, bucket_name: str, gcs_path: str):
+    """Uploads the local log file to Google Cloud Storage."""
+    if not local_log_file or not local_log_file.exists():
+        return
+
+    try:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        # Construct the full path: e.g., ijcai/logs/benchmark_complete_timestamp.log
+        blob_path = f"{gcs_path}/logs/{local_log_file.name}"
+        blob = bucket.blob(blob_path)
+        blob.upload_from_filename(str(local_log_file))
+        print(f"Successfully uploaded logs to gs://{bucket_name}/{blob_path}")
+    except Exception as e:
+        logging.getLogger("TabEmbedBench_Main").error(
+            f"Failed to upload logs to GCS: {e}"
+        )
 
 
 def get_benchmark_logger(name: str) -> logging.Logger:

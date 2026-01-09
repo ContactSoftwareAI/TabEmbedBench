@@ -17,13 +17,13 @@ from tabembedbench.benchmark.run_benchmark import (
     run_benchmark,
 )
 from tabembedbench.embedding_models import (
+    ConTextTabEmbedding,
     SphereBasedEmbedding,
     TabICLEmbedding,
     TableVectorizerEmbedding,
-    TabStarEmbedding,
-    ConTextTabEmbedding,
     TabPFNEmbedding,
     TabPFNEmbeddingConstantVector,
+    TabStarEmbedding,
 )
 from tabembedbench.evaluators import (
     LogisticRegressionHPOEvaluator,
@@ -46,9 +46,10 @@ from tabembedbench.evaluators.regression import (
 logger = logging.getLogger("IJCAI_Run_Benchmark")
 
 DEBUG = False
-GOOGLE_BUCKET = "bucket_tabdata/ijcai"
-DATA_DIR = "contexttab"
-
+DEBUG = False
+GOOGLE_BUCKET = "bucket_tabdata"
+GCS_DIR = "ijcai"
+DATA_DIR = "sphere_based_model"
 
 DATASETCONFIG = DatasetConfig(
     adbench_dataset_path="data/adbench_tabular_datasets",
@@ -66,7 +67,8 @@ BENCHMARK_CONFIG = BenchmarkConfig(
     data_dir=DATA_DIR,
     dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
     dataset_separation_configurations_tabpfn_subset_json_path="dataset_separation_tabarena_tabpfn_subset.json",
-    google_bucket=GOOGLE_BUCKET,
+    gcs_bucket=GOOGLE_BUCKET,
+    gcs_filepath=GCS_DIR,
 )
 
 
@@ -89,9 +91,7 @@ def get_embedding_models(debug=False):
 
     contexttab_embedding = ConTextTabEmbedding()
 
-    embedding_models = [
-        contexttab_embedding
-    ]
+    embedding_models = [contexttab_embedding]
 
     return embedding_models
 
