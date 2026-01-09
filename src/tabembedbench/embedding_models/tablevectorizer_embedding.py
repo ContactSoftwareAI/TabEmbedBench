@@ -22,12 +22,6 @@ class TableVectorizerEmbedding(AbstractEmbeddingGenerator):
         tablevectorizer (TableVectorizer): The underlying skrub TableVectorizer instance
             that handles the automatic feature transformation.
         _is_fitted (bool): Whether the model has been fitted to data.
-
-    Example:
-        >>> embedding_gen = TableVectorizerEmbedding()
-        >>> train_emb, test_emb, time = embedding_gen.generate_embeddings(
-        ...     X_train, X_test
-        ... )
     """
 
     def __init__(self, **kwargs):

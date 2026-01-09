@@ -139,12 +139,6 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
     References:
         [1] Qu, J. et al. (2025). Tabicl: A tabular foundation model for in-context
             learning on large data. arXiv preprint arXiv:2502.05564.
-
-    Example:
-        >>> embedding_gen = TabICLEmbedding()
-        >>> train_emb, test_emb, time = embedding_gen.generate_embeddings(
-        ...     X_train, X_test
-        ... )
     """
 
     def __init__(self, model_path: str | None = None, device: str | None = None):

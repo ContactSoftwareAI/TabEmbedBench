@@ -508,3 +508,32 @@ class TestAbstractEmbeddingGeneratorEdgeCases:
                 embedding_generator_instance.get_end_to_end_prediction(
                     X_train, y_train, X_test
                 )
+
+    def test_compute_embeddings_for_non_end_to_end_models(
+        self, embedding_generator_instance
+    ):
+        """Test that compute_embeddings works correctly for non-end-to-end models.
+
+        This test ensures that models which are not end-to-end can actually
+        generate embeddings. This catches issues like TabPFNEmbeddingConstantVectorRegression
+        which may throw errors during embedding computation.
+        """
+        if not embedding_generator_instance.is_end_to_end_model:
+            rng = np.random.default_rng(42)
+            X_train = rng.standard_normal(size=(50, 10))
+            X_test = rng.standard_normal(size=(20, 10))
+
+            # This should not raise any errors for properly implemented models
+            train_embeddings, test_embeddings, embedding_metadata = (
+                embedding_generator_instance.generate_embeddings(X_train, X_test)
+            )
+
+            # Verify embeddings are returned with correct shapes
+            assert train_embeddings is not None
+            assert test_embeddings is not None
+            assert len(train_embeddings.shape) == 2
+            assert isinstance(train_embeddings, np.ndarray)
+            assert isinstance(test_embeddings, np.ndarray)
+            assert train_embeddings.shape[0] == X_train.shape[0]
+            assert test_embeddings.shape[0] == X_test.shape[0]
+            assert isinstance(embedding_metadata, dict)
