@@ -203,17 +203,22 @@ def create_descriptive_dataframe(
         pl.DataFrame: A dataframe containing grouped descriptive statistics for the specified
             metric column and additional computed statistics.
     """
-    descriptive_statistic_df = df.group_by(["embedding_model", "algorithm"]).agg(
+    descriptive_statistic_df = df.with_columns(
+        #(pl.col("time_to_compute_embedding") / (pl.col("dataset_size") * pl.col("num_features")))
+        #(pl.col("time_to_compute_embedding") / pl.col("dataset_size"))
+        (pl.col("time_to_compute_embedding"))
+        .alias("normalized_time_to_compute_embedding")
+    ).group_by(["embedding_model", "algorithm"]).agg(
         pl.col(metric_col).mean().alias(f"average_{metric_col}"),
         pl.col(metric_col).std().alias(f"std_{metric_col}"),
         pl.col(metric_col).min().alias(f"min_{metric_col}"),
         pl.col(metric_col).max().alias(f"max_{metric_col}"),
         pl.col(metric_col).median().alias(f"median_{metric_col}"),
-        pl.col("time_to_compute_embedding")
+        pl.col("normalized_time_to_compute_embedding")
         .mean()
         .alias(f"averaged_embedding_compute_time"),
         pl.col("dataset_name").n_unique().alias("num_datasets"),
-    )
+    ).sort(["embedding_model", "algorithm"])
 
     return descriptive_statistic_df
 
@@ -298,6 +303,8 @@ def create_outlier_plots(
             "embedding_model",
             "algorithm_metric",
             "dataset_name",
+            "dataset_size",
+            "num_features",
             "outlier_ratio",
             "time_to_compute_embedding",
         ]
@@ -306,6 +313,8 @@ def create_outlier_plots(
             "algorithm",
             "embedding_model",
             "dataset_name",
+            "dataset_size",
+            "num_features",
             "outlier_ratio",
             "time_to_compute_embedding",
         ]
@@ -413,6 +422,8 @@ def create_tabarena_plots(
             "embedding_model",
             "algorithm_metric",
             "dataset_name",
+            "dataset_size",
+            "num_features",
             "time_to_compute_embedding",
         ]
     else:
@@ -420,6 +431,8 @@ def create_tabarena_plots(
             "algorithm",
             "embedding_model",
             "dataset_name",
+            "dataset_size",
+            "num_features",
             "time_to_compute_embedding",
         ]
 

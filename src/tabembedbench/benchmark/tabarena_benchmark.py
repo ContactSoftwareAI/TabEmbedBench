@@ -1,8 +1,7 @@
 import logging
-from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Tuple
 
 import numpy as np
 import openml
@@ -19,7 +18,7 @@ from sklearn.metrics import (
 from sklearn.preprocessing import LabelEncoder
 
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
-from tabembedbench.benchmark.constants import (
+from tabembedbench.constants import (
     SUPERVISED_BINARY_CLASSIFICATION,
     SUPERVISED_MULTICLASSIFICATION,
     SUPERVISED_REGRESSION,
@@ -29,8 +28,6 @@ from tabembedbench.embedding_models.abstractembedding import (
     AbstractEmbeddingGenerator,
 )
 from tabembedbench.evaluators.abstractevaluator import AbstractEvaluator
-
-TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 class TabArenaBenchmark(AbstractBenchmark):
@@ -46,7 +43,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         tabarena_lite: bool = True,
         exclude_datasets: list[str] | None = None,
         result_dir: str | Path = "result_tabarena",
-        timestamp: str = TIMESTAMP,
+        timestamp: str | None = None,
         logging_level: int = logging.INFO,
         save_result_dataframe: bool = True,
         upper_bound_num_samples: int = 100000,
@@ -320,7 +317,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
     def _get_default_metrics(
         self,
-    ) -> dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
+    ) -> Dict[str, Dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
         """
         Returns default metrics for different supervised learning tasks.
 
@@ -567,7 +564,7 @@ def run_tabarena_benchmark(
     upper_bound_num_features: int = 500,
     result_dir: str | Path = "result_tabarena",
     save_result_dataframe: bool = True,
-    timestamp: str = TIMESTAMP,
+    timestamp: str | None = None,
     run_tabpfn_subset: bool = True,
     openml_cache_dir: str | Path | None = None,
 ) -> pl.DataFrame:

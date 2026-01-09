@@ -1,6 +1,8 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator, Optional
+import os
+import numpy as np
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -44,6 +46,8 @@ class DatasetBenchmark(AbstractBenchmark):
         feature_columns: Optional[list[str]] = None,
         categorical_columns: Optional[list[str]] = None,
         numerical_columns: Optional[list[str]] = None,
+        text_columns: Optional[list[str]] = None,
+        text_filenames: Optional[list[str]] = None,
         test_size: float = 0.2,
         random_state: int = 42,
         dataset_name: str = None,
@@ -51,7 +55,7 @@ class DatasetBenchmark(AbstractBenchmark):
         task_type: str = "Supervised Classification",
         timestamp: str = TIMESTAMP,
         save_result_dataframe: bool = True,
-        upper_bound_num_samples: int = 100000,
+        upper_bound_num_samples: int = 1000000,
         upper_bound_num_features: int = 500,
     ):
         dataset_name = dataset_name if dataset_name else Path(dataset_path).stem
@@ -71,12 +75,14 @@ class DatasetBenchmark(AbstractBenchmark):
         self.feature_columns = feature_columns
         self.categorical_columns = categorical_columns
         self.numerical_columns = numerical_columns
+        self.text_columns = text_columns
+        self.text_filenames = text_filenames
         self.target_column = target_column
         self.test_size = test_size
         self.random_state = random_state
 
     def _load_datasets(self, **kwargs) -> list[pd.DataFrame]:
-        return [pd.read_csv(self.dataset_path)]
+        return [pd.read_csv(self.dataset_path,low_memory=False)]
 
     def _should_skip_dataset(self, dataset, **kwargs) -> tuple[bool, str | None]:
         return False, None
@@ -112,6 +118,14 @@ class DatasetBenchmark(AbstractBenchmark):
             label_encoder = LabelEncoder()
             y_train = label_encoder.fit_transform(y_train)
             y_test = label_encoder.transform(y_test)
+            if max(y_train)>1 or max(y_test)>1:
+                num_classes = max(max(y_train),max(y_test))+1
+                new_y_test = []
+                for i in range(len(y_test)):
+                    y_temp = np.zeros(num_classes,dtype = int)
+                    y_temp[y_test[i]] = 1
+                    new_y_test.append(y_temp)
+                y_test = np.array(new_y_test)
 
         yield {
             "X": None,
@@ -126,6 +140,8 @@ class DatasetBenchmark(AbstractBenchmark):
             "metadata": {
                 "task_type": self.task_type,
                 "categorical_column_names": self.categorical_columns,
+                "text_column_names": self.text_columns,
+                "text_column_paths": [os.path.join(self.result_dir,f) for f in self.text_filenames],
                 "numerical_columns": self.numerical_columns,
             },
         }
@@ -133,26 +149,26 @@ class DatasetBenchmark(AbstractBenchmark):
     def _get_benchmark_name(self) -> str:
         return f"Run_Dataset_{self.dataset_name}"
 
-    def _get_evaluator_prediction(
+    def _evaluate(
         self,
         embeddings: tuple,
         evaluator: AbstractEvaluator,
-        dataset_configurations: dict,
+        data_split: dict,
     ) -> dict:
         """Evaluate embeddings for classification or regression.
 
         Args:
             embeddings: Tuple of (train_embeddings, test_embeddings, compute_time).
             evaluator: The evaluator to use.
-            dataset_configurations: Dictionary with data and metadata.
+            data_split: Dictionary with data and metadata.
 
         Returns:
             Dictionary containing evaluation results.
         """
         train_embeddings, test_embeddings, compute_time = embeddings
-        y_train = dataset_configurations["y_train"]
-        y_test = dataset_configurations["y_test"]
-        task_type = dataset_configurations["metadata"]["task_type"]
+        y_train = data_split["y_train"]
+        y_test = data_split["y_test"]
+        task_type = data_split["metadata"]["task_type"]
 
         # Train evaluator
         prediction_train, _ = evaluator.get_prediction(
@@ -169,9 +185,9 @@ class DatasetBenchmark(AbstractBenchmark):
 
         # Build result dictionary
         result_dict = {
-            "dataset_name": [dataset_configurations["dataset_name"]],
-            "dataset_size": [dataset_configurations["dataset_size"]],
-            "num_features": [dataset_configurations["num_features"]],
+            "dataset_name": [data_split["dataset_name"]],
+            "dataset_size": [data_split["dataset_size"]],
+            "num_features": [data_split["num_features"]],
             "embed_dim": [train_embeddings.shape[-1]],
             "time_to_compute_embedding": [compute_time],
             "algorithm": [evaluator._name],
@@ -190,8 +206,8 @@ class DatasetBenchmark(AbstractBenchmark):
                 result_dict["task"] = ["classification"]
                 result_dict["classification_type"] = ["binary"]
             else:
-                auc_score = roc_auc_score(y_test, test_prediction, multi_class="ovr")
-                log_loss_score = log_loss(y_test, test_prediction)
+                auc_score = roc_auc_score(y_true=y_test, y_score=test_prediction, multi_class="ovr", average="weighted")
+                log_loss_score = log_loss(y_true=y_test, y_pred=test_prediction)
                 result_dict["task"] = ["classification"]
                 result_dict["classification_type"] = ["multiclass"]
                 result_dict["log_loss_score"] = [log_loss_score]
@@ -206,24 +222,53 @@ class DatasetBenchmark(AbstractBenchmark):
 
 
 if __name__ == "__main__":
-    from tabembedbench.examples.eurips_run import get_evaluators, get_embedding_models
+    from tabembedbench.examples.sphere_model_run import get_evaluators, get_embedding_models
 
-    embedding_models = get_embedding_models(debug=True)
-    evaluators = get_evaluators(debug=True)
+    embedding_models = get_embedding_models(debug=False)
+    evaluators = get_evaluators(debug=False)
 
-    csv_path = ""
-    target_column = ""
+    #csv_path = r"C:\Users\arf\data.tabdata-testsets\Titanic\titanic_split.csv"
+    #target_column = "Survived"
+    #task_type = "Supervised Classification"
+    #categorical_columns = ["Pclass","Sex","Embarked"]
+    #numerical_columns = ["Age","SibSp","Parch","Fare"]
+    #text_columns = []
+    #text_filenames = []
+
+    #csv_path = r"C:\Users\arf\data.tabdata-testsets\Rossmann\rossmann_normalized.csv"
+    #target_column = "NormalizedSales"
+    #task_type = "Supervised Regression"
+    #categorical_columns = ["Store","Promo","StateHoliday","SchoolHoliday"]
+    #numerical_columns = ["DayOfWeek","Date"]
+    #text_columns = []
+    #text_filenames = []
+
+    csv_path = r"C:\Users\arf\data.tabdata-testsets\WSV\ZEICHNUNG_cleaned.csv"
+    target_column = 'WSV_Z_OBTEIL_NR'
     task_type = "Supervised Classification"
-    categorical_columns = []
+    categorical_columns = ['Z_STATUS', 'ERZEUG_SYSTEM', 'EV_LOCATION', 'CDB_SITE_ID']
     numerical_columns = []
+    text_columns = []
+    text_filenames = []
+    #text_columns = ["WSV_Z_EINZEL"]
+    #text_filenames = [rf"{i}.pkl" for i in text_columns]
+
+    #csv_path = r"C:\Users\arf\data.tabdata-testsets\simple\simpleWithText_Classification.csv"
+    #target_column = 'Grade'
+    #task_type = "Supervised Classification"
+    #categorical_columns = ['Pupil', 'Subject', 'Teacher']
+    #numerical_columns = []
+    #text_columns = ["Comment"]
+    #text_filenames = [rf"{i}.pkl" for i in text_columns]
 
     dataset_benchmark = DatasetBenchmark(
         dataset_path=csv_path,
         target_column=target_column,
         categorical_columns=categorical_columns,
         numerical_columns=numerical_columns,
-        feature_columns=categorical_columns+numerical_columns,
-        feature_columns=feature_columns if len(feature_columns) > 0 else None,
+        text_columns=text_columns,
+        text_filenames=text_filenames,
+        feature_columns=categorical_columns+numerical_columns+text_columns,
         task_type=task_type,
     )
 

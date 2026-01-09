@@ -6,34 +6,32 @@ datasets. It supports classification, regression, and outlier detection tasks.
 """
 
 import logging
-
 import click
+from tabembedbench.utils.eda_utils import (
+    create_outlier_plots,
+    create_tabarena_plots,
+)
 
 from tabembedbench.benchmark.run_benchmark import (
-    BenchmarkConfig,
-    DatasetConfig,
     run_benchmark,
+    DatasetConfig,
+    BenchmarkConfig,
 )
 from tabembedbench.embedding_models import (
     TabICLEmbedding,
     TableVectorizerEmbedding,
     TabPFNEmbedding,
-    TabStarEmbedding,
-    ConTextTabEmbedding,
-)
-from tabembedbench.evaluators.classification.knn_classifier import (
-    KNNClassifierEvaluator,
-)
-from tabembedbench.evaluators.classification.mlp_classifier import (
-    MLPClassifierEvaluator,
+    SphereBasedEmbedding
 )
 from tabembedbench.evaluators.outlier import (
-    DeepSVDDEvaluator,
     IsolationForestEvaluator,
     LocalOutlierFactorEvaluator,
+    DeepSVDDEvaluator,
 )
-from tabembedbench.evaluators.regression.knn_regressor import KNNRegressorEvaluator
-from tabembedbench.evaluators.regression.mlp_regressor import MLPRegressorEvaluator
+from tabembedbench.evaluators.mlp_classifier import MLPClassifierEvaluator
+from tabembedbench.evaluators.mlp_regressor import MLPRegressorEvaluator
+from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
+from tabembedbench.evaluators.knn_regressor import KNNRegressorEvaluator
 
 logger = logging.getLogger("EuRIPS_Run_Benchmark")
 
@@ -53,21 +51,37 @@ def get_embedding_models(debug=False):
     if debug:
         return [TableVectorizerEmbedding()]
 
-    tabicl_row_embedder = TabICLEmbedding()
+    #tabicl_row_embedder = TabICLEmbedding()
 
-    tablevector = TableVectorizerEmbedding()
+    #tablevector = TableVectorizerEmbedding()
 
-    # tabpfn_embedder = TabPFNEmbedding(
-    #     num_estimators=5,
-    # )
+    #tabpfn_embedder = TabPFNEmbedding(
+    #    num_estimators=5,
+    #)
 
-    # tabstar_embedder = TabStarEmbedding()
+    #sphere_model_2 = SphereBasedEmbedding(embed_dim=2)
+    #sphere_model_4 = SphereBasedEmbedding(embed_dim=4)
+    #sphere_model_8 = SphereBasedEmbedding(embed_dim=8)
+    #sphere_model_16 = SphereBasedEmbedding(embed_dim=16)
+    #sphere_model_32 = SphereBasedEmbedding(embed_dim=32)
+    #sphere_model_64 = SphereBasedEmbedding(embed_dim=64)
+    #sphere_model_192 = SphereBasedEmbedding(embed_dim=192)
+    sphere_model_256 = SphereBasedEmbedding(embed_dim=256)
+    #sphere_model_512 = SphereBasedEmbedding(embed_dim=512)
 
     embedding_models = [
-        tabicl_row_embedder,
-        # tabpfn_embedder,
-        # tabstar_embedder,
-        tablevector,
+        #tabicl_row_embedder,
+        #tabpfn_embedder,
+        #tablevector,
+        #sphere_model_2,
+        #sphere_model_4,
+        #sphere_model_8,
+        #sphere_model_16,
+        #sphere_model_32,
+        #sphere_model_64,
+        #sphere_model_192,
+        sphere_model_256,
+        #sphere_model_512
     ]
 
     return embedding_models
@@ -165,7 +179,7 @@ def run_main(
     run_supervised,
     adbench_dataset_path,
     data_dir,
-    bin_edges,
+    bin_edges
 ):
     """
     Runs the main execution flow for the benchmark process, including data configuration,
@@ -181,7 +195,6 @@ def run_main(
         run_supervised (bool): Specifies whether to run the supervised evaluation.
         adbench_dataset_path (str): Path to the ADBench dataset directory.
         data_dir (str): Directory where processed data and results will be stored.
-        bin_edges (list): List of floats in (0,1) for grouping the results with respect to the outlier ratio.
 
     Raises:
         ValueError: If any configuration or dataset parameters are invalid.
@@ -198,25 +211,11 @@ def run_main(
     models_to_keep = [embedding_model._name for embedding_model in embedding_models]
 
     evaluators = get_evaluators(debug=debug)
-    order_evaluators_regression = [
-        evaluator._name
-        for evaluator in evaluators
-        if evaluator.task_type == "Supervised Regression"
-    ]
+    order_evaluators_regression = [evaluator._name for evaluator in evaluators if evaluator.task_type=="Supervised Regression"]
     order_evaluators_regression = list(dict.fromkeys(order_evaluators_regression))
-    order_evaluators_classification = [
-        evaluator._name
-        for evaluator in evaluators
-        if evaluator.task_type == "Supervised Classification"
-    ]
-    order_evaluators_classification = list(
-        dict.fromkeys(order_evaluators_classification)
-    )
-    order_evaluators_outlier = [
-        evaluator._name
-        for evaluator in evaluators
-        if evaluator.task_type == "Outlier Detection"
-    ]
+    order_evaluators_classification = [evaluator._name for evaluator in evaluators if evaluator.task_type=="Supervised Classification"]
+    order_evaluators_classification = list(dict.fromkeys(order_evaluators_classification))
+    order_evaluators_outlier = [evaluator._name for evaluator in evaluators if evaluator.task_type=="Outlier Detection"]
     order_evaluators_outlier = list(dict.fromkeys(order_evaluators_outlier))
 
     logger.info(f"Using {len(embedding_models)} embedding model(s)")
@@ -225,6 +224,7 @@ def run_main(
     dataset_config = DatasetConfig(
         adbench_dataset_path=adbench_dataset_path,
         exclude_adbench_datasets=[],
+        exclude_tabarena_datasets=[],
         upper_bound_dataset_size=max_samples,
         upper_bound_num_features=max_features,
     )
@@ -243,6 +243,25 @@ def run_main(
         dataset_config=dataset_config,
         benchmark_config=benchmark_config,
     )
+
+    if not result_outlier.is_empty():
+        create_outlier_plots(
+            result_outlier,
+            data_path=result_dir,
+            models_to_keep=models_to_keep,
+            algorithm_order=order_evaluators_outlier,
+            bin_edges=bin_edges,
+        )
+
+    if not result_tabarena.is_empty():
+        create_tabarena_plots(
+            result_tabarena,
+            data_path=result_dir,
+            models_to_keep=models_to_keep,
+            algorithm_order_classification=order_evaluators_classification,
+            algorithm_order_regression=order_evaluators_regression,
+        )
+
 
 
 @click.command()
@@ -294,7 +313,7 @@ def main(
         run_supervised=run_supervised,
         adbench_dataset_path=adbench_data,
         data_dir=data_dir,
-        bin_edges=[0.05, 0.1],
+        bin_edges=[0.05,0.1]
     )
 
 

@@ -1,4 +1,5 @@
 import logging
+import os
 import tracemalloc
 from pathlib import Path
 from typing import Any, Dict, Tuple
@@ -36,6 +37,50 @@ def save_result_df(
 
     result_df.write_parquet(parquet_file)
     result_df.write_csv(csv_file)
+
+
+def save_to_google_cloud_storage(
+    result_df: pl.DataFrame,
+    output_path: str,
+    bucket_name: str,
+    benchmark_name: str,
+    timestamp: str,
+) -> None:
+    """
+    Saves the given DataFrame to Google Cloud Storage in both Parquet and CSV formats.
+
+    This function writes the provided `result_df` as a Parquet file and a CSV file
+    to the specified Google Cloud Storage bucket and path. If the bucket name is
+    not explicitly provided, it attempts to retrieve the bucket name from the
+    environment variable `GCS_BUCKET_NAME`. Any errors during the process will be
+    logged.
+
+    Args:
+        result_df: A Polars DataFrame to be written to Google Cloud Storage.
+        output_path: The relative directory path in the GCS bucket where the files
+            will be stored.
+        bucket_name: The name of the Google Cloud Storage bucket. If not provided,
+            it will default to the value of the environment variable
+            `GCS_BUCKET_NAME`.
+        benchmark_name: A unique identifier to include in the file names.
+        timestamp: A timestamp string to append to the file names.
+
+    """
+    try:
+        bucket_name = bucket_name or os.getenv("GCS_BUCKET_NAME")
+
+        if not bucket_name:
+            logging.error("No GCS bucket name provided.")
+            return
+
+        gcs_path = (
+            f"gs://{bucket_name}/{output_path}/result_{benchmark_name}_{timestamp}"
+        )
+
+        result_df.write_parquet(gcs_path + ".parquet")
+        result_df.write_csv(gcs_path + ".csv")
+    except Exception as e:
+        logging.error(e)
 
 
 class MemoryTracker:

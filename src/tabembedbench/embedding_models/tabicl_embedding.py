@@ -1,12 +1,12 @@
+import gc
 import inspect
 from pathlib import Path
 from typing import Tuple, Union
-import gc
 
 import numpy as np
+import pandas as pd
 import torch
 from huggingface_hub import hf_hub_download
-import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
@@ -49,8 +49,8 @@ class TabICLRowEmbedding(nn.Module):
             processes column representations to extract row-level embeddings.
 
     References:
-    [1] Qu, J. et al. (2025). Tabicl: A tabular foundation model for in-context
-        learning on large data. arXiv preprint arXiv:2502.05564.
+    [1] Qu, J. et al. (2025). "Tabicl: A tabular foundation model for in-context
+        learning on large data." arXiv preprint arXiv:2502.05564.
     """
 
     def __init__(
