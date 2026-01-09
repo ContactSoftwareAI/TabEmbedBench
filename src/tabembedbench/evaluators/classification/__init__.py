@@ -3,7 +3,7 @@ from tabembedbench.evaluators.classification.knn_classifier import (
     KNNClassifierEvaluatorHPO,
 )
 from tabembedbench.evaluators.classification.logistic_regression import (
-    LogisticRegressionEvaluator,
+    LogisticRegressionHPOEvaluator,
 )
 from tabembedbench.evaluators.classification.mlp_classifier import (
     MLPClassifierEvaluator,
@@ -14,7 +14,7 @@ from tabembedbench.evaluators.classification.svm_classifier import (
 
 __all__ = [
     "SVMClassifierEvaluator",
-    "LogisticRegressionEvaluator",
+    "LogisticRegressionHPOEvaluator",
     "KNNClassifierEvaluator",
     "KNNClassifierEvaluatorHPO",
     "MLPClassifierEvaluator",
