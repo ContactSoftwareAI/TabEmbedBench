@@ -270,9 +270,7 @@ class AbstractBenchmark(ABC):
         )
         embedding_metadata.update(dataset_metadata)
         self._embedding_metadata_buffer.append(embedding_metadata)
-        self._save_embedding_metadata(
-            dataframe_name=embedding_metadata.get("embedding_model", "Unknown")
-        )
+        self._save_embedding_metadata(dataframe_name="embedding_metadata")
         return None
 
     def _compute_metrics(
@@ -348,6 +346,7 @@ class AbstractBenchmark(ABC):
             raise
 
         for evaluator in evaluators:
+            current_result = result_row_dict.copy()
             if not self._is_compatible(evaluator, dataset_metadata.get("task_type")):
                 self.logger.debug(
                     f"{logger_prefix} - Skipping evaluator {evaluator.name} is not compatible with {self.task_type}. Skipping..."
@@ -366,13 +365,13 @@ class AbstractBenchmark(ABC):
                 y_pred=prediction,
                 task_type=dataset_metadata.get("task_type"),
             )
-            result_row_dict["algorithm"] = evaluator.name
-            result_row_dict.update(metric_scores)
-            result_row_dict.update(evaluator.get_parameters())
+            current_result["algorithm"] = evaluator.name
+            current_result.update(metric_scores)
+            current_result.update(evaluator.get_parameters())
 
             evaluator.reset_evaluator()
             self._cleanup_gpu_cache()
-            self._results_buffer.append(result_row_dict)
+            self._results_buffer.append(current_result)
 
         # Save intermediate results after each model
         self._save_results()
