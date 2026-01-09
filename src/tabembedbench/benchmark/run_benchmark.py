@@ -131,6 +131,8 @@ def run_benchmark(
             timestamp=timestamp,
             logging_level=benchmark_config.logging_level,
             save_logs=benchmark_config.save_logs,
+            bucket_name=benchmark_config.gcs_bucket,
+            gcs_path=benchmark_config.gcs_filepath,
         )
 
     logger = logging.getLogger("TabEmbedBench_Main")
