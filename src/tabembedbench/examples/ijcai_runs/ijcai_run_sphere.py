@@ -24,6 +24,7 @@ from tabembedbench.embedding_models import (
     TabPFNEmbeddingConstantVector,
 )
 from tabembedbench.evaluators import (
+    KNNClassifierEvaluatorHPO,
     LogisticRegressionHPOEvaluator,
     SVMClassifierEvaluator,
 )
@@ -177,6 +178,8 @@ def get_evaluators(debug=False):
     evaluator_algorithms.extend(
         [
             LogisticRegressionHPOEvaluator(),
+            KNNClassifierEvaluatorHPO(),
+            SVMClassifierEvaluator(),
             MLPRegressorEvaluator(),
             MLPClassifierEvaluator(),
             deep_svdd_dynamic,
