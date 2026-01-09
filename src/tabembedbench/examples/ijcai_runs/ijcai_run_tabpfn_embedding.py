@@ -40,7 +40,7 @@ from tabembedbench.evaluators.regression import (
 
 logger = logging.getLogger("IJCAI_Run_Benchmark")
 
-DEBUG = True
+DEBUG = False
 GOOGLE_BUCKET = "bucket_tabdata/ijcai"
 DATA_DIR = "tabpfn_embedding"
 
@@ -59,8 +59,8 @@ BENCHMARK_CONFIG = BenchmarkConfig(
     run_dataset_separation=False,
     run_dataset_tabpfn_separation=True,
     data_dir=DATA_DIR,
-    dataset_separation_configurations_json_path="/Users/lkl/PycharmProjects/TabEmbedBench/src/tabembedbench/examples/ijcai_runs/dataset_separation_tabarena.json",
-    dataset_separation_configurations_tabpfn_subset_json_path="/Users/lkl/PycharmProjects/TabEmbedBench/src/tabembedbench/examples/ijcai_runs/dataset_separation_tabarena_tabpfn_subset.json",
+    dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
+    dataset_separation_configurations_tabpfn_subset_json_path="dataset_separation_tabarena_tabpfn_subset.json",
     google_bucket=GOOGLE_BUCKET,
 )
 

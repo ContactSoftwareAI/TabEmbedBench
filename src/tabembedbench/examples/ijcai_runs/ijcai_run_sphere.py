@@ -43,27 +43,27 @@ from tabembedbench.evaluators.regression import (
 
 logger = logging.getLogger("IJCAI_Run_Benchmark")
 
-DEBUG = True
+DEBUG = False
 GOOGLE_BUCKET = "bucket_tabdata/ijcai"
 DATA_DIR = "sphere_based_model"
 
 
 DATASETCONFIG = DatasetConfig(
-    adbench_dataset_path="/Users/lkl/PycharmProjects/TabEmbedBench/data/adbench_tabular_datasets",
+    adbench_dataset_path="/data/adbench_tabular_datasets",
     exclude_adbench_datasets=[],
-    upper_bound_dataset_size=1000,
-    upper_bound_num_features=200,
+    upper_bound_dataset_size=100000,
+    upper_bound_num_features=500,
 )
 
 
 BENCHMARK_CONFIG = BenchmarkConfig(
     run_outlier=False,
-    run_tabarena=True,
+    run_tabarena=False,
     run_dataset_separation=False,
-    run_dataset_tabpfn_separation=False,
+    run_dataset_tabpfn_separation=True,
     data_dir=DATA_DIR,
-    dataset_separation_configurations_json_path="/Users/lkl/PycharmProjects/TabEmbedBench/src/tabembedbench/examples/ijcai_runs/dataset_separation_tabarena.json",
-    dataset_separation_configurations_tabpfn_subset_json_path="/Users/lkl/PycharmProjects/TabEmbedBench/src/tabembedbench/examples/ijcai_runs/dataset_separation_tabarena_tabpfn_subset.json",
+    dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
+    dataset_separation_configurations_tabpfn_subset_json_path="dataset_separation_tabarena_tabpfn_subset.json",
     google_bucket=GOOGLE_BUCKET,
 )
 
