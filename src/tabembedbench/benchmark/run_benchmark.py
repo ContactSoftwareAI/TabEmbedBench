@@ -143,6 +143,10 @@ def run_benchmark(
     logger.info(f"Using {len(models)} embedding model(s)")
     logger.info(f"Using {len(evaluators)} evaluator(s)")
 
+    google_bucket_path = (
+        f"{benchmark_config.gcs_bucket}/{benchmark_config.gcs_filepath}"
+    )
+
     # Run outlier detection benchmark
     if benchmark_config.run_outlier:
         logger.info("Running outlier detection benchmark...")
@@ -156,7 +160,7 @@ def run_benchmark(
                 upper_bound_num_features=dataset_config.upper_bound_num_features,
                 result_dir=result_dir,
                 timestamp=timestamp,
-                google_bucket=benchmark_config.gcs_filepath,
+                google_bucket=google_bucket_path,
             )
             _cleanup_models(models, logger)
         except Exception as e:
@@ -180,7 +184,7 @@ def run_benchmark(
                 timestamp=timestamp,
                 result_dir=result_dir,
                 run_tabpfn_subset=benchmark_config.run_tabpfn_subset,
-                google_bucket=benchmark_config.gcs_filepath,
+                google_bucket=google_bucket_path,
             )
             _cleanup_models(models, logger)
         except Exception as e:
@@ -206,7 +210,7 @@ def run_benchmark(
                 result_dir=result_dir,
                 use_tabpfn_subset=benchmark_config.run_tabpfn_subset,
                 dataset_configurations_json_path=benchmark_config.dataset_separation_configurations_tabpfn_subset_json_path,
-                google_bucket=benchmark_config.gcs_filepath,
+                google_bucket=google_bucket_path,
             )
             _cleanup_models(models, logger)
         except Exception as e:
@@ -228,7 +232,7 @@ def run_benchmark(
                 result_dir=result_dir,
                 use_tabpfn_subset=benchmark_config.run_tabpfn_subset,
                 dataset_configurations_json_path=benchmark_config.dataset_separation_configurations_json_path,
-                google_bucket=benchmark_config.gcs_filepath,
+                google_bucket=google_bucket_path,
             )
             _cleanup_models(models, logger)
         except Exception as e:
