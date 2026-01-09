@@ -1,6 +1,6 @@
 import numpy as np
-import polars as pl
 import pandas as pd
+import polars as pl
 from sklearn.base import TransformerMixin
 
 from tabembedbench.embedding_models.abstractembedding import AbstractEmbeddingGenerator
@@ -21,9 +21,7 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
         n_cols (int | None): Number of columns in the fitted data.
     """
 
-    def __init__(
-        self, embed_dim: int
-    ) -> None:
+    def __init__(self, embed_dim: int) -> None:
         """Initialize the sphere-based embedding generator.
 
         Args:
@@ -47,7 +45,6 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
         text_indices: list[int] = [],
         **kwargs,
     ) -> pd.DataFrame:
-
         """Preprocess input data. Will transform the data to the common type pd.DataFrame for further processing.
 
         Args:
@@ -81,13 +78,14 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
                 else:
                     column_names.append(f"numerical_{i}")
                     # Ensure it's float for NaN handling
-                    numeric_col_series = pd.to_numeric(col_series, errors='coerce').astype(float)
+                    numeric_col_series = pd.to_numeric(
+                        col_series, errors="coerce"
+                    ).astype(float)
 
                     # Handle inf/-inf by replacing them with NaN
                     numeric_col_series.replace([np.inf, -np.inf], np.nan, inplace=True)
 
                     temp_data_list.append(numeric_col_series)
-
 
             processed_df = pd.concat(temp_data_list, axis=1)
             processed_df.columns = column_names
@@ -104,9 +102,13 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
                     processed_cols[col_name] = col_series
                 else:
                     if pd.api.types.is_numeric_dtype(dtype):
-                        processed_cols[col_name] = col_series.replace([np.inf, -np.inf], np.nan)
+                        processed_cols[col_name] = col_series.replace(
+                            [np.inf, -np.inf], np.nan
+                        )
                     elif pd.api.types.is_datetime64_any_dtype(dtype):
-                        processed_cols[col_name] = (col_series.astype(np.int64) // 10 ** 9).astype(float)
+                        processed_cols[col_name] = (
+                            col_series.astype(np.int64) // 10**9
+                        ).astype(float)
                     else:
                         try:
                             processed_cols[col_name] = col_series.astype(float)
@@ -133,7 +135,11 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
                         col_series.replace([np.inf, -np.inf], np.nan, inplace=True)
                         processed_pd_dfs.append(col_series.to_frame())
                     elif pd.api.types.is_datetime64_any_dtype(dtype):
-                        processed_pd_dfs.append((col_series.astype(np.int64) // 10 ** 9).astype(float).to_frame())
+                        processed_pd_dfs.append(
+                            (col_series.astype(np.int64) // 10**9)
+                            .astype(float)
+                            .to_frame()
+                        )
                     else:
                         try:
                             processed_pd_dfs.append(col_series.astype(float).to_frame())
@@ -169,8 +175,7 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
         """
         if categorical_column_names is None:
             categorical_column_names = []
-        self.model.fit(data,
-                       categorical_column_names=categorical_column_names)
+        self.model.fit(data, categorical_column_names=categorical_column_names)
 
     def _compute_embeddings(
         self,
@@ -189,7 +194,11 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
             np.ndarray: Embeddings of shape (n_samples, embed_dim).
         """
         embeddings_train = self.model.transform(X_train_preprocessed)
-        embeddings_test = None if X_test_preprocessed is None else self.model.transform(X_test_preprocessed)
+        embeddings_test = (
+            None
+            if X_test_preprocessed is None
+            else self.model.transform(X_test_preprocessed)
+        )
 
         return embeddings_train, embeddings_test
 
@@ -216,9 +225,7 @@ class SphereModel(TransformerMixin):
         n_cols (int | None): Number of columns in the fitted data.
     """
 
-    def __init__(
-        self, embed_dim: int
-    ) -> None:
+    def __init__(self, embed_dim: int) -> None:
         """Initialize the sphere-based embedding generator.
 
         Args:
@@ -226,7 +233,7 @@ class SphereModel(TransformerMixin):
         """
         super()
         self.embed_dim = embed_dim
-        #self.point_generator = SobolPointGenerator(d_internal=self.embed_dim-1)
+        # self.point_generator = SobolPointGenerator(d_internal=self.embed_dim-1)
         self.categorical_column_names = None
         self.column_properties = {}
         self.n_cols = None
@@ -259,21 +266,28 @@ class SphereModel(TransformerMixin):
                 category_embeddings = {}
 
                 for category in unique_categories:
-                    category_embeddings[category] = new_point_on_unit_sphere(self.embed_dim)
-                    #category_embeddings[category] = new_point(self.embed_dim)
+                    category_embeddings[category] = new_point_on_unit_sphere(
+                        self.embed_dim
+                    )
+                    # category_embeddings[category] = new_point(self.embed_dim)
 
                 self.column_properties[col] = category_embeddings
             else:
                 point = new_point_on_unit_sphere(self.embed_dim)
                 vec = np.zeros(self.embed_dim)
                 for j in range(int(np.floor(self.embed_dim / 2))):
-                    vec[2*j] = point[2*j+1]
-                    vec[2*j+1] = -point[2*j]
+                    vec[2 * j] = point[2 * j + 1]
+                    vec[2 * j + 1] = -point[2 * j]
                 vec /= np.linalg.norm(vec)
-                col_min = np.nanmin(column_data)
-                col_max = np.nanmax(column_data)
-                #self.column_properties.append([point,vec,col_min, col_max])
-                self.column_properties[col] = {'point': point, 'vec': vec, 'min_value': col_min, 'max_value': col_max}
+                col_min = float(np.nanmin(column_data))
+                col_max = float(np.nanmax(column_data))
+                # self.column_properties.append([point,vec,col_min, col_max])
+                self.column_properties[col] = {
+                    "point": point,
+                    "vec": vec,
+                    "min_value": col_min,
+                    "max_value": col_max,
+                }
 
     def transform(self, data: pd.DataFrame) -> np.ndarray:
         """Transforms input data into embeddings using appropriate methods for categorical and
@@ -305,18 +319,18 @@ class SphereModel(TransformerMixin):
             if col in self.categorical_column_names:
                 col_embedding = self._embed_categorical_column(column_data, col)
             else:
-                col_embedding = self._embed_numerical_column(column_data.to_numpy(), col)
+                col_embedding = self._embed_numerical_column(
+                    column_data.to_numpy(), col
+                )
 
             column_embeddings.append(col_embedding)
 
-        row_embeddings = np.mean(np.stack(np.array(column_embeddings),axis=0),axis=0)
-        #row_embeddings = np.concatenate(column_embeddings,axis=1)
+        row_embeddings = np.mean(np.stack(np.array(column_embeddings), axis=0), axis=0)
+        # row_embeddings = np.concatenate(column_embeddings,axis=1)
 
         return row_embeddings
 
-    def _embed_numerical_column(
-        self, column_data: np.ndarray, col: str
-    ) -> np.ndarray:
+    def _embed_numerical_column(self, column_data: np.ndarray, col: str) -> np.ndarray:
         """Embed a numerical column onto a randomly chosen great circle of the unit
         sphere in the embedding space.
 
@@ -327,21 +341,23 @@ class SphereModel(TransformerMixin):
         Returns:
             np.ndarray: Embedded values of shape (len(column_data), embed_dim).
         """
-        point = self.column_properties[col]['point'].reshape([1,self.embed_dim])
-        vec = self.column_properties[col]['vec'].reshape([1,self.embed_dim])
-        col_min = self.column_properties[col]['min_value']
-        col_max = self.column_properties[col]['max_value']
+        point = self.column_properties[col]["point"].reshape([1, self.embed_dim])
+        vec = self.column_properties[col]["vec"].reshape([1, self.embed_dim])
+        col_min = self.column_properties[col]["min_value"]
+        col_max = self.column_properties[col]["max_value"]
         col_range = col_max - col_min
 
-        alpha = (np.pi * (0.8 * (column_data - col_min) / col_range + 0.1)).reshape([len(column_data),1])
+        alpha = (np.pi * (0.8 * (column_data - col_min) / col_range + 0.1)).reshape(
+            [len(column_data), 1]
+        )
         embeddings = np.sin(alpha) * point + np.cos(alpha) * vec
-        embeddings[np.argwhere(np.isnan(column_data))] = np.zeros(self.embed_dim,dtype=float)
+        embeddings[np.argwhere(np.isnan(column_data))] = np.zeros(
+            self.embed_dim, dtype=float
+        )
 
-        return np.array(embeddings,dtype=float)
+        return np.array(embeddings, dtype=float)
 
-    def _embed_categorical_column(
-        self, column_data: pd.Series, col: str
-    ) -> np.ndarray:
+    def _embed_categorical_column(self, column_data: pd.Series, col: str) -> np.ndarray:
         """
         Embed a categorical column into the embedding space.
 
@@ -367,16 +383,18 @@ class SphereModel(TransformerMixin):
         unique_categories = column_data.dropna().unique()
         for value in unique_categories:
             if value not in unique_category_embeddings.keys():
-                unique_category_embeddings[value] = new_point_on_unit_sphere(self.embed_dim)
+                unique_category_embeddings[value] = new_point_on_unit_sphere(
+                    self.embed_dim
+                )
 
-        embeddings = np.empty((len(column_data), self.embed_dim),dtype=float)
+        embeddings = np.empty((len(column_data), self.embed_dim), dtype=float)
         for i, value in enumerate(column_data):
             if pd.isna(value):
-                embeddings[i, :] = np.zeros(self.embed_dim,dtype=float)
+                embeddings[i, :] = np.zeros(self.embed_dim, dtype=float)
             else:
                 embeddings[i, :] = unique_category_embeddings[value]
 
-        return np.array(embeddings,dtype=float)
+        return np.array(embeddings, dtype=float)
 
 
 def new_point_on_unit_sphere(d: int):
@@ -390,4 +408,4 @@ def new_point_on_unit_sphere(d: int):
     while norm < 1e-10:
         candidate_point = np.float32(np.random.randn(d))
         norm = np.linalg.norm(candidate_point)
-    return candidate_point/norm
+    return candidate_point / norm

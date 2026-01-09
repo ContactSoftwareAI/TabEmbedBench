@@ -78,6 +78,9 @@ def save_to_google_cloud_storage(
 
     """
     try:
+        # Import gcsfs to enable GCS support in Polars
+        import gcsfs  # noqa: F401
+
         if isinstance(output_path, Path):
             output_path = str(output_path)
 
@@ -87,14 +90,28 @@ def save_to_google_cloud_storage(
             logging.error("No GCS bucket name provided.")
             return
 
-        gcs_path = (
+        # Construct GCS paths
+        gcs_base_path = (
             f"gs://{bucket_name}/{output_path}/result_{dataframe_name}_{timestamp}"
         )
+        parquet_path = f"{gcs_base_path}.parquet"
+        csv_path = f"{gcs_base_path}.csv"
 
-        dataframe.write_parquet(gcs_path + ".parquet")
-        dataframe.write_csv(gcs_path + ".csv")
+        # Write Parquet file to GCS
+        dataframe.write_parquet(parquet_path)
+        logging.info(f"Successfully saved parquet file to {parquet_path}")
+
+        # Write CSV file to GCS
+        dataframe.write_csv(csv_path)
+        logging.info(f"Successfully saved CSV file to {csv_path}")
+
+    except ImportError:
+        logging.error(
+            "gcsfs library is not installed. Install it using 'uv add gcsfs'. "
+            "It is required for Google Cloud Storage integration with Polars."
+        )
     except Exception as e:
-        logging.error(e)
+        logging.error(f"Error saving to Google Cloud Storage: {e}", exc_info=True)
 
 
 class MemoryTracker:

@@ -223,6 +223,7 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
             Dict[str, Dict[str, Callable[[np.ndarray, np.ndarray], float]]] | None
         ) = None,
         openml_cache_dir: str | Path | None = None,
+        google_bucket: str | None = None,
     ):
         super().__init__(
             name="Dataset Separation Benchmark",
@@ -232,6 +233,7 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
             logging_level=logging_level,
             save_result_dataframe=save_result_dataframe,
             benchmark_metrics=benchmark_metrics,
+            gcs_bucket_name=google_bucket,
         )
         self.list_dataset_collections = list_dataset_collections
         self.random_seed = random_seed
@@ -495,7 +497,9 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
         indices = np.arange(len(combined_train_embeddings))
         self.rng.shuffle(indices)
 
-        embedding_metadata = {}
+        embedding_metadata = {
+            "embedding_model": embedding_model.name,
+        }
 
         return (
             combined_train_embeddings[indices],
@@ -592,6 +596,7 @@ def run_dataseparation_benchmark(
     create_embedding_plots: bool = False,
     dataset_configurations_json_path: str | Path = None,
     openml_cache_dir: str | Path | None = None,
+    google_bucket: str | None = None,
 ) -> pl.DataFrame:
     if not dataset_configurations_json_path:
         dataset_collections = get_list_of_dataset_collections(
@@ -612,6 +617,7 @@ def run_dataseparation_benchmark(
         openml_cache_dir=openml_cache_dir,
         create_embedding_plots=create_embedding_plots,
         timestamp=timestamp,
+        google_bucket=google_bucket,
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)

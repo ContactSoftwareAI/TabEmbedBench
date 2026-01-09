@@ -21,6 +21,7 @@ from tabembedbench.embedding_models import (
     TabICLEmbedding,
     TableVectorizerEmbedding,
     TabPFNEmbedding,
+    TabPFNEmbeddingConstantVector,
 )
 from tabembedbench.evaluators.classification import (
     KNNClassifierEvaluator,
@@ -39,7 +40,8 @@ from tabembedbench.evaluators.regression import (
 logger = logging.getLogger("IJCAI_Run_Benchmark")
 
 DEBUG = True
-GOOGLE_BUCKET = ""
+GOOGLE_BUCKET = "bucket_tabdata/ijcai"
+DATA_DIR = "sphere_based_model"
 
 
 DATASETCONFIG = DatasetConfig(
@@ -51,13 +53,14 @@ DATASETCONFIG = DatasetConfig(
 
 
 BENCHMARK_CONFIG = BenchmarkConfig(
-    run_outlier=True,
-    run_tabarena=True,
+    run_outlier=False,
+    run_tabarena=False,
     run_dataset_separation=False,
     run_dataset_tabpfn_separation=True,
-    data_dir="data",
+    data_dir=DATA_DIR,
     dataset_separation_configurations_json_path="/Users/lkl/PycharmProjects/TabEmbedBench/src/tabembedbench/examples/ijcai_runs/dataset_separation_tabarena.json",
     dataset_separation_configurations_tabpfn_subset_json_path="/Users/lkl/PycharmProjects/TabEmbedBench/src/tabembedbench/examples/ijcai_runs/dataset_separation_tabarena_tabpfn_subset.json",
+    google_bucket=GOOGLE_BUCKET,
 )
 
 
@@ -74,7 +77,11 @@ def get_embedding_models(debug=False):
         list: List of embedding models
     """
     if debug:
-        return [SphereBasedEmbedding(embed_dim=16)]
+        return [
+            # SphereBasedEmbedding(embed_dim=16),
+            TabICLEmbedding(),
+            # TabPFNEmbeddingConstantVector(),
+        ]
 
     sphere_model_64 = SphereBasedEmbedding(embed_dim=64)
     sphere_model_192 = SphereBasedEmbedding(embed_dim=192)

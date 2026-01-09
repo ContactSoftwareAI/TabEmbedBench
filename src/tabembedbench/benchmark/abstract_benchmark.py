@@ -589,6 +589,8 @@ class AbstractBenchmark(ABC):
                 output_path=self.result_dir,
                 dataframe_name=f"result_{self.name}",
                 timestamp=self.timestamp,
+                save_to_gcs=self.save_to_gcs,  # ✓ Present
+                bucket_name=self.bucket_name,
             )
 
     def _save_embedding_metadata(self, dataframe_name: str) -> None:
