@@ -44,6 +44,7 @@ class AbstractBenchmark(ABC):
         benchmark_metrics: (
             Dict[str, Dict[str, Callable[[np.ndarray, np.ndarray], float]]] | None
         ) = None,
+        gcs_bucket_name: str | None = None,
     ):
         """Initializes an instance of the benchmarking class with specified configurations, logging,
         and optional parameters for task execution.
@@ -77,6 +78,9 @@ class AbstractBenchmark(ABC):
         self.result_dir = result_dir
         self.embeddings_metadata_dir = result_dir / "embeddings"
         self.embeddings_metadata_dir.mkdir(parents=True, exist_ok=True)
+
+        self.bucket_name = gcs_bucket_name
+        self.save_to_gcs = True if gcs_bucket_name else False
 
         self.timestamp = timestamp or TIMESTAMP
         self.save_result_dataframe = save_result_dataframe
@@ -595,6 +599,8 @@ class AbstractBenchmark(ABC):
                 output_path=self.embeddings_metadata_dir,
                 dataframe_name=f"embedding_{dataframe_name}",
                 timestamp=self.timestamp,
+                save_to_gcs=self.save_to_gcs,
+                bucket_name=self.bucket_name,
             )
 
     def _cleanup_gpu_cache(self):

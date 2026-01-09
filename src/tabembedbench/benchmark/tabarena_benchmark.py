@@ -52,6 +52,7 @@ class TabArenaBenchmark(AbstractBenchmark):
         skip_missing_values: bool = True,
         benchmark_metrics: dict | None = None,
         openml_cache_dir: str | Path | None = None,
+        google_bucket: str = None,
     ):
         """
         Initializes the class with configuration options for running benchmarks using TabArena datasets.
@@ -89,6 +90,7 @@ class TabArenaBenchmark(AbstractBenchmark):
             save_result_dataframe=save_result_dataframe,
             upper_bound_num_samples=upper_bound_num_samples,
             upper_bound_num_features=upper_bound_num_features,
+            gcs_bucket_name=google_bucket,
         )
 
         self.tabarena_version = tabarena_version
@@ -567,6 +569,7 @@ def run_tabarena_benchmark(
     timestamp: str | None = None,
     run_tabpfn_subset: bool = True,
     openml_cache_dir: str | Path | None = None,
+    google_bucket: str = None,
 ) -> pl.DataFrame:
     """Run the TabArena benchmark for a set of embedding models.
 
@@ -606,6 +609,7 @@ def run_tabarena_benchmark(
         upper_bound_num_features=upper_bound_num_features,
         run_tabpfn_subset=run_tabpfn_subset,
         openml_cache_dir=openml_cache_dir,
+        google_bucket=google_bucket,
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)

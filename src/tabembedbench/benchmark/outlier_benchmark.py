@@ -102,6 +102,7 @@ class OutlierBenchmark(AbstractBenchmark):
         save_result_dataframe: bool = True,
         upper_bound_num_samples: int = 10000,
         upper_bound_num_features: int = 500,
+        google_bucket: str = None,
     ):
         """Initialize the outlier detection benchmark.
 
@@ -124,6 +125,7 @@ class OutlierBenchmark(AbstractBenchmark):
             save_result_dataframe=save_result_dataframe,
             upper_bound_num_samples=upper_bound_num_samples,
             upper_bound_num_features=upper_bound_num_features,
+            gcs_bucket_name=google_bucket,
         )
 
         # Handle dataset paths
@@ -367,6 +369,7 @@ def run_outlier_benchmark(
     save_result_dataframe: bool = True,
     result_dir: str | Path = "result_outlier",
     timestamp: str | None = None,
+    google_bucket: str = None,
 ) -> pl.DataFrame:
     """Run outlier detection benchmark using the provided embedding models.
 
@@ -402,6 +405,7 @@ def run_outlier_benchmark(
         save_result_dataframe=save_result_dataframe,
         upper_bound_num_samples=upper_bound_num_samples,
         upper_bound_num_features=upper_bound_num_features,
+        google_bucket=google_bucket,
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)

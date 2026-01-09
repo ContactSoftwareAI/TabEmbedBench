@@ -15,11 +15,11 @@ from tabembedbench.benchmark.run_benchmark import (
     run_benchmark,
 )
 from tabembedbench.embedding_models import (
+    ConTextTabEmbedding,
     TabICLEmbedding,
     TableVectorizerEmbedding,
     TabPFNEmbedding,
     TabStarEmbedding,
-    ConTextTabEmbedding,
 )
 from tabembedbench.evaluators.classification.knn_classifier import (
     KNNClassifierEvaluator,
@@ -231,7 +231,7 @@ def run_main(
 
     benchmark_config = BenchmarkConfig(
         run_outlier=run_outlier,
-        run_supervised=run_supervised,
+        run_tabarena=run_supervised,
         run_tabpfn_subset=True,
         logging_level=logging.DEBUG,
         data_dir=data_dir,

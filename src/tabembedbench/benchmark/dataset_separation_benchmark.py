@@ -531,11 +531,6 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
             embedding_model, dataset_collection
         )
 
-        self._embedding_utils(
-            (train_embeddings, test_embeddings, embedding_metadata),
-            dataset_configurations,
-        )
-
         dataset_collection_configuration = {
             "y_train": train_labels,
             "task_type": task_type,
@@ -543,6 +538,7 @@ class DatasetSeparationBenchmark(AbstractBenchmark):
 
         self._embedding_utils(
             (train_embeddings, test_embeddings, embedding_metadata),
+            {},
             dataset_configurations,
         )
 
@@ -592,6 +588,7 @@ def run_dataseparation_benchmark(
     use_tabpfn_subset: bool = False,
     result_dir: str | Path = "result_dataset_separation",
     save_result_dataframe: bool = True,
+    timestamp: str | None = None,
     create_embedding_plots: bool = False,
     dataset_configurations_json_path: str | Path = None,
     openml_cache_dir: str | Path | None = None,
@@ -614,6 +611,7 @@ def run_dataseparation_benchmark(
         save_result_dataframe=save_result_dataframe,
         openml_cache_dir=openml_cache_dir,
         create_embedding_plots=create_embedding_plots,
+        timestamp=timestamp,
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)
