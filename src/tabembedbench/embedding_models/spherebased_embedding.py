@@ -41,8 +41,6 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
         outlier: bool = False,
         categorical_column_names: list[str] = [],
         categorical_indices: list[int] = [],
-        text_column_names: list[str] = [],
-        text_indices: list[int] = [],
         **kwargs,
     ) -> pd.DataFrame:
         """Preprocess input data. Will transform the data to the common type pd.DataFrame for further processing.
@@ -53,8 +51,6 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
             outlier (bool, optional): Whether to handle outliers. Defaults to False.
             categorical_column_names: Names of the categorical columns,
             categorical_indices: Indices of the categorical columns,
-            text_column_names: Names of the text columns,
-            text_indices: Indices of the text columns,
             **kwargs: Additional keyword arguments (unused).
 
         Returns:
@@ -69,10 +65,6 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
 
                 if i in categorical_indices:
                     column_names.append(f"categorical_{i}")
-                    # Keep as-is, Pandas will likely assign object dtype for mixed/string
-                    temp_data_list.append(col_series)
-                elif i in text_indices:
-                    column_names.append(f"text_{i}")
                     # Keep as-is, Pandas will likely assign object dtype for mixed/string
                     temp_data_list.append(col_series)
                 else:
@@ -97,8 +89,6 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
                 col_series = X[col_name]
 
                 if col_name in categorical_column_names:
-                    processed_cols[col_name] = col_series
-                elif col_name in text_column_names:
                     processed_cols[col_name] = col_series
                 else:
                     if pd.api.types.is_numeric_dtype(dtype):
@@ -127,8 +117,6 @@ class SphereBasedEmbedding(AbstractEmbeddingGenerator):
             for col_index, (col_name, dtype) in enumerate(processed_df.dtypes.items()):
                 col_series = processed_df[col_name]
                 if col_name in categorical_column_names:
-                    processed_pd_dfs.append(col_series.to_frame())
-                if col_name in text_column_names:
                     processed_pd_dfs.append(col_series.to_frame())
                 else:
                     if pd.api.types.is_numeric_dtype(dtype):
