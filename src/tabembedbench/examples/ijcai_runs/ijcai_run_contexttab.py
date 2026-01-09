@@ -54,7 +54,7 @@ DATA_DIR = "contexttab"
 DATASETCONFIG = DatasetConfig(
     adbench_dataset_path="data/adbench_tabular_datasets",
     exclude_adbench_datasets=[],
-    upper_bound_dataset_size=100000,
+    upper_bound_dataset_size=8192,
     upper_bound_num_features=500,
 )
 

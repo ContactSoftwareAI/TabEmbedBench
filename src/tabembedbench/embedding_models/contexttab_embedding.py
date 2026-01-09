@@ -200,8 +200,9 @@ class ConTextTabEmbedding(AbstractEmbeddingGenerator):
         df = pd.concat([X, y.to_frame()], axis=1)
 
         # There is no bagging, but we still have to sample because there are too many points
-        if len(df) > self.max_context_size:
-            df = df.sample(self.max_context_size, replace=False, random_state=self.seed)
+        # Limit datasets to 8192 samples (context size) or include bagging
+        # if len(df) > self.max_context_size:
+        #    df = df.sample(self.max_context_size, replace=False, random_state=self.seed)
 
         # Remove constant columns
         X = df.iloc[:, :-1]
