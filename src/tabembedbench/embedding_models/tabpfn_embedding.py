@@ -127,7 +127,19 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         Returns:
             np.ndarray: Data converted to float64 dtype.
         """
-        return X
+        if isinstance(X, np.ndarray):
+            if X.dtype.kind in "OSU":  # Object, String, Unicode
+                X_df = pd.DataFrame(X)
+            else:
+                return X.astype(np.float64)
+        else:
+            X_df = X.copy()
+
+        # Factorize object/string columns to numeric
+        for col in X_df.select_dtypes(include=["object", "category", "string"]).columns:
+            X_df[col] = pd.factorize(X_df[col])[0]
+
+        return X_df.values.astype(np.float64)
 
     def _fit_model(
         self,

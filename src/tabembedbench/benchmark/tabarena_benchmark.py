@@ -464,6 +464,8 @@ class TabArenaBenchmark(AbstractBenchmark):
         result_row_dict.update(metric_scores)
 
         self._results_buffer.append(result_row_dict)
+        self._save_results()
+        self._cleanup_gpu_cache()
 
     def _get_task_configuration(self, dataset, task) -> tuple[int, int]:
         """Get the number of folds and repeats for a task.
