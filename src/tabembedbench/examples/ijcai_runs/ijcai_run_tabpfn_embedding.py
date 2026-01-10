@@ -17,13 +17,17 @@ from tabembedbench.benchmark.run_benchmark import (
     run_benchmark,
 )
 from tabembedbench.embedding_models import (
-    TableVectorizerEmbedding,
     TabPFNEmbedding,
     TabPFNEmbeddingClusterLabels,
     TabPFNEmbeddingConstantVector,
     TabPFNEmbeddingRandomVector,
+    TabPFNWrapper,
 )
-from tabembedbench.evaluators import LogisticRegressionHPOEvaluator
+from tabembedbench.evaluators import (
+    KNNClassifierEvaluatorHPO,
+    LogisticRegressionHPOEvaluator,
+    SVMClassifierEvaluator,
+)
 from tabembedbench.evaluators.classification import (
     KNNClassifierEvaluator,
     MLPClassifierEvaluator,
@@ -41,8 +45,9 @@ from tabembedbench.evaluators.regression import (
 logger = logging.getLogger("IJCAI_Run_Benchmark")
 
 DEBUG = False
-GOOGLE_BUCKET = "bucket_tabdata/ijcai"
-DATA_DIR = "tabpfn_embedding"
+GOOGLE_BUCKET = "bucket_tabdata"
+GCS_DIR = "ijcai"
+DATA_DIR = "tabpfn"
 
 
 DATASETCONFIG = DatasetConfig(
@@ -54,15 +59,18 @@ DATASETCONFIG = DatasetConfig(
 
 
 BENCHMARK_CONFIG = BenchmarkConfig(
-    run_outlier=True,
-    run_tabarena=True,
+    run_outlier=False,
+    run_tabarena=False,
     run_dataset_separation=False,
     run_dataset_tabpfn_separation=True,
     data_dir=DATA_DIR,
     dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
     dataset_separation_configurations_tabpfn_subset_json_path="dataset_separation_tabarena_tabpfn_subset.json",
-    gcs_filepath=GOOGLE_BUCKET,
+    gcs_bucket=GOOGLE_BUCKET,
+    gcs_filepath=GCS_DIR,
 )
+
+NUM_ESTIMATORS = 5
 
 
 def get_embedding_models(debug=False):
@@ -78,14 +86,16 @@ def get_embedding_models(debug=False):
         list: List of embedding models
     """
     if debug:
-        return [TableVectorizerEmbedding()]
+        return [TabPFNWrapper(), TabPFNEmbeddingConstantVector(num_estimators=1)]
 
-    tabpfn = TabPFNEmbedding()
-    tabpfn_cluster = TabPFNEmbeddingClusterLabels()
-    tabpfn_random = TabPFNEmbeddingRandomVector()
-    tabpfn_constant = TabPFNEmbeddingConstantVector()
+    tabpfn_wrapper = TabPFNWrapper(num_estimators=NUM_ESTIMATORS)
+    tabpfn = TabPFNEmbedding(num_estimators=NUM_ESTIMATORS)
+    tabpfn_cluster = TabPFNEmbeddingClusterLabels(num_estimators=NUM_ESTIMATORS)
+    tabpfn_random = TabPFNEmbeddingRandomVector(num_estimators=NUM_ESTIMATORS)
+    tabpfn_constant = TabPFNEmbeddingConstantVector(num_estimators=NUM_ESTIMATORS)
 
     embedding_models = [
+        tabpfn_wrapper,
         tabpfn,
         tabpfn_cluster,
         tabpfn_random,
@@ -170,6 +180,8 @@ def get_evaluators(debug=False):
     evaluator_algorithms.extend(
         [
             LogisticRegressionHPOEvaluator(),
+            KNNClassifierEvaluatorHPO(),
+            SVMClassifierEvaluator(),
             MLPRegressorEvaluator(),
             MLPClassifierEvaluator(),
             deep_svdd_dynamic,
