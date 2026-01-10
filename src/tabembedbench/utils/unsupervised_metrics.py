@@ -35,6 +35,9 @@ def calculate_rank_me(embeddings: np.ndarray, epsilon: float = 1e-7) -> float:
     if embeddings.ndim != 2:
         raise ValueError("Embeddings should be a 2D array.")
 
+    if embeddings.dtype == np.float16:
+        embeddings = embeddings.astype(np.float32)
+
     singular_values = np.linalg.svd(embeddings, compute_uv=False)
 
     l1_norm = np.sum(singular_values)
