@@ -13,6 +13,7 @@ from sklearn.cluster import HDBSCAN
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
 from skrub import TableVectorizer
+from tabicl.sklearn.preprocessing import TransformToNumerical
 from tabpfn import TabPFNClassifier, TabPFNRegressor
 from tabpfn.constants import ModelVersion
 from tabpfn.utils import infer_categorical_features
@@ -657,7 +658,7 @@ class TabPFNEmbeddingClusterLabels(TabPFNEmbedding):
         return pipeline
 
     def _get_inductive_clusterer(self) -> tuple[object, object]:
-        table_encoder = self.table_encoder or TableVectorizer()
+        table_encoder = self.table_encoder or TransformToNumerical()
         classifier = self.classifier or KNeighborsClassifier(
             n_neighbors=15,
             weights="distance",
