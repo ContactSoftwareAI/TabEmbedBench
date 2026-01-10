@@ -210,20 +210,14 @@ class TabPFNEmbedding(AbstractEmbeddingGenerator):
         """
         size_X_train = X_train_preprocessed.shape[0]
         if outlier:
-            X_embeddings = self._compute_embeddings_internal(
-                X_train_preprocessed, train=True, train_size=size_X_train
-            )
+            X_embeddings = self._compute_embeddings_internal(X_train_preprocessed)
 
             return X_embeddings, None
-        X_train_embeddings = self._compute_embeddings_internal(
-            X_train_preprocessed, train=True, train_size=size_X_train
-        )
+        X_train_embeddings = self._compute_embeddings_internal(X_train_preprocessed)
 
         X_train_test_stack = np.vstack([X_train_preprocessed, X_test_preprocessed])
 
-        X_embeddings = self._compute_embeddings_internal(
-            X_train_test_stack, train=False, train_size=size_X_train
-        )
+        X_embeddings = self._compute_embeddings_internal(X_train_test_stack)
 
         X_test_embeddings = X_embeddings[size_X_train:]
 
