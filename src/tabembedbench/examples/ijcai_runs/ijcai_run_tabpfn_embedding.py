@@ -59,7 +59,7 @@ DATASETCONFIG = DatasetConfig(
 
 
 BENCHMARK_CONFIG = BenchmarkConfig(
-    run_outlier=True,
+    run_outlier=False,
     run_tabarena=True,
     run_dataset_separation=False,
     run_dataset_tabpfn_separation=True,
@@ -86,7 +86,7 @@ def get_embedding_models(debug=False):
         list: List of embedding models
     """
     if debug:
-        return [TabPFNWrapper(), TabPFNEmbeddingConstantVector(num_estimators=1)]
+        return [TabPFNWrapper(), TabPFNEmbeddingConstantVector(num_estimators=5)]
 
     tabpfn_wrapper = TabPFNWrapper(num_estimators=NUM_ESTIMATORS)
     tabpfn = TabPFNEmbedding(num_estimators=NUM_ESTIMATORS)
@@ -136,6 +136,9 @@ def get_evaluators(debug=False):
                         "n_neighbors": 5,
                     }
                 ),
+                LogisticRegressionHPOEvaluator(),
+                KNNClassifierEvaluatorHPO(),
+                SVMClassifierEvaluator(),
             ]
         )
         return evaluator_algorithms
