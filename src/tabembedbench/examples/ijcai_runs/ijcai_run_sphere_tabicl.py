@@ -40,7 +40,7 @@ from tabembedbench.evaluators.regression import (
 
 logger = logging.getLogger("IJCAI_Run_Benchmark")
 
-DEBUG = True
+DEBUG = False
 GOOGLE_BUCKET = "bucket_tabdata"
 GCS_DIR = "ijcai"
 DATA_DIR = "sphere_based_tabicl_model"
@@ -49,16 +49,16 @@ DATA_DIR = "sphere_based_tabicl_model"
 DATASETCONFIG = DatasetConfig(
     adbench_dataset_path="data/adbench_tabular_datasets",
     exclude_adbench_datasets=["3_backdoor.npz"],
-    upper_bound_dataset_size=1000,
-    upper_bound_num_features=50,
+    upper_bound_dataset_size=15000,
+    upper_bound_num_features=500,
 )
 
 
 BENCHMARK_CONFIG = BenchmarkConfig(
-    run_outlier=False,
+    run_outlier=True,
     run_tabarena=True,
     run_dataset_separation=False,
-    run_dataset_tabpfn_separation=False,
+    run_dataset_tabpfn_separation=True,
     data_dir=DATA_DIR,
     dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
     dataset_separation_configurations_tabpfn_subset_json_path="dataset_separation_tabarena_tabpfn_subset.json",
