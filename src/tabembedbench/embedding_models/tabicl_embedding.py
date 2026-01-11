@@ -456,12 +456,12 @@ class TabICLWrapper(AbstractEmbeddingGenerator):
         if not self._is_fitted:
             raise ValueError("TabICL model has not been fitted yet")
         probs = self.task_model.predict_proba(X)
+        self._reset_embedding_model()
         if task_type == SUPERVISED_BINARY_CLASSIFICATION and probs.shape[1] == 2:
             return probs[:, 1]
         return probs
 
     def _reset_embedding_model(self, *args, **kwargs):
-        super()._reset_embedding_model(*args, **kwargs)
         self.task_model = None
 
 
