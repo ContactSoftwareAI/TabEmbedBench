@@ -296,9 +296,9 @@ class TabArenaBenchmark(AbstractBenchmark):
                     y_train = label_encoder.fit_transform(y_train)
                     y_test = label_encoder.transform(y_test)
                     task_type = (
-                        "Supervised Multiclass Classification"
+                        SUPERVISED_MULTICLASSIFICATION
                         if (dataset_metadata["num_classes"] > 2)
-                        else "Supervised Binary Classification"
+                        else SUPERVISED_BINARY_CLASSIFICATION
                     )
 
                 dataset_metadata["task_type"] = task_type
