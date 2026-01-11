@@ -5,9 +5,10 @@ from typing import Tuple, Union
 
 import numpy as np
 import pandas as pd
+import polars as pl
 import torch
 from huggingface_hub import hf_hub_download
-from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
     PowerTransformer,
@@ -16,6 +17,7 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 from sklearn.utils.validation import check_is_fitted
+from tabicl import TabICLClassifier
 from tabicl.model.embedding import ColEmbedding
 from tabicl.model.inference_config import InferenceConfig
 from tabicl.model.interaction import RowInteraction
@@ -27,7 +29,13 @@ from tabicl.sklearn.preprocessing import (
 )
 from torch import nn
 
+from tabembedbench.constants import (
+    CLASSIFICATION_TASKS,
+    SUPERVISED_BINARY_CLASSIFICATION,
+    SUPERVISED_REGRESSION,
+)
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
+from tabembedbench.utils.exception_utils import NotTaskCompatibleError
 from tabembedbench.utils.torch_utils import get_device
 
 
@@ -150,7 +158,7 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
             device (str | None, optional): Device to use for computation ('cuda' or 'cpu').
                 If None, automatically detects GPU availability. Defaults to None.
         """
-        super().__init__(name="TabICL")
+        super().__init__(name="TabICL Embedding")
 
         self.model_path = Path(model_path) if model_path is not None else None
         self.preprocess_pipeline = None
@@ -397,6 +405,64 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
         # Move model back to the device for next use
         if self.tabicl_row_embedder is not None:
             self.tabicl_row_embedder.to(self.device)
+
+
+class TabICLWrapper(AbstractEmbeddingGenerator):
+    def __init__(self, device=None, **kwargs):
+        super().__init__(
+            name="TabICL Classifier",
+            is_end_to_end_model=True,
+            end_to_end_compatible_tasks=CLASSIFICATION_TASKS,
+        )
+        self.device = device or get_device()
+        self.model = TabICLClassifier(device=self.device)
+        self.task_model = None
+
+    def _preprocess_data(
+        self,
+        X: np.ndarray,
+        train: bool = True,
+        task_type: str = SUPERVISED_BINARY_CLASSIFICATION,
+        **kwargs,
+    ) -> np.ndarray:
+        return X
+
+    def _fit_model(
+        self,
+        X_preprocessed: np.ndarray,
+        y_preprocessed: np.ndarray | None = None,
+        task_type=SUPERVISED_BINARY_CLASSIFICATION,
+        **kwargs,
+    ):
+        self.task_model = clone(self.model)
+        if task_type == SUPERVISED_REGRESSION:
+            raise NotTaskCompatibleError(model=self.name, task_type=task_type)
+        self.task_model.fit(X_preprocessed, y_preprocessed)
+        self._is_fitted = True
+
+    def _compute_embeddings(
+        self,
+        X_train_preprocessed: np.ndarray,
+        X_test_preprocessed: np.ndarray | None = None,
+        **kwargs,
+    ) -> (
+        np.ndarray | Tuple[np.ndarray, np.ndarray] | Tuple[np.ndarray, np.ndarray, dict]
+    ):
+        return None
+
+    def _get_prediction(
+        self, X: np.ndarray, task_type: str = SUPERVISED_BINARY_CLASSIFICATION, **kwargs
+    ) -> np.ndarray:
+        if not self._is_fitted:
+            raise ValueError("TabICL model has not been fitted yet")
+        probs = self.task_model.predict_proba(X)
+        if task_type == SUPERVISED_BINARY_CLASSIFICATION and probs.shape[1] == 2:
+            return probs[:, 1]
+        return probs
+
+    def _reset_embedding_model(self, *args, **kwargs):
+        super()._reset_embedding_model(*args, **kwargs)
+        self.task_model = None
 
 
 def filter_params_for_class(cls, params_dict):
