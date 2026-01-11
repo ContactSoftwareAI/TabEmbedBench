@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
+from tabembedbench.utils.exception_utils import NotTaskCompatibleError
+
 
 class AbstractEmbeddingGenerator(ABC):
     """
@@ -394,7 +396,7 @@ class AbstractEmbeddingGenerator(ABC):
             self.end_to_end_compatible_tasks
             and task_type not in self.end_to_end_compatible_tasks
         ):
-            raise ValueError()
+            raise NotTaskCompatibleError(model=self.name, task_type=task_type)
 
         _, X_test_preprocessed = self.preprocess_data(
             X_train, X_test=X_test, y_train=y_train, task_type=task_type, **kwargs

@@ -1,7 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
@@ -13,21 +12,14 @@ from tqdm import tqdm
 from tabembedbench.constants import TIMESTAMP
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
+from tabembedbench.utils.exception_utils import (
+    NotEndToEndCompatibleError,
+    NotTaskCompatibleError,
+)
 from tabembedbench.utils.logging_utils import get_benchmark_logger
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device, log_gpu_memory
 from tabembedbench.utils.tracking_utils import MemoryTracker, save_dataframe
 from tabembedbench.utils.unsupervised_metrics import calculate_rank_me
-
-
-class NotEndToEndCompatibleError(Exception):
-    """Raised when the embedding model is not an end-to-end model."""
-
-    def __init__(self, benchmark):
-        self.benchmark = benchmark
-        self.message = (
-            f"The benchmark {self.benchmark} is not compatible for end to end models."
-        )
-        super().__init__(self.message)
 
 
 class AbstractBenchmark(ABC):
@@ -447,6 +439,9 @@ class AbstractBenchmark(ABC):
                         embedding_model, evaluators, dataset_configurations
                     )
             except NotEndToEndCompatibleError as e:
+                self.logger.info(str(e))
+                continue
+            except NotTaskCompatibleError as e:
                 self.logger.info(str(e))
                 continue
             except Exception as e:
