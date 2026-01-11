@@ -107,7 +107,7 @@ class AbstractBenchmark(ABC):
         """
         if not self._results_buffer:
             return pl.DataFrame()
-        return pl.from_dicts(data=self._results_buffer)
+        return pl.from_dicts(data=self._results_buffer, infer_schema_length=None)
 
     @property
     def embedding_df(self) -> pl.DataFrame:
@@ -122,7 +122,9 @@ class AbstractBenchmark(ABC):
         """
         if not self._embedding_metadata_buffer:
             return pl.DataFrame()
-        return pl.from_dicts(data=self._embedding_metadata_buffer)
+        return pl.from_dicts(
+            data=self._embedding_metadata_buffer, infer_schema_length=None
+        )
 
     # ========== Abstract Methods (Subclasses must implement) ==========
     @abstractmethod
@@ -570,6 +572,10 @@ class AbstractBenchmark(ABC):
     def _save_results(self):
         """Save the current results to disk if enabled."""
         if self.save_result_dataframe and not self.result_df.is_empty():
+            df = self.result_df
+
+            df = df.with_columns([pl.col(col).fill_null(None) for col in df.columns])
+
             # Sort columns: non-algorithm columns first, then algorithm columns
             non_algo_cols = [
                 col for col in self.result_df.columns if not col.startswith("algorithm")

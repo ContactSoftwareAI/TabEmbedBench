@@ -55,7 +55,7 @@ DATASETCONFIG = DatasetConfig(
 
 
 BENCHMARK_CONFIG = BenchmarkConfig(
-    run_outlier=True,
+    run_outlier=False,
     run_tabarena=True,
     run_dataset_separation=False,
     run_dataset_tabpfn_separation=True,
