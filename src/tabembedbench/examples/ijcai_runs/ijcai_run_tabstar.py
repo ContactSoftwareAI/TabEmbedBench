@@ -17,15 +17,16 @@ from tabembedbench.benchmark.run_benchmark import (
     run_benchmark,
 )
 from tabembedbench.embedding_models import (
+    ConTextTabEmbedding,
     SphereBasedEmbedding,
     TabICLEmbedding,
     TableVectorizerEmbedding,
-    TabStarEmbedding,
-    ConTextTabEmbedding,
     TabPFNEmbedding,
     TabPFNEmbeddingConstantVector,
+    TabStarEmbedding,
 )
 from tabembedbench.evaluators import (
+    KNNClassifierEvaluatorHPO,
     LogisticRegressionHPOEvaluator,
     SVMClassifierEvaluator,
 )
@@ -54,7 +55,7 @@ DATA_DIR = "tabstar"
 DATASETCONFIG = DatasetConfig(
     adbench_dataset_path="data/adbench_tabular_datasets",
     exclude_adbench_datasets=[],
-    upper_bound_dataset_size=100000,
+    upper_bound_dataset_size=15000,
     upper_bound_num_features=500,
 )
 
@@ -62,7 +63,7 @@ DATASETCONFIG = DatasetConfig(
 BENCHMARK_CONFIG = BenchmarkConfig(
     run_outlier=True,
     run_tabarena=True,
-    run_dataset_separation=True,
+    run_dataset_separation=False,
     run_dataset_tabpfn_separation=True,
     data_dir=DATA_DIR,
     dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
@@ -91,9 +92,7 @@ def get_embedding_models(debug=False):
 
     tabStar_embedding = TabStarEmbedding()
 
-    embedding_models = [
-        tabStar_embedding
-    ]
+    embedding_models = [tabStar_embedding]
 
     return embedding_models
 
@@ -173,6 +172,8 @@ def get_evaluators(debug=False):
     evaluator_algorithms.extend(
         [
             LogisticRegressionHPOEvaluator(),
+            KNNClassifierEvaluatorHPO(),
+            SVMClassifierEvaluator(),
             MLPRegressorEvaluator(),
             MLPClassifierEvaluator(),
             deep_svdd_dynamic,
