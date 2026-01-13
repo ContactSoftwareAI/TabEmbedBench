@@ -50,19 +50,40 @@ GCS_DIR = "ijcai"
 DATA_DIR = "sphere_based_model"
 
 
+EXCLUDE_TABARENA_DATASETS = [
+    "airfoil_self_noise",
+    "anneal",
+    "Another-Dataset-on-used-Fiat-500",
+    "Bank_Customer_Churn",
+    "blood-transfusion-service-center",
+    "churn",
+    "coil2000_insurance_policies",
+    "concrete_compressive_strength",
+    "credit-g",
+    "diabetes",
+    "E-CommereShippingData",
+    "Fitness_Club",
+    "hazelnut-spread-contaminant-detection",
+    "healthcare_insurance_expenses",
+    "heloc",
+    "in_vehicle_coupon_recommendation",
+]
+
+
 DATASETCONFIG = DatasetConfig(
     adbench_dataset_path="data/adbench_tabular_datasets",
     exclude_adbench_datasets=[],
-    upper_bound_dataset_size=100000,
+    exclude_tabarena_datasets=EXCLUDE_TABARENA_DATASETS,
+    upper_bound_dataset_size=15000,
     upper_bound_num_features=500,
 )
 
 
 BENCHMARK_CONFIG = BenchmarkConfig(
-    run_outlier=True,
+    run_outlier=False,
     run_tabarena=True,
-    run_dataset_separation=True,
-    run_dataset_tabpfn_separation=True,
+    run_dataset_separation=False,
+    run_dataset_tabpfn_separation=False,
     data_dir=DATA_DIR,
     dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
     dataset_separation_configurations_tabpfn_subset_json_path="dataset_separation_tabarena_tabpfn_subset.json",
@@ -178,8 +199,6 @@ def get_evaluators(debug=False):
     evaluator_algorithms.extend(
         [
             LogisticRegressionHPOEvaluator(),
-            KNNClassifierEvaluatorHPO(),
-            SVMClassifierEvaluator(),
             MLPRegressorEvaluator(),
             MLPClassifierEvaluator(),
             deep_svdd_dynamic,
