@@ -38,6 +38,16 @@ class TabStarModel(PreTrainedModel):
         target_tokens = encoded[:, :d_output]
         return target_tokens
 
+
+    # The code of the functions "get_textual_embedding" and "get_textual_embedding_in_batches" was copied.
+    # Original Source: TabSTAR
+    # URL: https://github.com/alanarazi7/TabSTAR
+    # Original Copyright:
+    # Copyright (c) 2025 Alan Arazi
+    #
+    # Licensed under the MIT License.
+    # The full license text for this component can be found in: https://github.com/alanarazi7/TabSTAR?tab=MIT-1-ov-file
+
     def get_textual_embedding(self, x_txt: np.array) -> Tensor:
         text_batch_size = 128
         while text_batch_size > 1:
@@ -290,38 +300,3 @@ class TabStarEmbedding(AbstractEmbeddingGenerator):
         if self.tabstar_row_embedder is not None:
             self.tabstar_row_embedder.to(self.device)
 
-
-
-# if __name__ == "__main__":
-#     PATH = r'/home/frederik_hoppe_contact_software_/projects/tabembedbench/data/adbench_tabular_datasets/1_ALOI.npz'
-#
-#     data = np.load(PATH)
-#
-#     try:
-#         X = data['X']  # Features
-#         y = data['y']  # Target labels
-#     except KeyError:
-#         print("Available keys in the dataset:", list(data.files))
-#         X = data[data.files[0]]
-#         y = data[data.files[1]]
-#
-#     x_train = DataFrame(X)
-#     x_train.columns = [f'feature_{i}' for i in range(x_train.shape[1])]
-#     y_train = y #Series(y)
-#
-#     x_test = None
-#     y_test = None
-#
-#     if x_test is None:
-#         assert y_test is None, "If x_test is None, y_test must also be None"
-#         x_train, x_test, y_train, y_test = train_test_split(x_train, y_train, test_size=0.1)
-#
-#     tabstar_model = TabStarEmbedding()
-#     embeddings, _, _ = tabstar_model.generate_embeddings(x_train, x_test, outlier=True)
-#
-#     #tabstar_cls = TabSTARClassifier if is_cls else TabSTARRegressor
-#     #tabstar = tabstar_cls()
-#     #tabstar.fit(x_train, y_train)
-#     #y_pred = tabstar.predict(x_test)
-#     #metric = tabstar.score(X=x_test, y=y_test)
-#     #print(f"Accuracy: {metric:.4f}")
