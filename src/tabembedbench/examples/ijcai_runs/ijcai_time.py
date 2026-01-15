@@ -14,28 +14,16 @@ from tabembedbench.benchmark.run_benchmark import (
 )
 from tabembedbench.embedding_models import (
     SphereBasedEmbedding,
+    TableVectorizerEmbedding,
+    TabPFNEmbedding,
+    TabPFNEmbeddingClusterLabels,
+    TabPFNEmbeddingConstantVector,
+    TabPFNEmbeddingRandomVector,
+    TabStarEmbedding,
 )
 from tabembedbench.embedding_models.tabicl_embedding import (
     TabICLEmbedding,
     TabICLWrapper,
-)
-from tabembedbench.evaluators import (
-    KNNClassifierEvaluatorHPO,
-    LogisticRegressionHPOEvaluator,
-    SVMClassifierEvaluator,
-)
-from tabembedbench.evaluators.classification import (
-    KNNClassifierEvaluator,
-    MLPClassifierEvaluator,
-)
-from tabembedbench.evaluators.outlier import (
-    DeepSVDDEvaluator,
-    IsolationForestEvaluator,
-    LocalOutlierFactorEvaluator,
-)
-from tabembedbench.evaluators.regression import (
-    KNNRegressorEvaluator,
-    MLPRegressorEvaluator,
 )
 
 logger = logging.getLogger("IJCAI_Run_Benchmark")
@@ -43,47 +31,29 @@ logger = logging.getLogger("IJCAI_Run_Benchmark")
 DEBUG = False
 GOOGLE_BUCKET = "bucket_tabdata"
 GCS_DIR = "ijcai"
-DATA_DIR = "sphere_based_tabicl_model"
-
-EXCLUDE_TABARENA_DATASETS = [
-    "airfoil_self_noise",
-    "anneal",
-    "Another-Dataset-on-used-Fiat-500",
-    "Bank_Customer_Churn",
-    "blood-transfusion-service-center",
-    "churn",
-    "coil2000_insurance_policies",
-    "concrete_compressive_strength",
-    "credit-g",
-    "diabetes",
-    "E-CommereShippingData",
-    "Fitness_Club",
-    "hazelnut-spread-contaminant-detection",
-    "healthcare_insurance_expenses",
-    "heloc",
-    "in_vehicle_coupon_recommendation",
-]
+DATA_DIR = "embedding_times"
 
 DATASETCONFIG = DatasetConfig(
     adbench_dataset_path="data/adbench_tabular_datasets",
     exclude_adbench_datasets=[],
-    exclude_tabarena_datasets=EXCLUDE_TABARENA_DATASETS,
     upper_bound_dataset_size=15000,
     upper_bound_num_features=500,
 )
 
 
 BENCHMARK_CONFIG = BenchmarkConfig(
-    run_outlier=False,
+    run_outlier=True,
     run_tabarena=True,
     run_dataset_separation=False,
-    run_dataset_tabpfn_separation=True,
+    run_dataset_tabpfn_separation=False,
     data_dir=DATA_DIR,
     dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
     dataset_separation_configurations_tabpfn_subset_json_path="dataset_separation_tabarena_tabpfn_subset.json",
     gcs_bucket=GOOGLE_BUCKET,
     gcs_filepath=GCS_DIR,
 )
+
+NUM_ESTIMATORS = 5
 
 
 def get_embedding_models(debug=False):
@@ -110,7 +80,11 @@ def get_embedding_models(debug=False):
     sphere_model_256 = SphereBasedEmbedding(embed_dim=256)
     sphere_model_512 = SphereBasedEmbedding(embed_dim=512)
     tabicl_embedding = TabICLEmbedding()
-    tabicl_wrapper = TabICLWrapper()
+    tablevectorizer = TableVectorizerEmbedding()
+    tabpfn = TabPFNEmbedding(num_estimators=NUM_ESTIMATORS)
+    tabpfn_random = TabPFNEmbeddingRandomVector(num_estimators=NUM_ESTIMATORS)
+    tabpfn_constant = TabPFNEmbeddingConstantVector(num_estimators=NUM_ESTIMATORS)
+    tabStar_embedding = TabStarEmbedding()
 
     embedding_models = [
         sphere_model_64,
@@ -118,8 +92,17 @@ def get_embedding_models(debug=False):
         sphere_model_256,
         sphere_model_512,
         tabicl_embedding,
-        tabicl_wrapper,
+        tablevectorizer,
     ]
+
+    embedding_models.extend(
+        [
+            tabpfn,
+            tabpfn_random,
+            tabpfn_constant,
+            tabStar_embedding,
+        ]
+    )
 
     return embedding_models
 
@@ -139,74 +122,7 @@ def get_evaluators(debug=False):
     Returns:
         list: A list of configured evaluator instances ready for benchmarking.
     """
-    evaluator_algorithms = []
-
-    if debug:
-        evaluator_algorithms.extend(
-            [
-                KNNRegressorEvaluator(
-                    num_neighbors=5, weights="distance", metric="euclidean"
-                ),
-                KNNClassifierEvaluator(
-                    num_neighbors=5, weights="distance", metric="euclidean"
-                ),
-                LocalOutlierFactorEvaluator(
-                    model_params={
-                        "n_neighbors": 5,
-                    }
-                ),
-            ]
-        )
-        return evaluator_algorithms
-
-    for num_neighbors in range(5, 50, 5):
-        for metric in [
-            "euclidean",
-        ]:
-            for weights in [
-                "distance",
-            ]:
-                evaluator_algorithms.extend(
-                    [
-                        KNNRegressorEvaluator(
-                            num_neighbors=num_neighbors, weights=weights, metric=metric
-                        ),
-                        KNNClassifierEvaluator(
-                            num_neighbors=num_neighbors, weights=weights, metric=metric
-                        ),
-                    ]
-                )
-            evaluator_algorithms.append(
-                LocalOutlierFactorEvaluator(
-                    model_params={
-                        "n_neighbors": num_neighbors,
-                        "metric": metric,
-                    }
-                )
-            )
-    for num_estimators in range(50, 300, 50):
-        evaluator_algorithms.append(
-            IsolationForestEvaluator(
-                model_params={
-                    "n_estimators": num_estimators,
-                }
-            )
-        )
-
-    deep_svdd_dynamic = DeepSVDDEvaluator(dynamic_hidden_neurons=True)
-    deep_svdd_dynamic._name = "DeepSVDD-dynamic"
-
-    evaluator_algorithms.extend(
-        [
-            LogisticRegressionHPOEvaluator(),
-            MLPRegressorEvaluator(),
-            MLPClassifierEvaluator(),
-            deep_svdd_dynamic,
-            DeepSVDDEvaluator(),
-        ]
-    )
-
-    return evaluator_algorithms
+    return []
 
 
 def main(debug=False):
