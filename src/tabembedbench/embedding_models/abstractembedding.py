@@ -273,6 +273,7 @@ class AbstractEmbeddingGenerator(ABC):
             Tuple[np.ndarray | pl.DataFrame | pd.DataFrame, np.ndarray | pl.DataFrame | pd.DataFrame | None]:
                 A tuple containing the preprocessed training and (if provided) test datasets.
         """
+        preprocess_start_time = time.perf_counter()
         X_train_preprocessed = self._preprocess_data(
             X_train, train=True, outlier=outlier, **kwargs
         )
@@ -283,12 +284,15 @@ class AbstractEmbeddingGenerator(ABC):
             )
         else:
             X_test_preprocessed = None
-
+        preprocess_time = time.perf_counter() - preprocess_start_time
+        fit_start_time = time.perf_counter()
         self._fit_model(
             X_train_preprocessed, y_preprocessed=y_train, outlier=outlier, **kwargs
         )
+        fit_time = time.perf_counter() - fit_start_time
 
-        return X_train_preprocessed, X_test_preprocessed
+        time_data = {"preprocess_time": preprocess_time, "fit_time": fit_time}
+        return X_train_preprocessed, X_test_preprocessed, time_data
 
     def generate_embeddings(
         self,
@@ -324,8 +328,8 @@ class AbstractEmbeddingGenerator(ABC):
             Exception: If the embeddings generated for training and testing data
                 contain NaN values.
         """
-        X_train_preprocessed, X_test_preprocessed = self.preprocess_data(
-            X_train, X_test, outlier=outlier, **kwargs
+        X_train_preprocessed, X_test_preprocessed, preprocess_times = (
+            self.preprocess_data(X_train, X_test, outlier=outlier, **kwargs)
         )
         start_time = time.perf_counter()
         results = self._compute_embeddings(
@@ -351,6 +355,8 @@ class AbstractEmbeddingGenerator(ABC):
             "embedding_model": self.name,
             "compute_embeddings_time": compute_embeddings_time,
         }
+
+        embedding_metadata.update(preprocess_times)
 
         if model_specific_metadata:
             embedding_metadata.update(model_specific_metadata)
