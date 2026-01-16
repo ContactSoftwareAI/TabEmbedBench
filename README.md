@@ -11,22 +11,6 @@ TabEmbedBench is a benchmarking framework for evaluating tabular data embedding 
 - Includes KNN/MLP evaluators for supervised tasks and LOF/Isolation Forest/DeepSVDD for outlier detection
 - Scriptable via a Click-based CLI and a Python API
 
-
-## Citations
-
-If you use this code, please cite:
-
-```
-@misc{hoppe2025comparingtaskagnosticembeddingmodels,
-      title={Comparing Task-Agnostic Embedding Models for Tabular Data}, 
-      author={Frederik Hoppe and Lars Kleinemeier and Astrid Franz and Udo Göbel},
-      year={2025},
-      eprint={2511.14276},
-      archivePrefix={arXiv},
-      url={https://arxiv.org/abs/2511.14276}, 
-}
-```
-
 ## Tech stack
 
 - Language: Python
