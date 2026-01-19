@@ -20,12 +20,36 @@ To install the project and its dependencies, follow these steps:
    cd TabEmbedBench
    ```
 
-2. **Sync the environment with uv**:
-   This command will create a virtual environment and install all necessary dependencies (including development tools)
-   as defined in `uv.lock`.
+2. **Install the package in editable mode with uv**:
+   Using `uv sync` is the recommended way to set up the project. It automatically creates a virtual environment,
+   installs all dependencies, and installs the `tabembedbench` package itself in **editable mode**.
+
    ```bash
    uv sync
    ```
+
+   **What this does:**
+    - **Editable Install**: The package is installed in a way that changes to the source code in `src/tabembedbench` are
+      immediately reflected without needing to reinstall. This is ideal for development.
+    - **Virtual Environment**: A `.venv` directory is created containing all project-specific dependencies, ensuring
+      isolation from your system Python.
+    - **Lockfile Consistency**: `uv` uses `uv.lock` to ensure that everyone working on the project has the exact same
+      versions of all dependencies.
+
+3. **(Optional) Install specific dependency groups**:
+   If you only need production dependencies, you can use:
+   ```bash
+   uv sync --no-dev
+   ```
+
+## What it Does
+
+TabEmbedBench is designed to simplify the evaluation of tabular embedding models. It provides:
+
+- **Unified Interface**: A common API for different embedding models (TabPFN, TabStar, etc.).
+- **Automated Benchmarking**: Tools to run models against standard datasets from ADBench and TabArena.
+- **Multi-task Evaluation**: Support for Outlier Detection, Classification, and Regression.
+- **Extensibility**: Easily add new models or evaluators by following the provided abstract base classes.
 
 ## Running Experiments
 
