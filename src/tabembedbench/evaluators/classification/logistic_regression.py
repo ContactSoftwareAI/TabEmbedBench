@@ -6,6 +6,17 @@ from tabembedbench.evaluators.abstractevaluator import AbstractHPOEvaluator
 
 
 class LogisticRegressionHPOEvaluator(AbstractHPOEvaluator):
+    """Evaluate Logistic Regression hyperparameters.
+
+    This class serves as an evaluator for hyperparameter optimization of Logistic Regression
+    models in the context of classification tasks. It defines the scoring metric, hyperparameter
+    search space, and manages the generation of model predictions for downstream operations.
+
+    Attributes:
+        model_class (type): Indicates the model class being evaluated. Specifically, this is
+            `LogisticRegression` from scikit-learn.
+    """
+
     model_class = LogisticRegression
 
     def __init__(self, **kwargs) -> None:

@@ -12,7 +12,6 @@ from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.cluster import HDBSCAN
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
-from skrub import TableVectorizer
 from tabicl.sklearn.preprocessing import TransformToNumerical
 from tabpfn import TabPFNClassifier, TabPFNRegressor
 from tabpfn.constants import ModelVersion
@@ -414,6 +413,39 @@ class TabPFNEmbeddingConstantVector(TabPFNEmbedding):
 
 
 class TabPFNEmbeddingRandomVector(TabPFNEmbedding):
+    """
+    TabPFNEmbeddingRandomVector generates random target vectors to compute embeddings
+    using the TabPFN framework.
+
+    This class extends the TabPFNEmbedding class by allowing random target generation
+    based on specified distributions. It supports discrete and continuous distributions
+    and customizes embeddings using target-specific and estimator-specific settings.
+
+    Attributes:
+        DISCRETE_DISTRIBUTION (list[str]): List of supported discrete distributions.
+
+        epsilon (float): Small constant used to prevent numerical errors.
+
+        distribution (str): Type of distribution used for generating random targets.
+            Examples include "standard_normal" and distributions supported in
+            DISCRETE_DISTRIBUTION.
+
+        dist_kwargs (Optional[dict]): Dictionary of additional distribution-specific
+            arguments.
+
+        name (str): Descriptive name for the embedding instance.
+
+        random_state: Random seed to ensure reproducibility.
+
+        rng (np.random.Generator): Random number generator instance.
+
+        num_targets (int): Number of target vectors to generate.
+
+        random_train_targets (Optional[np.ndarray]): Cached random train targets.
+
+        is_discrete (bool): Indicates if the specified distribution is discrete.
+    """
+
     DISCRETE_DISTRIBUTION = ["integers", "binomial", "poisson", "geometric"]
 
     def __init__(
@@ -425,6 +457,18 @@ class TabPFNEmbeddingRandomVector(TabPFNEmbedding):
         distribution: str = "standard_normal",
         dist_kwargs: Optional[dict] = None,
     ):
+        """
+        Initializes an instance of the class.
+
+        Args:
+            num_estimators (int): Number of estimators.
+            random_state: Random state for reproducibility.
+            epsilon (float): Small value to avoid division by zero or numerical issues.
+            num_targets (int): Number of targets.
+            distribution (str): Distribution type for random vector. Common values include
+                "standard_normal," and other supported types.
+            dist_kwargs (Optional[dict]): Additional keyword arguments for the distribution.
+        """
         super().__init__(
             num_estimators=num_estimators,
         )
@@ -439,6 +483,23 @@ class TabPFNEmbeddingRandomVector(TabPFNEmbedding):
         self.is_discrete = self.distribution in self.DISCRETE_DISTRIBUTION
 
     def _generate_random_targets(self, size: tuple[int, int]) -> np.ndarray:
+        """
+        Generates a random target array of a specified shape using the defined distribution.
+
+        This method uses the NumPy random generator (`rng`) to generate an array of random
+        numbers based on the specified `distribution` attribute. It applies any additional
+        parameters (`dist_kwargs`) configured for the distribution. If the specified
+        distribution is not found in the NumPy random generator, a `ValueError` is raised.
+
+        Args:
+            size (tuple[int, int]): The shape of the target array to be generated.
+
+        Returns:
+            np.ndarray: A randomly generated array following the specified distribution.
+
+        Raises:
+            ValueError: If the specified distribution is not found in the NumPy random generator.
+        """
         try:
             dist_func = getattr(self.rng, self.distribution)
 
@@ -455,6 +516,25 @@ class TabPFNEmbeddingRandomVector(TabPFNEmbedding):
         outlier: bool = False,
         **kwargs,
     ) -> tuple[np.ndarray, np.ndarray | None]:
+        """
+        Computes embeddings for train and test datasets by generating random target values
+        and applying an internal embedding computation mechanism. If the test dataset is
+        not provided, only embeddings for the train dataset will be returned.
+
+        Args:
+            X_train_preprocessed (np.ndarray | pd.DataFrame): Preprocessed training data.
+            X_test_preprocessed (np.ndarray | pd.DataFrame | None): Preprocessed testing data.
+                If None, no test embeddings will be computed.
+            outlier (bool): Flag indicating whether to include outlier consideration (not
+                used in computation).
+            **kwargs: Additional keyword arguments (not used in computation).
+
+        Returns:
+            tuple[np.ndarray, np.ndarray | None]: A tuple containing:
+                - The embeddings computed for the training dataset.
+                - The embeddings computed for the testing dataset if `X_test_preprocessed`
+                  is provided; otherwise, None.
+        """
         train_size = X_train_preprocessed.shape[0]
         train_targets = self._generate_random_targets(
             size=(train_size, self.num_targets)
@@ -482,6 +562,25 @@ class TabPFNEmbeddingRandomVector(TabPFNEmbedding):
     def _compute_embeddings_internal(
         self, X: NDArray, targets: NDArray | None = None
     ) -> np.ndarray:
+        """
+        Computes embeddings for given input data and optional target values using a specified
+        model. The computation process depends on the configuration of the model (e.g., whether
+        it is discrete or continuous) and parameters such as the number of estimators
+        and aggregation methods.
+
+        Args:
+            X (NDArray): Input data for which embeddings will be computed.
+            targets (NDArray | None): Target values corresponding to the input data. Can be
+                None if no target-specific embeddings are needed.
+
+        Returns:
+            np.ndarray: Computed embeddings based on the input data and the configuration
+                of the model.
+
+        Raises:
+            NotImplementedError: If an unsupported aggregation method for estimators
+                or embeddings is specified.
+        """
         target_embeddings = []
         num_targets = targets.shape[-1] if len(targets.shape) > 1 else 1
         model = self.tabpfn_clf if self.is_discrete else self.tabpfn_reg
@@ -520,12 +619,50 @@ class TabPFNEmbeddingRandomVector(TabPFNEmbedding):
         raise NotImplementedError
 
     def _reset_embedding_model(self):
+        """
+        Resets the embedding model to its initial state.
+
+        This method overrides the base class implementation to reset the state of the
+        embedding model and initialize the random number generator (RNG) with the
+        specified random state.
+
+        Raises:
+            Any exceptions raised from the parent class's `_reset_embedding_model`
+            implementation will propagate through this method.
+        """
         super()._reset_embedding_model()
         self.rng = np.random.default_rng(self.random_state)
         self.random_train_targets = None
 
 
 class TabPFNEmbeddingClusterLabels(TabPFNEmbedding):
+    """
+    Extends the TabPFNEmbedding class to include clustering-based preprocessing of features,
+    enabling flexible embedding generation for classification or regression tasks based
+    on cluster label information.
+
+    The class leverages clustering techniques (like HDBSCAN) combined with optional
+    dimensionality reduction to effectively encode input features. It supports various
+    configuration modes for automatic determination of task type (classification or
+    regression) and integrates well with pre-defined metrics and flexible cluster limits.
+
+    Attributes:
+        clusterer (Optional[BaseEstimator]): The clustering algorithm to use for grouping
+            data points. Defaults to None.
+        table_encoder (Optional[TransformerMixin]): A transformer for preprocessing tabular
+            data. If None, a default encoder is used.
+        classifier (Optional[BaseEstimator]): The classifier or regressor for predictive
+            modeling following feature embedding. Defaults to None.
+        mode (Literal["auto", "classification", "regression"]): Task mode, determining
+            whether to use classification or regression. Defaults to "auto".
+        distance_metrics (Optional[list[str]]): List of distance metrics to calculate target
+            embeddings in regression mode. Defaults to ["min"] if unspecified.
+        max_clusters (int): The maximum number of clusters allowed for classification mode.
+            Defaults to 10.
+        random_state (int): Seed used for reproducibility of random number generation.
+            Defaults to None.
+    """
+
     def __init__(
         self,
         clusterer: Optional[BaseEstimator] = None,
@@ -538,22 +675,23 @@ class TabPFNEmbeddingClusterLabels(TabPFNEmbedding):
         random_state: int = None,
     ):
         """
-        TabPFN embedding using cluster-derived targets.
+        Initializes an instance of the TabPFN classifier with cluster labels. Provides functionality for supervised
+        classification or regression with customizable clustering, encoding, and distance metrics.
 
         Args:
-            clusterer: Clustering algorithm (e.g., HDBSCAN, KMeans)
-            table_encoder: Encoder to convert tables to numerical format
-                (default: TableVectorizer)
-            classifier: Classifier for inductive predictions
-                (default: KNeighborsClassifier with distance weighting)
-            mode: How to generate targets:
-                - "auto": Use classification if ≤max_clusters, else regression
-                - "classification": Always use cluster labels
-                - "regression": Always use distance-based targets
-            distance_metrics: Which distance metrics to use in regression mode
-                Options: ["min", "mean", "std"] (default: ["min"])
-            max_clusters: Maximum clusters for classification mode
-            num_estimators: Number of TabPFN ensemble members
+            clusterer (Optional[BaseEstimator]): The clustering algorithm to be used for creating clusters.
+                Defaults to None.
+            table_encoder (Optional[TransformerMixin]): The table encoder used for preprocessing the input data.
+                Defaults to None.
+            classifier (Optional[BaseEstimator]): The base classifier or regressor to be used in the model.
+                Defaults to None.
+            mode (Literal["auto", "classification", "regression"]): Specifies the mode of the model. 'auto' lets the
+                system detect the mode automatically. Default is "auto".
+            distance_metrics (Optional[list[str]]): A list of distance metrics to be used for processing. Default
+                is None.
+            max_clusters (int): The maximum allowable number of clusters. Defaults to 10.
+            num_estimators (int): The number of estimators to be used in the model. Defaults to 1.
+            random_state (int): Seed for random number generation to ensure reproducibility. Defaults to None.
         """
         super().__init__(num_estimators=num_estimators)
         self.clusterer = clusterer
@@ -652,6 +790,17 @@ class TabPFNEmbeddingClusterLabels(TabPFNEmbedding):
         return pipeline
 
     def _get_inductive_clusterer(self) -> tuple[object, object]:
+        """
+        Creates and returns a pair of cloned instances for the table encoder and the classifier.
+
+        This method ensures that the table encoder and the classifier are properly initialized
+        and returns their cloned versions. These components are essential for inductive clustering
+        to transform data and perform the classification task.
+
+        Returns:
+            tuple[object, object]: A tuple containing cloned instances of the table encoder and the
+            classifier, which are used for data transformation and classification respectively.
+        """
         table_encoder = self.table_encoder or TransformToNumerical()
         classifier = self.classifier or KNeighborsClassifier(
             n_neighbors=15,
@@ -664,12 +813,19 @@ class TabPFNEmbeddingClusterLabels(TabPFNEmbedding):
 
     def _determine_mode(self, cluster_labels: NDArray[np.integer]) -> str:
         """
+        Determines the mode of operation as either 'classification' or 'regression'.
+
+        If the mode attribute is already set as 'classification' or 'regression', it
+        returns the existing value. Otherwise, the mode is determined automatically
+        based on the number of unique clusters in `cluster_labels`.
 
         Args:
-            cluster_labels:
+            cluster_labels (NDArray[np.integer]): An array representing the cluster
+                labels assigned to the data points. Cluster labels with a value of -1
+                are excluded when determining the number of clusters.
 
         Returns:
-
+            str: The mode of operation, either 'classification' or 'regression'.
         """
         if self.mode in ["classification", "regression"]:
             return self.mode
@@ -685,14 +841,26 @@ class TabPFNEmbeddingClusterLabels(TabPFNEmbedding):
         mode: str,
     ) -> NDArray:
         """
+        Computes target labels or distance-based targets based on clustering results and the
+        specified mode of operation.
+
+        In classification mode, clusters are optionally merged to satisfy a maximum number of
+        clusters constraint. In regression mode, computes distance-based metrics for the clusters
+        such as minimum, mean, or standard deviation of distances, depending on the enabled
+        distance metrics.
 
         Args:
-            X:
-            cluster_labels:
-            mode:
+            X (NDArray): Input data array of shape (n_samples, n_features).
+            cluster_labels (NDArray[np.integer]): Cluster labels for the input data. A label of
+                -1 indicates noise or unlabeled samples.
+            mode (str): Operation mode. Either "classification" for handling cluster labels or
+                "regression" for computing distance-based targets.
 
         Returns:
-
+            NDArray: Processed targets based on the specified mode. In classification mode,
+                returns the modified or original cluster labels. In regression mode, returns
+                distance-based targets, either as a single metric array or stacked metrics
+                array of shape (n_samples, n_metrics).
         """
         if mode == "classification":
             # Merge clusters if there are too many
@@ -815,12 +983,28 @@ class TabPFNEmbeddingClusterLabels(TabPFNEmbedding):
         targets: NDArray,
         mode: str,
     ) -> np.ndarray:
-        """Internal method to compute embeddings from targets
+        """
+        Computes embeddings for input features and targets using the TabPFN model.
+
+        This function internally processes the input features and target variables and
+        selects the appropriate model based on the specified mode ('classification' or
+        'regression'). It computes embeddings for the targets by applying the TabPFN model.
+        The embeddings can be aggregated using different strategies such as mean or concatenation.
 
         Args:
-            X:
-            targets:
-            mode:
+            X (NDArray): Input feature matrix of shape (n_samples, n_features).
+            targets (NDArray): Target values with shape (n_samples,) or
+                (n_samples, n_targets).
+            mode (str): Mode for the TabPFN model. Either "classification" or
+                "regression".
+
+        Returns:
+            np.ndarray: Computed embeddings for the input features with shape
+                depending on the aggregation strategy.
+
+        Raises:
+            NotImplementedError: If an unsupported aggregation method is specified
+                for embeddings or multiple estimators.
         """
 
         # Ensure targets is 2D
@@ -873,6 +1057,19 @@ class TabPFNEmbeddingClusterLabels(TabPFNEmbedding):
             raise NotImplementedError(f"Aggregation '{self.emb_agg}' not implemented")
 
     def _reset_embedding_model(self):
+        """
+        Resets the embedding model state to its initial configuration.
+
+        This method overrides the parent class's reset functionality to include
+        additional clean-up specific to the implementation, such as resetting
+        certain attributes to their initial states.
+
+        Attributes:
+            actual_mode_ (Optional[Any]): Stores the current mode of the model. Reset
+                to None when the method is called.
+            n_clusters_ (Optional[int]): Stores the number of clusters in use. Reset
+                to None when the method is called.
+        """
         super()._reset_embedding_model()
         self.actual_mode_ = None
         self.n_clusters_ = None
@@ -898,6 +1095,17 @@ class TabPFNWrapper(TabPFNEmbedding):
         self,
         num_estimators: int = 1,
     ) -> None:
+        """
+        Initializes the TabPFN class with the given parameters.
+
+        The TabPFN class serves as a model designed for tabular predictive modeling tasks.
+        It includes configurations for the number of estimators and sets up compatibility
+        with specific task types. This class leverages an end-to-end approach for task
+        prediction and modeling.
+
+        Args:
+            num_estimators (int): The number of estimators to be initialized for the model.
+        """
         super().__init__(num_estimators=num_estimators)
         self._is_end_to_end_model = True
         self.name = "TabPFN"
@@ -911,6 +1119,20 @@ class TabPFNWrapper(TabPFNEmbedding):
         task_type=SUPERVISED_BINARY_CLASSIFICATION,
         **kwargs,
     ):
+        """
+        Fits the model to the preprocessed training data using the specified task type.
+
+        This method initializes the appropriate model (`tabpfn_clf` for classification and
+        `tabpfn_reg` for regression) based on the task type and fits it to the provided data.
+
+        Args:
+            X_preprocessed (np.ndarray): The preprocessed feature dataset used for training.
+            y_preprocessed (np.ndarray | None, optional): The preprocessed labels or target
+                values for training. Required for supervised tasks.
+            task_type: The type of task to perform. Defaults to supervised binary
+                classification. Must be one of the predefined task types.
+            **kwargs: Additional keyword arguments passed to the fitting process.
+        """
         self.task_model = (
             self.tabpfn_clf if task_type in CLASSIFICATION_TASKS else self.tabpfn_reg
         )
@@ -922,6 +1144,22 @@ class TabPFNWrapper(TabPFNEmbedding):
         X: np.ndarray,
         task_type: str = SUPERVISED_BINARY_CLASSIFICATION,
     ) -> np.ndarray:
+        """
+        Generates predictions or probabilities for the provided input data based on the task type.
+
+        This function utilizes the `task_model` to generate either classification probabilities
+        or prediction values depending on the specified task type. For binary classification tasks,
+        it will return the probabilities corresponding to the positive class.
+
+        Args:
+            X (np.ndarray): The input features for making predictions. Should be a 2D array where
+                each row represents a sample and each column represents a feature.
+            task_type (str): The type of the prediction task. Defaults to SUPERVISED_BINARY_CLASSIFICATION.
+                Supported task types include those defined in `CLASSIFICATION_TASKS`.
+
+        Returns:
+            np.ndarray: The predicted values or probabilities depending on the task type.
+        """
         if not self.task_model:
             raise ValueError("Something went wrong.")
         if task_type in CLASSIFICATION_TASKS:
@@ -932,5 +1170,14 @@ class TabPFNWrapper(TabPFNEmbedding):
         return self.task_model.predict(X)
 
     def _reset_embedding_model(self):
+        """
+        Resets the embedding model and associated task model for the instance.
+
+        This method overrides the base class's `_reset_embedding_model` to ensure
+        the instance's task model is also cleared and reset to `None`.
+
+        Raises:
+            None: This method does not raise any exceptions.
+        """
         super()._reset_embedding_model()
         self.task_model = None

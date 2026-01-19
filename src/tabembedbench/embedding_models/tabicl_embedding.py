@@ -408,6 +408,20 @@ class TabICLEmbedding(AbstractEmbeddingGenerator):
 
 
 class TabICLWrapper(AbstractEmbeddingGenerator):
+    """
+    TabICLWrapper is a class designed for generating embeddings using a TabICL-based
+    classifier. It integrates functionalities for handling data preprocessing, training
+    models, generating embeddings, and making predictions. This class is specifically
+    tailored to tasks involving classification and supports end-to-end model compatibility.
+
+    Attributes:
+        device (str): The device (e.g., 'cpu' or 'cuda') on which the model will run.
+        model (TabICLClassifier): The core TabICL classifier model used for training
+            and inference.
+        task_model (Optional[TabICLClassifier]): An instance of the TabICLClassifier
+            used for the specific machine learning task.
+    """
+
     def __init__(self, device=None, **kwargs):
         super().__init__(
             name="TabICL Classifier",
@@ -425,6 +439,24 @@ class TabICLWrapper(AbstractEmbeddingGenerator):
         task_type: str = SUPERVISED_BINARY_CLASSIFICATION,
         **kwargs,
     ) -> np.ndarray:
+        """
+        Preprocesses the input data X based on the specified task type, training mode,
+        and any additional keyword arguments. This function is used to prepare the data
+        for model training or inference by applying necessary transformations.
+
+        Args:
+            X (np.ndarray): The input data to be preprocessed.
+            train (bool): Indicates whether the preprocessing is in the training
+                phase. Default is True.
+            task_type (str): The type of machine learning task, such as supervised
+                binary classification.
+            **kwargs: Additional arguments for customizing the preprocessing
+                behavior.
+
+        Returns:
+            np.ndarray: The preprocessed data ready for further processing or
+            model consumption.
+        """
         return X
 
     def _fit_model(
@@ -434,6 +466,29 @@ class TabICLWrapper(AbstractEmbeddingGenerator):
         task_type=SUPERVISED_BINARY_CLASSIFICATION,
         **kwargs,
     ):
+        """
+        Fits a specified model to the provided preprocessed data.
+
+        This method clones the base model, checks if the provided task type is compatible
+        with the model, and fits the model using the preprocessed feature matrix and
+        target vector. The task type determines the kind of problem being solved
+        (e.g., binary classification, regression).
+
+        Args:
+            X_preprocessed (np.ndarray): The feature matrix that has been preprocessed
+                and is ready for model training.
+            y_preprocessed (np.ndarray | None): The target vector associated with
+                the feature matrix. It is optional for certain unsupervised tasks or
+                when no labels are involved.
+            task_type: The type of learning task. Defaults to SUPERVISED_BINARY_CLASSIFICATION.
+                Other supported values must be compatible with the model.
+            **kwargs: Additional keyword arguments that may be passed to the model's
+                fit method.
+
+        Raises:
+            NotTaskCompatibleError: If the provided task type is not compatible with
+                the current model.
+        """
         self.task_model = clone(self.model)
         if task_type == SUPERVISED_REGRESSION:
             raise NotTaskCompatibleError(model=self.name, task_type=task_type)
@@ -448,11 +503,54 @@ class TabICLWrapper(AbstractEmbeddingGenerator):
     ) -> (
         np.ndarray | Tuple[np.ndarray, np.ndarray] | Tuple[np.ndarray, np.ndarray, dict]
     ):
+        """
+        Compute embeddings for preprocessed training data and optionally for test data.
+
+        This method takes preprocessed training data as input, computes embeddings,
+        and optionally computes embeddings for test data if provided. Additional
+        settings for the computation can be passed via keyword arguments.
+
+        Args:
+            X_train_preprocessed (np.ndarray): The preprocessed training dataset.
+            X_test_preprocessed (np.ndarray | None): The preprocessed test dataset.
+                Optional; defaults to None.
+            **kwargs: Additional parameters for embedding computation. Specific
+                parameters depend on the implementation.
+
+        Returns:
+            np.ndarray | Tuple[np.ndarray, np.ndarray] | Tuple[np.ndarray, np.ndarray, dict]:
+                Embeddings for the training dataset if `X_test_preprocessed` is not
+                provided. If both `X_train_preprocessed` and `X_test_preprocessed`
+                are provided, returns a tuple containing embeddings for the training
+                and test datasets. An optional dictionary of additional metadata
+                may also be included in the result tuple.
+
+        """
         return None
 
     def _get_prediction(
         self, X: np.ndarray, task_type: str = SUPERVISED_BINARY_CLASSIFICATION, **kwargs
     ) -> np.ndarray:
+        """
+        Predicts probabilities or outputs for the given data based on the trained model and task type.
+
+        This method computes the predictions using the model associated with the instance. Predictions
+        are determined based on the provided task type. For classification tasks, probabilities may be
+        returned, and for binary classification with appropriate conditions, this method returns the
+        probability of the positive class. Additional parameters can be passed as needed.
+
+        Args:
+            X (np.ndarray): Input feature matrix for which predictions are to be made.
+            task_type (str): Type of prediction task (e.g., SUPERVISED_BINARY_CLASSIFICATION).
+                Defaults to SUPERVISED_BINARY_CLASSIFICATION.
+            **kwargs: Additional optional arguments used during prediction.
+
+        Returns:
+            np.ndarray: The predicted probabilities or outputs associated with the input data.
+
+        Raises:
+            ValueError: If the model has not been fitted prior to prediction.
+        """
         if not self._is_fitted:
             raise ValueError("TabICL model has not been fitted yet")
         probs = self.task_model.predict_proba(X)
@@ -462,6 +560,16 @@ class TabICLWrapper(AbstractEmbeddingGenerator):
         return probs
 
     def _reset_embedding_model(self, *args, **kwargs):
+        """
+        Resets the embedding model to its initial state.
+
+        This method clears the current task-specific model by setting it to None. It is
+        used to reinitialize or reset the current embedding model.
+
+        Args:
+            *args: Additional positional arguments for future extensibility.
+            **kwargs: Additional keyword arguments for future extensibility.
+        """
         self.task_model = None
 
 

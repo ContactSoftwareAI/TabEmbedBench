@@ -2,14 +2,8 @@ from typing import Tuple
 
 import numpy as np
 from numpy.typing import NDArray
-from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.cluster import DBSCAN, AgglomerativeClustering, KMeans
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import pairwise_distances
-from sklearn.utils.metaestimators import available_if
-from sklearn.utils.validation import check_is_fitted
-from skrub import TableVectorizer
-from tabicl.sklearn.preprocessing import TransformToNumerical
 
 
 def _classifier_has(attr):
