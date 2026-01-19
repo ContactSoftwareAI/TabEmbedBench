@@ -31,10 +31,40 @@ from tabembedbench.evaluators.abstractevaluator import AbstractEvaluator
 
 
 class TabArenaBenchmark(AbstractBenchmark):
-    """Simplified benchmark for TabArena classification and regression tasks.
+    """
+    This class implements a benchmarking framework leveraging the TabArena dataset and its
+    variants to evaluate machine learning models across various supervised learning tasks.
 
-    This benchmark evaluates embedding models on supervised learning tasks
-    from the OpenML TabArena benchmark suite.
+    The TabArenaBenchmark class extends an abstract benchmarking interface and is purpose-built
+    to handle challenges associated with the TabArena dataset. It offers configurations for
+    dataset filtering, data preprocessing, and task-specific benchmarking, making it suitable
+    for both regression and classification tasks. Core functionalities include dataset
+    selection, metric evaluation, data splitting, and logging of experiment results.
+
+    Attributes:
+        tabarena_version (str): Specifies the version of the TabArena dataset.
+        tabarena_lite (bool): A flag indicating whether to benchmark using the lighter version
+            of the TabArena dataset.
+        exclude_datasets (list[str]): A list of dataset names or IDs to exclude during benchmarking.
+        result_dir (str | Path): The directory where benchmark results will be stored.
+        timestamp (str | None): A timestamp string used to uniquely identify this benchmark
+            run within the result directory.
+        logging_level (int): Defines the verbosity level for logging runtime messages.
+        save_result_dataframe (bool): Specifies whether benchmark results should be saved
+            into a DataFrame.
+        upper_bound_num_samples (int): Sets an upper limit on the number of samples allowed
+            within each dataset for benchmarking tasks.
+        upper_bound_num_features (int): Sets an upper limit on the number of features included
+            in each dataset for tasks.
+        run_tabpfn_subset (bool): A flag to restrict benchmarking to a predefined subset of
+            datasets optimized for the TabPFN algorithm.
+        skip_missing_values (bool): Indicates whether datasets containing missing values
+            should be excluded during the benchmark.
+        benchmark_metrics (dict): A dictionary specifying the performance metrics for the
+            benchmark tasks. Defaults to system-defined metrics if not provided.
+        openml_cache_dir (str | Path): The directory path where the OpenML cache is stored.
+            If not provided, defaults to "data/tabarena_datasets".
+        google_bucket (str): Represents the Google Cloud Storage bucket name, where applicable.
     """
 
     def __init__(
@@ -55,27 +85,37 @@ class TabArenaBenchmark(AbstractBenchmark):
         google_bucket: str = None,
     ):
         """
-        Initializes the class with configuration options for running benchmarks using TabArena datasets.
-        The class is designed to support various supervised learning tasks with configurable parameters
-        such as benchmark versions, dataset inclusion/exclusion, and cache management. Additionally,
-        it sets up directories and logging for efficient benchmark execution.
+        Initializes the instance with configuration settings for benchmarking using
+        the TabArena dataset.
 
         Args:
-            tabarena_version (str): Defines the version of the TabArena benchmark suite used.
-            tabarena_lite (bool): Determines whether to use the lightweight configuration of TabArena.
-            exclude_datasets (list[str] | None): List of datasets to exclude from the benchmark process.
-            result_dir (str | Path): Path to the directory where benchmark results will be stored.
-            timestamp (str): Timestamp used for organizing run-specific outputs and logs.
-            logging_level (int): Logging level for the benchmark process (e.g., logging.INFO).
-            save_result_dataframe (bool): Determines whether to save benchmark results as a DataFrame.
-            upper_bound_num_samples (int): Maximum allowed number of samples in the dataset.
-            upper_bound_num_features (int): Maximum allowed number of features in the dataset.
-            run_tabpfn_subset (bool): Indicates if a specific subset of TabPFN should be included.
-            skip_missing_values (bool): Specifies whether to skip datasets with missing values.
-            benchmark_metrics (dict | None): Dictionary of benchmark metrics to use. Defaults to a
-                predefined set.
-            openml_cache_dir (str | Path | None): Path to the directory for caching OpenML datasets.
-                Defaults to "data/tabarena_datasets" if not provided.
+            tabarena_version (str): Specifies the version of the TabArena dataset.
+            tabarena_lite (bool): Indicates whether to use the lite version of the
+                TabArena dataset.
+            exclude_datasets (list[str] | None): List of dataset IDs or names to
+                exclude from the benchmarking process.
+            result_dir (str | Path): Path to the directory where the results will
+                be saved.
+            timestamp (str | None): Optional timestamp to append to result files
+                for uniqueness.
+            logging_level (int): Logging verbosity level.
+            save_result_dataframe (bool): Specifies whether to save the results as
+                a DataFrame.
+            upper_bound_num_samples (int): Maximum number of samples allowed per
+                dataset.
+            upper_bound_num_features (int): Maximum number of features allowed per
+                dataset.
+            run_tabpfn_subset (bool): Whether to process only a predefined subset
+                of TabArena datasets optimized for TabPFN.
+            skip_missing_values (bool): Specifies whether to skip datasets that
+                contain missing values.
+            benchmark_metrics (dict | None): Dictionary defining the metrics to
+                use for evaluation. If not provided, default metrics will be used.
+            openml_cache_dir (str | Path | None): Path to a custom cache directory
+                for storing OpenML datasets. If not specified, a default path will
+                be used.
+            google_bucket (str): Name of the Google Cloud Storage bucket, if
+                applicable.
         """
         super().__init__(
             name="TabEmbedBench_TabArena",
@@ -83,7 +123,7 @@ class TabArenaBenchmark(AbstractBenchmark):
                 SUPERVISED_REGRESSION,
                 SUPERVISED_BINARY_CLASSIFICATION,
                 SUPERVISED_MULTICLASSIFICATION,
-            ],  # Will be overridden per split
+            ],
             result_dir=result_dir,
             timestamp=timestamp,
             logging_level=logging_level,
@@ -205,36 +245,29 @@ class TabArenaBenchmark(AbstractBenchmark):
 
     def _prepare_dataset(self, dataset_info: dict) -> Iterator[dict]:
         """
-        Prepares the dataset for model training and evaluation by performing preprocessing
-        and creating train-test splits. Handles categorical and numerical transformations,
-        removes irrelevant features, and encodes classification labels when necessary.
-
-        The method processes data fold by fold and repeat by repeat, yielding independent
-        data splits for each fold and repeat combination.
+        Prepares and processes dataset for machine learning tasks based on the provided dataset
+        information, including metadata extraction, column filtering, and train-test splitting
+        across specified folds and repeats.
 
         Args:
-            dataset_info (dict): A dictionary containing dataset meta-information.
-                - "task": The task object containing task specifications such as
-                  task type ("Supervised Classification") and target_name.
-                - "dataset": The dataset object from which data can be retrieved.
-                - "folds": The number of data folds for splitting.
-                - "repeats": The number of repeats for each fold.
+            dataset_info (dict): A dictionary containing the following keys:
+                - "task": The task object representing the machine learning task.
+                - "dataset": The dataset object containing data and metadata.
+                - "folds": The number of folds for cross-validation.
+                - "repeats": The number of repetitions for cross-validation.
 
         Yields:
-            Iterator[dict]: An iterator that generates dictionaries, each containing
-                processed data, metadata, and train-test splits for a specific fold/repeat.
-                - "X_train", "X_test" (DataFrame): Transformed training and test input data.
-                - "y_train", "y_test" (Series): Encoded training and test target labels.
-                - "dataset_name" (str): The name of the dataset.
-                - "dataset_size" (int): Total number of records in the dataset.
-                - "num_features" (int): Number of features in the dataset.
-                - "metadata" (dict): Additional information about the task and processing,
-                  such as task type, categorical columns, fold, and repeat.
-
-        Raises:
-            Any exception raised during data retrieval, preprocessing, or train-test splitting
-            will propagate to the caller. Ensure proper exception handling is implemented
-            where this function is used.
+            dict: A dictionary containing:
+                - "X_train": Training samples.
+                - "X_test": Test samples.
+                - "y_train": Encoded training labels (for classification tasks).
+                - "y_true": True labels for the test set.
+                - "dataset_metadata": A dictionary containing metadata about the dataset.
+                - "feature_metadata": A dictionary containing feature-specific metadata, including:
+                    - "categorical_indices": Indices of categorical features.
+                    - "categorical_column_names": Names of categorical columns.
+                    - "fold": Current fold index.
+                    - "repeat": Current repeat index.
         """
         task = dataset_info["task"]
         dataset = dataset_info["dataset"]

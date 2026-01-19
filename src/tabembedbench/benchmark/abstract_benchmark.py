@@ -23,6 +23,31 @@ from tabembedbench.utils.unsupervised_metrics import calculate_rank_me
 
 
 class AbstractBenchmark(ABC):
+    """
+    Abstract base class for benchmarking tasks.
+
+    This class serves as the foundation for implementing benchmarking logic. It defines
+    an abstract interface that must be implemented by subclasses to provide functionality
+    for dataset loading, preparation, evaluation, and metrics computation. The class
+    supports metadata handling, such as embedding metadata and result buffers, and allows
+    saving results locally or optionally to a Google Cloud Storage bucket.
+
+    Attributes:
+        task_type (list[str]): A list of task types for which this benchmark is conducted.
+        result_dir (Path): The path where benchmark results will be stored.
+        embeddings_metadata_dir (Path): The path where embedding metadata results will be stored.
+        bucket_name (str | None): The name of the Google Cloud Storage bucket for result
+            exportation, if applicable.
+        save_to_gcs (bool): A flag that indicates whether to save results to Google Cloud Storage.
+        timestamp (str): The timestamp for the benchmark run.
+        save_result_dataframe (bool): A flag indicating whether the results should be saved as
+            a DataFrame.
+        upper_bound_num_samples (int): The maximum allowable number of samples for datasets
+            during benchmarking.
+        upper_bound_num_features (int): The maximum allowable number of features for datasets
+            during benchmarking.
+    """
+
     def __init__(
         self,
         name: str,
@@ -38,25 +63,31 @@ class AbstractBenchmark(ABC):
         ) = None,
         gcs_bucket_name: str | None = None,
     ):
-        """Initializes an instance of the benchmarking class with specified configurations, logging,
-        and optional parameters for task execution.
+        """
+        Initializes the class with parameters needed for running a benchmark task.
 
         Args:
-            name (str): Name of the benchmark or task identifier.
-            task_type (str | list[str]): Type or types of tasks to execute, e.g., "classification".
-            result_dir (str | Path, optional): Directory path where results will be stored. Defaults
+            name (str): The name of the benchmark task.
+            task_type (str | list[str]): The type of task or list of task types for which the
+                benchmark is being conducted.
+            result_dir (str | Path): The directory path where the results should be stored. Defaults
                 to "results".
-            timestamp (str | None, optional): A string timestamp for benchmarking identification.
-                If None, the current timestamp is used. Defaults to None.
-            logging_level (int, optional): Logging verbosity level. Defaults to logging.INFO.
-            save_result_dataframe (bool, optional): Whether to save the results in a DataFrame
-                format. Defaults to True.
-            upper_bound_num_samples (int, optional): Maximum number of samples allowed during
-                task execution. Defaults to 10000.
-            upper_bound_num_features (int, optional): Maximum number of features allowed during
-                task execution. Defaults to 500.
-            benchmark_metrics (Dict[str, Dict[str, Callable[[np.ndarray, np.ndarray], float]]] | None, optional): Dictionary of metrics to evaluate task
-                performance. If None, default metrics are used. Defaults to None.
+            timestamp (str | None): An optional timestamp to use for this benchmark run. Defaults
+                to None, where the current timestamp will be used.
+            logging_level (int): The logging level to set for the benchmark logger. Defaults to
+                `logging.INFO`.
+            save_result_dataframe (bool): Determines whether to save the resulting data as a
+                dataframe. Defaults to True.
+            upper_bound_num_samples (int): The upper limit for the number of samples applicable
+                during the benchmarking process. Defaults to 10000.
+            upper_bound_num_features (int): The upper limit for the number of features applicable
+                during the benchmarking process. Defaults to 500.
+            benchmark_metrics (Dict[str, Dict[str, Callable[[np.ndarray, np.ndarray], float]]] | None):
+                A dictionary specifying benchmark metrics, where keys are metric categories, and
+                values are dictionaries with metric names as keys and their evaluation functions
+                as values. Defaults to None, which initializes with default metrics.
+            gcs_bucket_name (str | None): The name of the Google Cloud Storage (GCS) bucket where
+                results can optionally be uploaded. Defaults to None.
         """
         self.logger = get_benchmark_logger(name)
         self.logger.setLevel(logging_level)
