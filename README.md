@@ -14,11 +14,7 @@ performance evaluations.
 
 To install the project and its dependencies, follow these steps:
 
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd TabEmbedBench
-   ```
+1. **Download the repository**
 
 2. **Install the package in editable mode with uv**:
    Using `uv sync` is the recommended way to set up the project. It automatically creates a virtual environment,
