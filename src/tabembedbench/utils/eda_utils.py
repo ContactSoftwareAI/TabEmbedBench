@@ -4,6 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import polars as pl
 import seaborn as sns
+from itertools import cycle
 
 logger = logging.getLogger("Results processing ")
 
@@ -38,21 +39,32 @@ def separate_by_task_type(df: pl.DataFrame):
             - multiclass_results_df: Results for multiclass classification tasks
             - regression_results_df: Results for regression tasks
     """
-    binary_results_df = df.filter(pl.col("classification_type") == "binary")
+    binary_results_df = df.filter(pl.col("task") == "Supervised Binary Classification")
 
-    multiclass_results_df = df.filter(pl.col("classification_type") == "multiclass")
+    multiclass_results_df = df.filter(pl.col("task") == "Supervised Multiclass Classification")
 
-    regression_results_df = df.filter(pl.col("task") == "regression")
+    regression_results_df = df.filter(pl.col("task") == "Supervised Regression")
 
     return binary_results_df, multiclass_results_df, regression_results_df
 
 
 def create_color_mapping(models_to_keep: list[str]):
-    colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
-    color_mapping = {
-        model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
-        for model, (r, g, b) in zip(models_to_keep, colors)
-    }
+    colors = [
+        "#0080C5",
+        "#FCB900",
+        "#92C108",
+        "#E3075A",
+        "#36AEE7",
+        "#F29100",
+        "#DBDC2E",
+        "#EE5CA1",
+        "#005E9E",
+        "#EA5A02",
+        "#639C2E",
+        "#A90E4E",
+        "#003254",
+    ]
+    color_mapping = dict(zip(models_to_keep, cycle(colors)))
     return color_mapping
 
 
@@ -191,17 +203,22 @@ def create_descriptive_dataframe(
         pl.DataFrame: A dataframe containing grouped descriptive statistics for the specified
             metric column and additional computed statistics.
     """
-    descriptive_statistic_df = df.group_by(["embedding_model", "algorithm"]).agg(
+    descriptive_statistic_df = df.with_columns(
+        #(pl.col("time_to_compute_embedding") / (pl.col("dataset_size") * pl.col("num_features")))
+        #(pl.col("time_to_compute_embedding") / pl.col("dataset_size"))
+        (pl.col("time_to_compute_embedding"))
+        .alias("normalized_time_to_compute_embedding")
+    ).group_by(["embedding_model", "algorithm"]).agg(
         pl.col(metric_col).mean().alias(f"average_{metric_col}"),
         pl.col(metric_col).std().alias(f"std_{metric_col}"),
         pl.col(metric_col).min().alias(f"min_{metric_col}"),
         pl.col(metric_col).max().alias(f"max_{metric_col}"),
         pl.col(metric_col).median().alias(f"median_{metric_col}"),
-        pl.col("time_to_compute_embedding")
+        pl.col("normalized_time_to_compute_embedding")
         .mean()
         .alias(f"averaged_embedding_compute_time"),
         pl.col("dataset_name").n_unique().alias("num_datasets"),
-    )
+    ).sort(["embedding_model", "algorithm"])
 
     return descriptive_statistic_df
 
@@ -214,23 +231,27 @@ def create_outlier_ratio_dataframe(
     binning_expr = pl.lit(None, dtype=pl.Int64)
     for i in range(len(bin_edges), -1, -1):
         if i == len(bin_edges):
-            lower_bound = bin_edges[i-1]
-            condition = (pl.col("outlier_ratio") >= lower_bound)
+            lower_bound = bin_edges[i - 1]
+            condition = pl.col("outlier_ratio") >= lower_bound
             bin_label = f">={lower_bound}"
         elif i == 0:
             upper_bound = bin_edges[i]
-            condition = (pl.col("outlier_ratio") < upper_bound)
+            condition = pl.col("outlier_ratio") < upper_bound
             bin_label = f"<{upper_bound}"
         else:
-            lower_bound = bin_edges[i-1]
+            lower_bound = bin_edges[i - 1]
             upper_bound = bin_edges[i]
-            condition = (pl.col("outlier_ratio") >= lower_bound) & (pl.col("outlier_ratio") < upper_bound)
+            condition = (pl.col("outlier_ratio") >= lower_bound) & (
+                pl.col("outlier_ratio") < upper_bound
+            )
             bin_label = f"[{lower_bound},{upper_bound})"
-        binning_expr = pl.when(condition).then(pl.lit(bin_label)).otherwise(binning_expr)
-    temp_df = df.with_columns(
-        binning_expr.alias("outlier_ratio_bin_based")
-    )
-    descriptive_statistic_df = temp_df.group_by(["embedding_model", "outlier_ratio_bin_based"]).agg(
+        binning_expr = (
+            pl.when(condition).then(pl.lit(bin_label)).otherwise(binning_expr)
+        )
+    temp_df = df.with_columns(binning_expr.alias("outlier_ratio_bin_based"))
+    descriptive_statistic_df = temp_df.group_by(
+        ["embedding_model", "outlier_ratio_bin_based"]
+    ).agg(
         pl.col(metric_col).mean().alias(f"average_{metric_col}"),
         pl.col(metric_col).std().alias(f"std_{metric_col}"),
         pl.col(metric_col).min().alias(f"min_{metric_col}"),
@@ -268,11 +289,7 @@ def create_outlier_plots(
         models_to_keep = df.get_column("embedding_model").unique().to_list()
 
     if color_mapping is None:
-        colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
-        color_mapping = {
-            model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
-            for model, (r, g, b) in zip(models_to_keep, colors)
-        }
+        color_mapping = create_color_mapping(models_to_keep)
 
     setup_publication_style()
 
@@ -286,6 +303,8 @@ def create_outlier_plots(
             "embedding_model",
             "algorithm_metric",
             "dataset_name",
+            "dataset_size",
+            "num_features",
             "outlier_ratio",
             "time_to_compute_embedding",
         ]
@@ -294,28 +313,26 @@ def create_outlier_plots(
             "algorithm",
             "embedding_model",
             "dataset_name",
+            "dataset_size",
+            "num_features",
             "outlier_ratio",
             "time_to_compute_embedding",
         ]
 
-    agg_result = df.group_by(
-        grouped_columns
-    ).agg(
+    agg_result = df.group_by(grouped_columns).agg(
         pl.col("auc_score").max().alias("auc_score"),
     )
 
     agg_result = clean_results(agg_result)
 
     descriptive_df = create_descriptive_dataframe(agg_result, "auc_score")
-    descriptive_df.write_csv(
-        Path(outlier_path / "outlier_descriptive.csv")
-    )
+    descriptive_df.write_csv(Path(outlier_path / "outlier_descriptive.csv"))
 
     if bin_edges:
-        outlier_ratio_df = create_outlier_ratio_dataframe(agg_result, bin_edges, "auc_score")
-        outlier_ratio_df.write_csv(
-            Path(outlier_path / "outlier_ratio.csv")
+        outlier_ratio_df = create_outlier_ratio_dataframe(
+            agg_result, bin_edges, "auc_score"
         )
+        outlier_ratio_df.write_csv(Path(outlier_path / "outlier_ratio.csv"))
 
     boxplot = sns.boxplot(
         data=agg_result,
@@ -386,11 +403,7 @@ def create_tabarena_plots(
         models_to_keep = df.get_column("embedding_model").unique().to_list()
 
     if color_mapping is None:
-        colors = sns.color_palette("colorblind", n_colors=len(models_to_keep))
-        color_mapping = {
-            model: f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
-            for model, (r, g, b) in zip(models_to_keep, colors)
-        }
+        color_mapping = create_color_mapping(models_to_keep)
 
     # Filter "euclidean" metric and "distance" weight
     if "algorithm_metric" in df.columns and "algorithm_weights" in df.columns:
@@ -409,6 +422,8 @@ def create_tabarena_plots(
             "embedding_model",
             "algorithm_metric",
             "dataset_name",
+            "dataset_size",
+            "num_features",
             "time_to_compute_embedding",
         ]
     else:
@@ -416,6 +431,8 @@ def create_tabarena_plots(
             "algorithm",
             "embedding_model",
             "dataset_name",
+            "dataset_size",
+            "num_features",
             "time_to_compute_embedding",
         ]
 
@@ -429,9 +446,7 @@ def create_tabarena_plots(
     setup_publication_style()
 
     # Boxplot for binary classification
-    binary_agg_result = binary.group_by(
-        grouped_columns
-    ).agg(
+    binary_agg_result = binary.group_by(grouped_columns).agg(
         pl.col("auc_score").max().alias("auc_score"),
     )
 
@@ -454,9 +469,7 @@ def create_tabarena_plots(
     plt.close()
 
     # Boxplot for multiclass classification
-    multiclass_agg_result = multiclass.group_by(
-        grouped_columns
-    ).agg(
+    multiclass_agg_result = multiclass.group_by(grouped_columns).agg(
         pl.col("auc_score").max().alias("auc_score"),
     )
 
@@ -479,10 +492,8 @@ def create_tabarena_plots(
     plt.close()
 
     # Boxplot for regression
-    regression_agg_result = regression.group_by(
-        grouped_columns
-    ).agg(
-        pl.col("mape_score").max().alias("mape_score"),
+    regression_agg_result = regression.group_by(grouped_columns).agg(
+        pl.col("mape_score").min().alias("mape_score"),
     )
 
     boxplot = sns.boxplot(

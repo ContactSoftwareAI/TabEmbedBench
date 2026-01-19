@@ -1,66 +1,70 @@
-from datetime import datetime
+import logging
+from functools import partial
 from pathlib import Path
-from typing import Iterator, List
+from typing import Any, Callable, Dict, Iterator, List, Tuple
 
 import numpy as np
 import openml
 import pandas as pd
 import polars as pl
-from sklearn.metrics import log_loss, mean_absolute_percentage_error, roc_auc_score
+from sklearn.metrics import (
+    log_loss,
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    r2_score,
+    roc_auc_score,
+    root_mean_squared_error,
+)
 from sklearn.preprocessing import LabelEncoder
-from tabicl.sklearn.preprocessing import TransformToNumerical
 
 from tabembedbench.benchmark.abstract_benchmark import AbstractBenchmark
+from tabembedbench.constants import (
+    SUPERVISED_BINARY_CLASSIFICATION,
+    SUPERVISED_MULTICLASSIFICATION,
+    SUPERVISED_REGRESSION,
+    TABARENA_TABPFN_SUBSET,
+)
 from tabembedbench.embedding_models.abstractembedding import (
     AbstractEmbeddingGenerator,
 )
 from tabembedbench.evaluators.abstractevaluator import AbstractEvaluator
 
-TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-TABARENA_TABPFN_SUBSET = [
-    363621,
-    363629,
-    363614,
-    363698,
-    363626,
-    363685,
-    363625,
-    363696,
-    363675,
-    363707,
-    363671,
-    363612,
-    363615,
-    363711,
-    363682,
-    363684,
-    363674,
-    363700,
-    363702,
-    363704,
-    363623,
-    363694,
-    363708,
-    363706,
-    363689,
-    363624,
-    363619,
-    363676,
-    363712,
-    363632,
-    363691,
-    363681,
-    363686,
-    363679,
-]
-
 
 class TabArenaBenchmark(AbstractBenchmark):
-    """Simplified benchmark for TabArena classification and regression tasks.
+    """
+    This class implements a benchmarking framework leveraging the TabArena dataset and its
+    variants to evaluate machine learning models across various supervised learning tasks.
 
-    This benchmark evaluates embedding models on supervised learning tasks
-    from the OpenML TabArena benchmark suite.
+    The TabArenaBenchmark class extends an abstract benchmarking interface and is purpose-built
+    to handle challenges associated with the TabArena dataset. It offers configurations for
+    dataset filtering, data preprocessing, and task-specific benchmarking, making it suitable
+    for both regression and classification tasks. Core functionalities include dataset
+    selection, metric evaluation, data splitting, and logging of experiment results.
+
+    Attributes:
+        tabarena_version (str): Specifies the version of the TabArena dataset.
+        tabarena_lite (bool): A flag indicating whether to benchmark using the lighter version
+            of the TabArena dataset.
+        exclude_datasets (list[str]): A list of dataset names or IDs to exclude during benchmarking.
+        result_dir (str | Path): The directory where benchmark results will be stored.
+        timestamp (str | None): A timestamp string used to uniquely identify this benchmark
+            run within the result directory.
+        logging_level (int): Defines the verbosity level for logging runtime messages.
+        save_result_dataframe (bool): Specifies whether benchmark results should be saved
+            into a DataFrame.
+        upper_bound_num_samples (int): Sets an upper limit on the number of samples allowed
+            within each dataset for benchmarking tasks.
+        upper_bound_num_features (int): Sets an upper limit on the number of features included
+            in each dataset for tasks.
+        run_tabpfn_subset (bool): A flag to restrict benchmarking to a predefined subset of
+            datasets optimized for the TabPFN algorithm.
+        skip_missing_values (bool): Indicates whether datasets containing missing values
+            should be excluded during the benchmark.
+        benchmark_metrics (dict): A dictionary specifying the performance metrics for the
+            benchmark tasks. Defaults to system-defined metrics if not provided.
+        openml_cache_dir (str | Path): The directory path where the OpenML cache is stored.
+            If not provided, defaults to "data/tabarena_datasets".
+        google_bucket (str): Represents the Google Cloud Storage bucket name, where applicable.
     """
 
     def __init__(
@@ -69,35 +73,64 @@ class TabArenaBenchmark(AbstractBenchmark):
         tabarena_lite: bool = True,
         exclude_datasets: list[str] | None = None,
         result_dir: str | Path = "result_tabarena",
-        timestamp: str = TIMESTAMP,
+        timestamp: str | None = None,
+        logging_level: int = logging.INFO,
         save_result_dataframe: bool = True,
         upper_bound_num_samples: int = 100000,
         upper_bound_num_features: int = 500,
         run_tabpfn_subset: bool = True,
+        skip_missing_values: bool = True,
+        benchmark_metrics: dict | None = None,
+        openml_cache_dir: str | Path | None = None,
+        google_bucket: str = None,
     ):
-        """Initialize the TabArena benchmark.
+        """
+        Initializes the instance with configuration settings for benchmarking using
+        the TabArena dataset.
 
         Args:
-            tabarena_version: OpenML suite identifier.
-            tabarena_lite: Whether to use lite mode (fewer folds/repeats).
-            exclude_datasets: List of dataset names to exclude from the benchmark.
-            result_dir: Directory for saving results.
-            timestamp: Timestamp string for result file naming.
-            save_result_dataframe: Whether to save results to disk.
-            upper_bound_num_samples: Maximum dataset size to process.
-            upper_bound_num_features: Maximum number of features to process.
-            run_tabpfn_subset: Whether to run only a subset of TabPFN tasks.
+            tabarena_version (str): Specifies the version of the TabArena dataset.
+            tabarena_lite (bool): Indicates whether to use the lite version of the
+                TabArena dataset.
+            exclude_datasets (list[str] | None): List of dataset IDs or names to
+                exclude from the benchmarking process.
+            result_dir (str | Path): Path to the directory where the results will
+                be saved.
+            timestamp (str | None): Optional timestamp to append to result files
+                for uniqueness.
+            logging_level (int): Logging verbosity level.
+            save_result_dataframe (bool): Specifies whether to save the results as
+                a DataFrame.
+            upper_bound_num_samples (int): Maximum number of samples allowed per
+                dataset.
+            upper_bound_num_features (int): Maximum number of features allowed per
+                dataset.
+            run_tabpfn_subset (bool): Whether to process only a predefined subset
+                of TabArena datasets optimized for TabPFN.
+            skip_missing_values (bool): Specifies whether to skip datasets that
+                contain missing values.
+            benchmark_metrics (dict | None): Dictionary defining the metrics to
+                use for evaluation. If not provided, default metrics will be used.
+            openml_cache_dir (str | Path | None): Path to a custom cache directory
+                for storing OpenML datasets. If not specified, a default path will
+                be used.
+            google_bucket (str): Name of the Google Cloud Storage bucket, if
+                applicable.
         """
-        # Note: task_type will be determined per dataset
-        # Using "Supervised Classification" as default, but will check compatibility per split
         super().__init__(
-            logger_name="TabEmbedBench_TabArena",
-            task_type="Supervised Classification",  # Will be overridden per split
+            name="TabEmbedBench_TabArena",
+            task_type=[
+                SUPERVISED_REGRESSION,
+                SUPERVISED_BINARY_CLASSIFICATION,
+                SUPERVISED_MULTICLASSIFICATION,
+            ],
             result_dir=result_dir,
             timestamp=timestamp,
+            logging_level=logging_level,
             save_result_dataframe=save_result_dataframe,
             upper_bound_num_samples=upper_bound_num_samples,
             upper_bound_num_features=upper_bound_num_features,
+            gcs_bucket_name=google_bucket,
         )
 
         self.tabarena_version = tabarena_version
@@ -107,12 +140,41 @@ class TabArenaBenchmark(AbstractBenchmark):
         self.task_ids = None
         self.len_tabpfn_subset = len(TABARENA_TABPFN_SUBSET)
         self.exclude_datasets = exclude_datasets or []
+        self.skip_missing_values = skip_missing_values
+        self.benchmark_metrics = benchmark_metrics or self._get_default_metrics()
 
-    def _load_datasets(self, **kwargs) -> list:
-        """Load TabArena tasks from OpenML.
+        if openml_cache_dir is None:
+            openml_cache_dir = Path("data/tabarena_datasets")
+        else:
+            openml_cache_dir = Path(openml_cache_dir)
+
+        openml_cache_dir.mkdir(parents=True, exist_ok=True)
+        openml.config.set_root_cache_directory(openml_cache_dir)
+        self.openml_cache_dir = openml_cache_dir
+
+        self.logger.info(f"OpenML cache directory: {self.openml_cache_dir}")
+
+    def _load_datasets(self, **kwargs) -> List[Dict[str, Any]]:
+        """
+        Loads and processes datasets from the OpenML benchmark suite.
+
+        This method retrieves the OpenML benchmark suite based on the specified
+        `tabarena_version`, extracts tasks from the suite, and fetches their corresponding
+        datasets. Additionally, it determines the folds and repeats configuration for each
+        task dataset and compiles the collected information into a list.
+
+        Args:
+            **kwargs: Optional keyword arguments that may be used in the dataset loading
+                process.
 
         Returns:
-            List of dictionaries containing task information.
+            List[Dict[str, Any]]: A list of dictionaries, each containing the following
+                information for a task:
+                - task_id: The identifier of the task.
+                - task: The OpenML task object.
+                - dataset: The dataset associated with the task.
+                - folds: The number of folds for cross-validation associated with the task.
+                - repeats: The number of repeats for cross-validation associated with the task.
         """
         self.benchmark_suite = openml.study.get_suite(self.tabarena_version)
         self.task_ids = self.benchmark_suite.tasks
@@ -135,9 +197,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         return datasets
 
-    def _should_skip_dataset(
-        self, dataset_info: dict, **kwargs
-    ) -> tuple[bool, str | None]:
+    def _should_skip_dataset(self, dataset_info: dict, **kwargs) -> Tuple[bool, str]:
         """Check if a dataset should be skipped.
 
         Args:
@@ -151,150 +211,215 @@ class TabArenaBenchmark(AbstractBenchmark):
         dataset = dataset_info["dataset"]
         num_samples = dataset.qualities["NumberOfInstances"]
         num_features = dataset.qualities["NumberOfFeatures"]
+        num_of_missing_values = dataset.qualities["NumberOfMissingValues"]
 
-        # Check size constraints
-        should_skip, reason = self._check_dataset_size_constraints(
-            num_samples, num_features, dataset.name
+        skip_reasons: list[str] = []
+
+        skip_reasons.extend(
+            self._check_dataset_size_constraints(
+                num_samples, num_features, dataset.name
+            )
         )
 
-        if not should_skip:
-            if self.run_tabpfn_subset and task_id not in TABARENA_TABPFN_SUBSET:
-                should_skip, reason = True, f"Not in TabPFN subset"
-            elif dataset.name in self.exclude_datasets:
-                should_skip, reason = (
-                    True,
-                    f"Excluded dataset {dataset.name} by request of user.",
-                )
-            else:
-                self.len_tabpfn_subset -= 1
-                task = dataset_info["task"]
-                self.logger.info(
-                    f"Starting experiments for dataset {dataset.name} "
-                    f"and task {task.task_type}. "
-                    f"{self.len_tabpfn_subset} datasets remaining."
-                )
+        if num_of_missing_values > 0 and self.skip_missing_values:
+            skip_reasons.append("Contains missing values")
 
-        return should_skip, reason
+        if self.run_tabpfn_subset and task_id not in TABARENA_TABPFN_SUBSET:
+            skip_reasons.append("Not in TabPFN subset")
 
-    def _prepare_dataset(self, dataset_info: dict, **kwargs) -> Iterator[dict]:
+        if dataset.name in self.exclude_datasets:
+            skip_reasons.append("Excluded by user")
+
+        if skip_reasons:
+            reason = " | ".join(skip_reasons)
+            return True, f"Dataset {dataset.name} - Skipping dataset: {reason}"
+
+        self.len_tabpfn_subset -= 1
+        task = dataset_info["task"]
+        msg = (
+            f"Dataset {dataset.name} - Starting experiments for task {task.task_type}. "
+            f"{self.len_tabpfn_subset} datasets remaining."
+        )
+
+        return False, msg
+
+    def _prepare_dataset(self, dataset_info: dict) -> Iterator[dict]:
         """
-        Prepares the dataset for model training and evaluation by performing preprocessing
-        and creating train-test splits. Handles categorical and numerical transformations,
-        removes irrelevant features, and encodes classification labels when necessary.
-
-        The method processes data fold by fold and repeat by repeat, yielding independent
-        data splits for each fold and repeat combination.
+        Prepares and processes dataset for machine learning tasks based on the provided dataset
+        information, including metadata extraction, column filtering, and train-test splitting
+        across specified folds and repeats.
 
         Args:
-            dataset_info (dict): A dictionary containing dataset meta-information.
-                - "task": The task object containing task specifications such as
-                  task type ("Supervised Classification") and target_name.
-                - "dataset": The dataset object from which data can be retrieved.
-                - "folds": The number of data folds for splitting.
-                - "repeats": The number of repeats for each fold.
-            **kwargs: Additional arguments that might be required for processing
-                the dataset. These are ignored by default.
+            dataset_info (dict): A dictionary containing the following keys:
+                - "task": The task object representing the machine learning task.
+                - "dataset": The dataset object containing data and metadata.
+                - "folds": The number of folds for cross-validation.
+                - "repeats": The number of repetitions for cross-validation.
 
         Yields:
-            Iterator[dict]: An iterator that generates dictionaries, each containing
-                processed data, metadata, and train-test splits for a specific fold/repeat.
-                - "X_train", "X_test" (DataFrame): Transformed training and test input data.
-                - "y_train", "y_test" (ndarray or Series): Encoded training and test target labels.
-                - "dataset_name" (str): The name of the dataset.
-                - "dataset_size" (int): Total number of records in the dataset.
-                - "num_features" (int): Number of features in the dataset.
-                - "metadata" (dict): Additional information about the task and processing,
-                  such as task type, categorical indices, fold, and repeat.
-
-        Raises:
-            Any exception raised during data retrieval, preprocessing, or train-test splitting
-            will propagate to the caller. Ensure proper exception handling is implemented
-            where this function is used.
+            dict: A dictionary containing:
+                - "X_train": Training samples.
+                - "X_test": Test samples.
+                - "y_train": Encoded training labels (for classification tasks).
+                - "y_true": True labels for the test set.
+                - "dataset_metadata": A dictionary containing metadata about the dataset.
+                - "feature_metadata": A dictionary containing feature-specific metadata, including:
+                    - "categorical_indices": Indices of categorical features.
+                    - "categorical_column_names": Names of categorical columns.
+                    - "fold": Current fold index.
+                    - "repeat": Current repeat index.
         """
         task = dataset_info["task"]
         dataset = dataset_info["dataset"]
         folds = dataset_info["folds"]
         repeats = dataset_info["repeats"]
 
+        dataset_metadata = {
+            "dataset_name": dataset.name,
+            "num_samples": dataset.qualities.get("NumberOfInstances"),
+            "num_features": dataset.qualities.get("NumberOfFeatures"),
+            "num_classes": dataset.qualities.get("NumberOfClasses", None),
+            "percentage_of_numeric_features": dataset.qualities.get(
+                "PercentageNumericFeatures", None
+            ),
+            "ratio_features_samples": dataset.qualities["Dimensionality"],
+        }
+
+        task_type = task.task_type
+
+        X, y, categorical_indicator, _ = dataset.get_data(
+            target=task.target_name, dataset_format="dataframe"
+        )
+
+        X, categorical_indicator = self._remove_columns_with_one_unique_value(
+            X,
+            categorical_indicator,
+            dataset.name,
+        )
+
         # Iterate through all folds and repeats
         for repeat in range(repeats):
             for fold in range(folds):
-                # Get data from dataset
-                X, y, categorical_indicator, attribute_names = dataset.get_data(
-                    target=task.target_name, dataset_format="dataframe"
-                )
-
-                # Remove the columns with only one unique value
-                X, categorical_indicator = self._remove_columns_with_one_unique_value(
-                    X, categorical_indicator, dataset.name
-                )
-
-                # Get categorical indices
-                categorical_indices = np.nonzero(categorical_indicator)[0].tolist()
-
                 # Get train/test split
                 train_indices, test_indices = task.get_train_test_split_indices(
                     fold=fold,
                     repeat=repeat,
                 )
 
+                categorical_column_names = [
+                    col
+                    for col, is_categorical in zip(X.columns, categorical_indicator)
+                    if is_categorical
+                ]
+                categorical_indices = [
+                    i
+                    for i, is_categorical in enumerate(categorical_indicator)
+                    if is_categorical
+                ]
+
                 X_train = X.iloc[train_indices]
                 X_test = X.iloc[test_indices]
                 y_train = y.iloc[train_indices]
                 y_test = y.iloc[test_indices]
 
-                numerical_transformer = TransformToNumerical()
-
-                X_train = numerical_transformer.fit_transform(X_train)
-                X_test = numerical_transformer.transform(X_test)
-
                 # Encode labels for classification
-                if task.task_type == "Supervised Classification":
+                if task_type == "Supervised Classification":
                     label_encoder = LabelEncoder()
+
                     y_train = label_encoder.fit_transform(y_train)
                     y_test = label_encoder.transform(y_test)
+                    task_type = (
+                        SUPERVISED_MULTICLASSIFICATION
+                        if (dataset_metadata["num_classes"] > 2)
+                        else SUPERVISED_BINARY_CLASSIFICATION
+                    )
+
+                dataset_metadata["task_type"] = task_type
 
                 yield {
-                    "X": None,
                     "X_train": X_train,
                     "X_test": X_test,
-                    "y": None,
                     "y_train": y_train,
-                    "y_test": y_test,
-                    "dataset_name": dataset.name,
-                    "dataset_size": X.shape[0],
-                    "num_features": X_train.shape[1],
-                    "metadata": {
-                        "task_type": task.task_type,
+                    "y_true": y_test,
+                    "dataset_metadata": dataset_metadata,
+                    "feature_metadata": {
                         "categorical_indices": categorical_indices,
+                        "categorical_column_names": categorical_column_names,
                         "fold": fold,
                         "repeat": repeat,
                     },
                 }
 
-    def _evaluate(
+    def _get_default_metrics(
         self,
-        embeddings: tuple,
-        evaluator: AbstractEvaluator,
-        data_split: dict,
-    ) -> dict:
-        """Evaluate embeddings for classification or regression.
+    ) -> Dict[str, Dict[str, Callable[[np.ndarray, np.ndarray], float]]]:
+        """
+        Returns default metrics for different supervised learning tasks.
 
-        Args:
-            embeddings: Tuple of (train_embeddings, test_embeddings, compute_time).
-            evaluator: The evaluator to use.
-            data_split: Dictionary with data and metadata.
+        This function provides a mapping of supervised learning task types to their default
+        evaluation metrics. The supported task types and their associated metrics are as
+        follows:
+        - SUPERVISED_REGRESSION: Includes "mape_score" for Mean Absolute Percentage Error.
+        - SUPERVISED_BINARY_CLASSIFICATION: Includes "auc_score" for Area Under the ROC Curve.
+        - SUPERVISED_MULTICLASSIFICATION: Includes "auc_score" for Area Under the ROC Curve
+          with one-vs-rest strategy and "log_loss_score" for Log Loss.
 
         Returns:
-            Dictionary containing evaluation results.
+            dict[str, dict[str, Callable[[np.ndarray, np.ndarray], float]]]: A nested dictionary
+            where keys represent supervised task types, and values are dictionaries that map
+            metric names to callable functions implementing those metrics.
         """
-        train_embeddings, test_embeddings, compute_time = embeddings
-        y_train = data_split["y_train"]
-        y_test = data_split["y_test"]
-        task_type = data_split["metadata"]["task_type"]
+        return {
+            SUPERVISED_REGRESSION: {
+                "mae_score": mean_absolute_error,
+                "mape_score": mean_absolute_percentage_error,
+                "r2_score": r2_score,
+                "rmse_score": root_mean_squared_error,
+            },
+            SUPERVISED_BINARY_CLASSIFICATION: {
+                "auc_score": roc_auc_score,
+            },
+            SUPERVISED_MULTICLASSIFICATION: {
+                "auc_score_ovr": partial(roc_auc_score, multi_class="ovr"),
+                "auc_score_ovo": partial(roc_auc_score, multi_class="ovo"),
+                "log_loss_score": log_loss,
+            },
+        }
+
+    def _get_evaluator_prediction(
+        self,
+        embeddings: Tuple[np.ndarray, np.ndarray, float],
+        evaluator: AbstractEvaluator,
+        dataset_configurations: dict,
+    ) -> np.ndarray:
+        """
+        Generates evaluator predictions based on provided embeddings and dataset configurations.
+
+        This function is responsible for using the provided embeddings and dataset
+        configurations to train the evaluator and generate predictions for the test
+        embeddings. It supports different task types, such as supervised binary
+        classification, and formats the output predictions accordingly.
+
+        Args:
+            embeddings (Tuple[np.ndarray, np.ndarray, float]): A tuple containing the train
+                embeddings, test embeddings, and a float value (usually an objective
+                metric or loss value).
+            evaluator (AbstractEvaluator): An instance of the evaluator that provides
+                prediction capabilities. The evaluator should implement a `get_prediction`
+                method for training and test inference.
+            dataset_configurations (dict): A dictionary containing dataset-configured
+                details required for the training and prediction process. It includes
+                metadata like `task_type` and data like `y_train`.
+
+        Returns:
+            np.ndarray: The predictions generated by the evaluator for the test embeddings.
+        """
+        task_type = dataset_configurations["dataset_metadata"]["task_type"]
+        train_embeddings, test_embeddings, _ = embeddings
+        y_train = dataset_configurations["y_train"]
 
         # Train evaluator
-        prediction_train, _ = evaluator.get_prediction(
+        evaluator.get_prediction(
             train_embeddings,
             y_train,
             train=True,
@@ -306,65 +431,74 @@ class TabArenaBenchmark(AbstractBenchmark):
             train=False,
         )
 
-        # Build result dictionary
-        result_dict = {
-            "dataset_name": [data_split["dataset_name"]],
-            "dataset_size": [data_split["dataset_size"]],
-            "num_features": [data_split["num_features"]],
-            "embed_dim": [train_embeddings.shape[-1]],
-            "time_to_compute_embedding": [compute_time],
-            "algorithm": [evaluator._name],
-            "fold": [data_split["metadata"]["fold"]],
-            "repeat": [data_split["metadata"]["repeat"]],
-        }
+        if task_type == SUPERVISED_BINARY_CLASSIFICATION:
+            test_prediction = test_prediction[:, 1]
 
-        # Compute task-specific metrics
-        if task_type == "Supervised Regression":
-            mape_score = mean_absolute_percentage_error(y_test, test_prediction)
-            result_dict["task"] = ["regression"]
-            result_dict["mape_score"] = [mape_score]
+        return test_prediction
 
-        elif task_type == "Supervised Classification":
-            n_classes = test_prediction.shape[1]
-            if n_classes == 2:
-                auc_score = roc_auc_score(y_test, test_prediction[:, 1])
-                result_dict["task"] = ["classification"]
-                result_dict["classification_type"] = ["binary"]
-            else:
-                auc_score = roc_auc_score(y_test, test_prediction, multi_class="ovr")
-                log_loss_score = log_loss(y_test, test_prediction)
-                result_dict["task"] = ["classification"]
-                result_dict["classification_type"] = ["multiclass"]
-                result_dict["log_loss_score"] = [log_loss_score]
-            result_dict["auc_score"] = [auc_score]
+    def _process_end_to_end_model_pipeline(
+        self,
+        embedding_model: AbstractEmbeddingGenerator,
+        dataset_configurations: dict,
+    ) -> None:
+        """Processes an end-to-end model pipeline to generate predictions and compute evaluation metrics.
 
-        # Add evaluator parameters
-        evaluator_params = evaluator.get_parameters()
-        for key, value in evaluator_params.items():
-            result_dict[f"algorithm_{key}"] = [value]
-
-        return result_dict
-
-    def _get_benchmark_name(self) -> str:
-        """Get the benchmark name for result saving.
-
-        Returns:
-            String identifier for the benchmark.
-        """
-        return "TabArena"
-
-    def _is_compatible(self, evaluator: AbstractEvaluator, data_split: dict) -> bool:
-        """Check if evaluator is compatible with the current task.
+        This function manages the pipeline for training a given end-to-end model on the specified dataset,
+        generating predictions for a test set, computing relevant metrics, and storing the results in a
+        buffer for later usage.
 
         Args:
-            evaluator: The evaluator to check.
-            data_split: Dictionary containing data split information.
+            embedding_model: An instance of AbstractEmbeddingGenerator that supplies methods for embedding
+                generation and end-to-end prediction.
+            dataset_configurations: A dictionary containing configurations of the dataset, including
+                training and test data, ground truth labels, dataset metadata, and feature metadata. The
+                following keys are expected in the dictionary:
+                - X_train: Training features.
+                - y_train: Training labels.
+                - X_test: Testing features.
+                - y_true: Ground truth labels for the test data.
+                - dataset_metadata: A dictionary describing dataset-specific metadata, such as task type.
+                - feature_metadata: A dictionary describing feature-related metadata, such as current fold
+                  and repeat.
 
         Returns:
-            True if evaluator supports the task type.
+            None
         """
-        task_type = data_split["metadata"]["task_type"]
-        return task_type == evaluator.task_type
+        X_train = dataset_configurations.get("X_train")
+        y_train = dataset_configurations.get("y_train")
+        X_test = dataset_configurations.get("X_test")
+        y_true = dataset_configurations.get("y_true")
+        dataset_metadata = dataset_configurations.get("dataset_metadata")
+        feature_metadata = dataset_configurations.get("feature_metadata")
+        task_type = dataset_metadata.get("task_type")
+
+        result_row_dict = {
+            "embedding_model": None,
+            "algorithm": embedding_model.name,
+            "fold": feature_metadata["fold"],
+            "repeat": feature_metadata["repeat"],
+        }
+
+        result_row_dict.update(dataset_metadata)
+
+        test_prediction = embedding_model.get_end_to_end_prediction(
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            task_type=task_type,
+        )
+
+        metric_scores = self._compute_metrics(
+            y_true,
+            test_prediction,
+            task_type,
+        )
+
+        result_row_dict.update(metric_scores)
+
+        self._results_buffer.append(result_row_dict)
+        self._save_results()
+        self._cleanup_gpu_cache()
 
     def _get_task_configuration(self, dataset, task) -> tuple[int, int]:
         """Get the number of folds and repeats for a task.
@@ -394,7 +528,7 @@ class TabArenaBenchmark(AbstractBenchmark):
     def _remove_columns_with_one_unique_value(
         self,
         X: pd.DataFrame,
-        categorical_indices: List[bool],
+        categorical_indicator: List[bool],
         dataset_name: str = "",
     ) -> tuple[pd.DataFrame, List[bool]]:
         """
@@ -407,7 +541,7 @@ class TabArenaBenchmark(AbstractBenchmark):
 
         Args:
             X (pd.DataFrame): The input DataFrame containing data.
-            categorical_indices (List[bool]): A list of boolean values where each entry
+            categorical_indicator (List[bool]): A list of boolean values where each entry
                 indicates whether the corresponding column in X is categorical.
             dataset_name (str): An optional name for the dataset, used for logging
                 purposes. Defaults to an empty string.
@@ -420,10 +554,10 @@ class TabArenaBenchmark(AbstractBenchmark):
         X_copy = X.copy()
 
         num_features_before = X_copy.shape[1]
-        categorical_indices_updated = categorical_indices.copy()
+        categorical_indices_updated = categorical_indicator.copy()
 
         # Get column names
-        cols = [col for col, is_cat in zip(X.columns, categorical_indices)]
+        cols = [col for col, is_cat in zip(X.columns, categorical_indicator)]
 
         # Track columns to drop
         cols_to_drop = []
@@ -450,7 +584,7 @@ class TabArenaBenchmark(AbstractBenchmark):
             drop_indices = [X.columns.get_loc(col) for col in cols_to_drop]
             categorical_indices_updated = [
                 cat_ind
-                for i, cat_ind in enumerate(categorical_indices)
+                for i, cat_ind in enumerate(categorical_indicator)
                 if i not in drop_indices
             ]
             self.logger.info(f"Number of features after: {X_copy.shape[1]}")
@@ -467,8 +601,10 @@ def run_tabarena_benchmark(
     upper_bound_num_features: int = 500,
     result_dir: str | Path = "result_tabarena",
     save_result_dataframe: bool = True,
-    timestamp: str = TIMESTAMP,
+    timestamp: str | None = None,
     run_tabpfn_subset: bool = True,
+    openml_cache_dir: str | Path | None = None,
+    google_bucket: str = None,
 ) -> pl.DataFrame:
     """Run the TabArena benchmark for a set of embedding models.
 
@@ -492,6 +628,7 @@ def run_tabarena_benchmark(
         save_result_dataframe: Whether to save results to disk. Defaults to True.
         timestamp: Timestamp string for result file naming. Defaults to current timestamp.
         run_tabpfn_subset: Whether to run only the TabPFN subset of tasks. Defaults to True.
+        openml_cache_dir: Directory for caching OpenML datasets. If None, uses default.
 
     Returns:
         pl.DataFrame: Polars DataFrame containing the benchmark results.
@@ -506,6 +643,8 @@ def run_tabarena_benchmark(
         upper_bound_num_samples=upper_bound_num_samples,
         upper_bound_num_features=upper_bound_num_features,
         run_tabpfn_subset=run_tabpfn_subset,
+        openml_cache_dir=openml_cache_dir,
+        google_bucket=google_bucket,
     )
 
     return benchmark.run_benchmark(embedding_models, evaluators)

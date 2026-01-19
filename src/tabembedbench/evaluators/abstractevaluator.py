@@ -16,7 +16,7 @@ class AbstractEvaluator(ABC):
         task_type (str): Type of task (e.g., 'classification', 'regression').
     """
 
-    def __init__(self, name: str, task_type: str):
+    def __init__(self, name: str, task_type: str | list[str]):
         """Initialize the AbstractEvaluator.
 
         Args:
@@ -24,7 +24,19 @@ class AbstractEvaluator(ABC):
             task_type (str): Type of task for this evaluator.
         """
         self._name = name or self.__class__.__name__
-        self.task_type = task_type
+        self.task_type = task_type if isinstance(task_type, list) else [task_type]
+
+    @property
+    def name(self) -> str:
+        """Gets the name attribute value.
+
+        This property retrieves the value of the `_name` attribute,
+        which represents the name associated with the instance.
+
+        Returns:
+            str: The name associated with the instance.
+        """
+        return self._name
 
     @abstractmethod
     def get_prediction(
@@ -71,6 +83,9 @@ class AbstractEvaluator(ABC):
         """
         return self.task_type
 
+    def check_task_type(self, task: str):
+        return task in self.task_type
+
 
 class AbstractHPOEvaluator(AbstractEvaluator):
     """Abstract base class for evaluators with Optuna hyperparameter optimization.
@@ -92,10 +107,12 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         best_model: Best model trained with optimal hyperparameters.
     """
 
+    model_class = None
+
     def __init__(
         self,
         name: str,
-        task_type: str,
+        task_type: str | list[str],
         n_trials: int = 50,
         cv_folds: int = 5,
         random_state: int = 42,
@@ -134,8 +151,41 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         self.best_score = None
         self.best_model = None
 
+    # ========== Abstract Methods (Subclasses must implement) ==========
     @abstractmethod
-    def create_model(self, trial: optuna.Trial):
+    def get_scoring_metric(self) -> str:
+        """Get the scoring metric for cross-validation.
+
+        Returns:
+            str: The sklearn scoring string.
+        """
+        pass
+
+    @abstractmethod
+    def _get_search_space(self) -> dict[str, dict]:
+        """Get the search space for hyperparameter optimization.
+
+        Returns:
+            dict[str, optuna.search_space]: Dictionary
+                mapping hyperparameter names to Optuna search spaces.
+        """
+        pass
+
+    @abstractmethod
+    def _get_model_predictions(self, model, embeddings: np.ndarray):
+        """Get predictions from a trained model.
+
+        Args:
+            model: Trained model instance.
+            embeddings (np.ndarray): Input embeddings for prediction.
+
+        Returns:
+            Model predictions on the embeddings.
+        """
+        pass
+
+    # ========== Concrete Methods (Implemented in base class) ==========
+    def create_model(self, trial: optuna.Trial, **kwargs):
         """Create a model with hyperparameters suggested by Optuna trial.
 
         Args:
@@ -144,16 +194,58 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         Returns:
             Model instance with trial-suggested hyperparameters.
         """
-        pass
+        if self.model_class is None:
+            raise NotImplementedError(
+                "Subclasses must define model_class or override create_model."
+            )
 
-    @abstractmethod
-    def get_scoring_metric(self) -> dict[str, str]:
-        """Get the scoring metric for cross-validation.
+        search_space = self._get_search_space()
+        params = kwargs.copy()
 
-        Returns:
-            dict[str, str]: Dictionary mapping metric name to sklearn scoring string.
-        """
-        pass
+        suggestion_methods = {
+            "int": lambda name, cfg: trial.suggest_int(
+                name=name,
+                low=cfg["low"],
+                high=cfg["high"],
+                step=cfg.get("step", 1),
+                log=cfg.get("log", False),
+            ),
+            "float": lambda name, cfg: trial.suggest_float(
+                name, cfg["low"], cfg["high"], log=cfg.get("log", False)
+            ),
+            "categorical": lambda name, cfg: trial.suggest_categorical(
+                name, cfg["choices"]
+            ),
+            "constant": lambda name, cfg: cfg["value"],
+            "int_sequence": lambda name, cfg: tuple(
+                trial.suggest_int(
+                    f"{name}_{i}", cfg["low"], cfg["high"], log=cfg.get("log", False)
+                )
+                for i in range(params[cfg.get("length_param")])
+            ),
+        }
+
+        for param_name in sorted(
+            search_space.keys(),
+            key=lambda x: search_space[x].get("type") == "int_sequence",
+        ):
+            config = search_space.get(param_name)
+            param_type = config.get("type")
+            if param_type not in suggestion_methods:
+                raise TypeError(
+                    f"Unsupported hyperparameter type '{param_type}' for '{param_name}'. "
+                    f"Supported types: {list(suggestion_methods.keys())}"
+                )
+
+            params[param_name] = suggestion_methods[param_type](param_name, config)
+
+        # Remove parameters which are only suggested for length of a sequence like number of layers
+        for config in search_space.values():
+            length_param = config.get("length_param")
+            if length_param and length_param in params:
+                params.pop(length_param)
+
+        return self.model_class(**params)
 
     def objective(
         self, trial: optuna.Trial, embeddings: np.ndarray, y: np.ndarray
@@ -181,7 +273,6 @@ class AbstractHPOEvaluator(AbstractEvaluator):
             n_jobs=1,
         )
 
-        # Return mean score
         return scores.mean()
 
     def optimize_hyperparameters(
@@ -233,17 +324,9 @@ class AbstractHPOEvaluator(AbstractEvaluator):
 
         return self.best_params
 
-    @abstractmethod
-    def _get_search_space(self) -> dict[str, optuna.search_space]:
-        """Get the search space for hyperparameter optimization.
-
-        Returns:
-            dict[str, optuna.search_space]: Dictionary
-                mapping hyperparameter names to Optuna search spaces.
-        """
-        pass
-
-    def fit_best_model(self, embeddings: np.ndarray, y: np.ndarray):
+    def fit_best_model(
+        self, embeddings: np.ndarray, y: np.ndarray, **additional_parameters
+    ):
         """Fit a model using the best hyperparameters found during optimization.
 
         Args:
@@ -257,10 +340,11 @@ class AbstractHPOEvaluator(AbstractEvaluator):
             raise ValueError(
                 "No best parameters found. Run optimize_hyperparameters first."
             )
-
+        best_model_params = self.best_params
+        best_model_params.update(additional_parameters)
         # Create a trial with best parameters for model creation
         # We use a frozen trial to avoid suggesting new parameters
-        frozen_trial = optuna.trial.FixedTrial(self.best_params)
+        frozen_trial = optuna.trial.FixedTrial(best_model_params)
         self.best_model = self.create_model(frozen_trial)
 
         # Fit the model
@@ -271,6 +355,7 @@ class AbstractHPOEvaluator(AbstractEvaluator):
         embeddings: np.ndarray,
         y: np.ndarray | None = None,
         train: bool = True,
+        **kwargs,
     ) -> tuple:
         """Get predictions from the evaluator.
 
@@ -301,7 +386,7 @@ class AbstractHPOEvaluator(AbstractEvaluator):
             self.optimize_hyperparameters(embeddings, y)
 
             # Fit best model
-            self.fit_best_model(embeddings, y)
+            self.fit_best_model(embeddings, y, **kwargs)
 
             # Get predictions
             predictions = self._get_model_predictions(self.best_model, embeddings)
@@ -321,19 +406,6 @@ class AbstractHPOEvaluator(AbstractEvaluator):
 
         predictions = self._get_model_predictions(self.best_model, embeddings)
         return predictions, None
-
-    @abstractmethod
-    def _get_model_predictions(self, model, embeddings: np.ndarray):
-        """Get predictions from a trained model.
-
-        Args:
-            model: Trained model instance.
-            embeddings (np.ndarray): Input embeddings for prediction.
-
-        Returns:
-            Model predictions on the embeddings.
-        """
-        pass
 
     def reset_evaluator(self):
         """Reset the evaluator to its initial state.

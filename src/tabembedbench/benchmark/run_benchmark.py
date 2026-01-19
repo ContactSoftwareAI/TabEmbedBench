@@ -14,11 +14,14 @@ from typing import Tuple
 import polars as pl
 import torch
 
+from tabembedbench.benchmark.dataset_separation_benchmark import (
+    run_dataseparation_benchmark,
+)
 from tabembedbench.benchmark.outlier_benchmark import run_outlier_benchmark
 from tabembedbench.benchmark.tabarena_benchmark import run_tabarena_benchmark
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
 from tabembedbench.evaluators import AbstractEvaluator
-from tabembedbench.utils.logging_utils import setup_unified_logging
+from tabembedbench.utils.logging_utils import setup_unified_logging, upload_logs_to_gcs
 
 
 @dataclass
@@ -64,7 +67,7 @@ class BenchmarkConfig:
     Attributes:
         run_outlier (bool): Whether to include outlier detection benchmarks in the
             run.
-        run_supervised (bool): Whether to run supervised benchmarks.
+        run_tabarena (bool): Whether to run supervised benchmarks.
         run_tabpfn_subset (bool): Whether to include TabPFN subset benchmarks in
             the run.
         data_dir (str | Path): Path to the directory where necessary data is
@@ -76,11 +79,17 @@ class BenchmarkConfig:
     """
 
     run_outlier: bool = True
-    run_supervised: bool = True
+    run_tabarena: bool = True
+    run_dataset_tabpfn_separation: bool = True
+    run_dataset_separation: bool = False
     run_tabpfn_subset: bool = False
     data_dir: str | Path = "data"
     save_logs: bool = True
     logging_level: int = logging.INFO
+    dataset_separation_configurations_json_path: str | Path = None
+    dataset_separation_configurations_tabpfn_subset_json_path: str | Path = None
+    gcs_bucket: str = (None,)
+    gcs_filepath: str = None
 
 
 def run_benchmark(
@@ -88,7 +97,7 @@ def run_benchmark(
     evaluator_algorithms: list[AbstractEvaluator],
     dataset_config: DatasetConfig | None = None,
     benchmark_config: BenchmarkConfig | None = None,
-) -> Tuple[pl.DataFrame, pl.DataFrame, Path]:
+) -> Tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame, pl.DataFrame, Path]:
     """Run comprehensive benchmark evaluation for embedding models.
 
     This function orchestrates the complete benchmarking process, running both
@@ -114,10 +123,11 @@ def run_benchmark(
     result_dir.mkdir(parents=True, exist_ok=True)
 
     # Setup logging
+    log_file_path = None
     if benchmark_config.save_logs:
         log_dir = result_dir / "logs"
-        log_dir.mkdir(exist_ok=True)
-        setup_unified_logging(
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file_path = setup_unified_logging(
             log_dir=log_dir,
             timestamp=timestamp,
             logging_level=benchmark_config.logging_level,
@@ -134,6 +144,16 @@ def run_benchmark(
     logger.info(f"Using {len(models)} embedding model(s)")
     logger.info(f"Using {len(evaluators)} evaluator(s)")
 
+    if (
+        benchmark_config.gcs_bucket is not None
+        and benchmark_config.gcs_filepath is not None
+    ):
+        google_bucket_path = (
+            f"{benchmark_config.gcs_bucket}/{benchmark_config.gcs_filepath}"
+        )
+    else:
+        google_bucket_path = None
+
     # Run outlier detection benchmark
     if benchmark_config.run_outlier:
         logger.info("Running outlier detection benchmark...")
@@ -147,6 +167,7 @@ def run_benchmark(
                 upper_bound_num_features=dataset_config.upper_bound_num_features,
                 result_dir=result_dir,
                 timestamp=timestamp,
+                google_bucket=google_bucket_path,
             )
             _cleanup_models(models, logger)
         except Exception as e:
@@ -156,7 +177,7 @@ def run_benchmark(
         result_outlier_df = pl.DataFrame()
 
     # Run TabArena benchmark
-    if benchmark_config.run_supervised:
+    if benchmark_config.run_tabarena:
         logger.info("Running supervised benchmark (TabArena)...")
         try:
             result_tabarena_df = run_tabarena_benchmark(
@@ -170,6 +191,7 @@ def run_benchmark(
                 timestamp=timestamp,
                 result_dir=result_dir,
                 run_tabpfn_subset=benchmark_config.run_tabpfn_subset,
+                google_bucket=google_bucket_path,
             )
             _cleanup_models(models, logger)
         except Exception as e:
@@ -179,8 +201,69 @@ def run_benchmark(
         logger.info("Skipping supervised benchmark.")
         result_tabarena_df = pl.DataFrame()
 
+    if (
+        benchmark_config.run_dataset_tabpfn_separation
+        and benchmark_config.dataset_separation_configurations_tabpfn_subset_json_path
+        is not None
+    ):
+        logger.info(
+            "Running dataset separation on TabPFN constrainted dataset benchmark..."
+        )
+        try:
+            result_dataset_tabpfn_separation_df = run_dataseparation_benchmark(
+                embedding_models=models,
+                evaluators=evaluators,
+                timestamp=timestamp,
+                result_dir=result_dir,
+                use_tabpfn_subset=benchmark_config.run_tabpfn_subset,
+                dataset_configurations_json_path=benchmark_config.dataset_separation_configurations_tabpfn_subset_json_path,
+                google_bucket=google_bucket_path,
+            )
+            _cleanup_models(models, logger)
+        except Exception as e:
+            logger.exception(f"Error during supervised benchmark: {e}")
+            result_dataset_tabpfn_separation_df = pl.DataFrame()
+    else:
+        result_dataset_tabpfn_separation_df = pl.DataFrame()
+
+    if (
+        benchmark_config.run_dataset_separation
+        and benchmark_config.dataset_separation_configurations_json_path is not None
+    ):
+        logger.info("Running dataset separation benchmark...")
+        try:
+            result_dataset_separation_df = run_dataseparation_benchmark(
+                embedding_models=models,
+                evaluators=evaluators,
+                timestamp=timestamp,
+                result_dir=result_dir,
+                use_tabpfn_subset=benchmark_config.run_tabpfn_subset,
+                dataset_configurations_json_path=benchmark_config.dataset_separation_configurations_json_path,
+                google_bucket=google_bucket_path,
+            )
+            _cleanup_models(models, logger)
+        except Exception as e:
+            logger.exception(f"Error during supervised benchmark: {e}")
+            result_dataset_separation_df = pl.DataFrame()
+    else:
+        result_dataset_separation_df = pl.DataFrame()
+
+    if benchmark_config.gcs_bucket and log_file_path:
+        logger.info("Uploading logs to Google Cloud Storage...")
+        upload_logs_to_gcs(
+            local_log_file=log_file_path,
+            bucket_name=benchmark_config.gcs_bucket,
+            gcs_path=f"{benchmark_config.gcs_filepath}/{str(result_dir)}" or "",
+        )
+
     logger.info(f"Benchmark completed at {datetime.now()}")
-    return result_outlier_df, result_tabarena_df, result_dir
+    return (
+        result_outlier_df,
+        result_tabarena_df,
+        result_dataset_tabpfn_separation_df,
+        result_dataset_separation_df,
+        result_dir,
+    )
 
 
 def _validate_models(
