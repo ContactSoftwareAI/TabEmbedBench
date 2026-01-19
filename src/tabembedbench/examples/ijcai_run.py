@@ -7,12 +7,6 @@ datasets. It supports classification, regression, and outlier detection tasks.
 
 import logging
 
-import click
-from tabembedbench.evaluators.knn_classifier import KNNClassifierEvaluator
-from tabembedbench.evaluators.knn_regressor import KNNRegressorEvaluator
-from tabembedbench.evaluators.mlp_classifier import MLPClassifierEvaluator
-from tabembedbench.evaluators.mlp_regressor import MLPRegressorEvaluator
-
 from tabembedbench.benchmark.run_benchmark import (
     BenchmarkConfig,
     DatasetConfig,
@@ -20,21 +14,60 @@ from tabembedbench.benchmark.run_benchmark import (
 )
 from tabembedbench.embedding_models import (
     SphereBasedEmbedding,
-    TabICLEmbedding,
     TableVectorizerEmbedding,
     TabPFNEmbedding,
+    TabPFNEmbeddingConstantVector,
+    TabPFNEmbeddingRandomVector,
+    TabStarEmbedding,
+)
+from tabembedbench.embedding_models.tabicl_embedding import (
+    TabICLEmbedding,
+    TabICLWrapper,
+)
+from tabembedbench.evaluators import (
+    LogisticRegressionHPOEvaluator,
+)
+from tabembedbench.evaluators.classification import (
+    KNNClassifierEvaluator,
+    MLPClassifierEvaluator,
 )
 from tabembedbench.evaluators.outlier import (
     DeepSVDDEvaluator,
     IsolationForestEvaluator,
     LocalOutlierFactorEvaluator,
 )
-from tabembedbench.utils.eda_utils import (
-    create_outlier_plots,
-    create_tabarena_plots,
+from tabembedbench.evaluators.regression import (
+    KNNRegressorEvaluator,
+    MLPRegressorEvaluator,
 )
 
-logger = logging.getLogger("EuRIPS_Run_Benchmark")
+logger = logging.getLogger("IJCAI_Run_Benchmark")
+
+DEBUG = False
+GOOGLE_BUCKET = "bucket_tabdata"
+GCS_DIR = "ijcai"
+DATA_DIR = "ijcai_run"
+
+DATASETCONFIG = DatasetConfig(
+    adbench_dataset_path="data/adbench_tabular_datasets",
+    exclude_adbench_datasets=[],
+    exclude_tabarena_datasets=[],
+    upper_bound_dataset_size=15000,
+    upper_bound_num_features=500,
+)
+
+
+BENCHMARK_CONFIG = BenchmarkConfig(
+    run_outlier=True,
+    run_tabarena=True,
+    data_dir=DATA_DIR,
+    dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
+    dataset_separation_configurations_tabpfn_subset_json_path="dataset_separation_tabarena_tabpfn_subset.json",
+    gcs_bucket=GOOGLE_BUCKET,
+    gcs_filepath=GCS_DIR,
+)
+
+NUM_ESTIMATORS = 5
 
 
 def get_embedding_models(debug=False):
@@ -50,26 +83,40 @@ def get_embedding_models(debug=False):
         list: List of embedding models
     """
     if debug:
-        return [TableVectorizerEmbedding()]
-
-    tabicl_row_embedder = TabICLEmbedding()
-
-    tablevector = TableVectorizerEmbedding()
-
-    tabpfn_embedder = TabPFNEmbedding(num_estimators=5)
+        return [
+            # SphereBasedEmbedding(embed_dim=16),
+            TabICLWrapper(),
+            TabICLEmbedding(),
+        ]
 
     sphere_model_64 = SphereBasedEmbedding(embed_dim=64)
     sphere_model_192 = SphereBasedEmbedding(embed_dim=192)
+    sphere_model_256 = SphereBasedEmbedding(embed_dim=256)
     sphere_model_512 = SphereBasedEmbedding(embed_dim=512)
+    tabicl_embedding = TabICLEmbedding()
+    tablevectorizer = TableVectorizerEmbedding()
+    tabpfn = TabPFNEmbedding(num_estimators=NUM_ESTIMATORS)
+    tabpfn_random = TabPFNEmbeddingRandomVector(num_estimators=NUM_ESTIMATORS)
+    tabpfn_constant = TabPFNEmbeddingConstantVector(num_estimators=NUM_ESTIMATORS)
+    tabStar_embedding = TabStarEmbedding()
 
     embedding_models = [
-        tabicl_row_embedder,
-        tabpfn_embedder,
-        tablevector,
         sphere_model_64,
         sphere_model_192,
+        sphere_model_256,
         sphere_model_512,
+        tabicl_embedding,
+        tablevectorizer,
     ]
+
+    embedding_models.extend(
+        [
+            tabpfn,
+            tabpfn_random,
+            tabpfn_constant,
+            tabStar_embedding,
+        ]
+    )
 
     return embedding_models
 
@@ -148,6 +195,7 @@ def get_evaluators(debug=False):
 
     evaluator_algorithms.extend(
         [
+            LogisticRegressionHPOEvaluator(),
             MLPRegressorEvaluator(),
             MLPClassifierEvaluator(),
             deep_svdd_dynamic,
@@ -158,164 +206,31 @@ def get_evaluators(debug=False):
     return evaluator_algorithms
 
 
-def run_main(
-    debug,
-    max_samples,
-    max_features,
-    run_outlier,
-    run_supervised,
-    adbench_dataset_path,
-    data_dir,
-    bin_edges,
-):
-    """
-    Runs the main execution flow for the benchmark process, including data configuration,
-    model evaluation, and result visualization. This function coordinates the various
-    components involved in embedding model evaluation and creates plots for analysis.
-
-    Args:
-        debug (bool): Enables or disables debug mode. If True, reduces processing limits
-            for faster debugging.
-        max_samples (int): Maximum number of samples to process in each dataset.
-        max_features (int): Maximum number of features to include for the datasets.
-        run_outlier (bool): Specifies whether to run the outlier detection evaluation.
-        run_supervised (bool): Specifies whether to run the supervised evaluation.
-        adbench_dataset_path (str): Path to the ADBench dataset directory.
-        data_dir (str): Directory where processed data and results will be stored.
-        bin_edges (list): List of floats in (0,1) for grouping the results with respect to the outlier ratio.
-
-    Raises:
-        ValueError: If any configuration or dataset parameters are invalid.
-
-    Returns:
-        None
-    """
-    if debug:
-        logger.info("Running in DEBUG mode")
-        max_samples = 910
-        max_features = 50
-
+def main(debug=False):
     embedding_models = get_embedding_models(debug=debug)
-    models_to_keep = [embedding_model._name for embedding_model in embedding_models]
 
     evaluators = get_evaluators(debug=debug)
-    order_evaluators_regression = [
-        evaluator._name
-        for evaluator in evaluators
-        if evaluator.task_type == "Supervised Regression"
-    ]
-    order_evaluators_regression = list(dict.fromkeys(order_evaluators_regression))
-    order_evaluators_classification = [
-        evaluator._name
-        for evaluator in evaluators
-        if evaluator.task_type == "Supervised Classification"
-    ]
-    order_evaluators_classification = list(
-        dict.fromkeys(order_evaluators_classification)
-    )
-    order_evaluators_outlier = [
-        evaluator._name
-        for evaluator in evaluators
-        if evaluator.task_type == "Outlier Detection"
-    ]
-    order_evaluators_outlier = list(dict.fromkeys(order_evaluators_outlier))
 
     logger.info(f"Using {len(embedding_models)} embedding model(s)")
     logger.info(f"Using {len(evaluators)} evaluator(s)")
 
-    dataset_config = DatasetConfig(
-        adbench_dataset_path=adbench_dataset_path,
-        exclude_adbench_datasets=[],
-        upper_bound_dataset_size=max_samples,
-        upper_bound_num_features=max_features,
-    )
+    dataset_config = DATASETCONFIG
 
-    benchmark_config = BenchmarkConfig(
-        run_outlier=run_outlier,
-        run_tabarena=run_supervised,
-        run_tabpfn_subset=True,
-        logging_level=logging.DEBUG,
-        data_dir=data_dir,
-    )
+    benchmark_config = BENCHMARK_CONFIG
 
-    result_outlier, result_tabarena, result_dir = run_benchmark(
+    (
+        result_outlier,
+        result_tabarena,
+        result_dataset_separation_tabpfn,
+        result_dataset_separation,
+        result_dir,
+    ) = run_benchmark(
         embedding_models=embedding_models,
         evaluator_algorithms=evaluators,
         dataset_config=dataset_config,
         benchmark_config=benchmark_config,
     )
 
-    if not result_outlier.is_empty():
-        create_outlier_plots(
-            result_outlier,
-            data_path=result_dir,
-            models_to_keep=models_to_keep,
-            algorithm_order=order_evaluators_outlier,
-            bin_edges=bin_edges,
-        )
-
-    if not result_tabarena.is_empty():
-        create_tabarena_plots(
-            result_tabarena,
-            data_path=result_dir,
-            models_to_keep=models_to_keep,
-            algorithm_order_classification=order_evaluators_classification,
-            algorithm_order_regression=order_evaluators_regression,
-        )
-
-
-@click.command()
-@click.option("--debug", is_flag=True, help="Run in debug mode ")
-@click.option("--max-samples", default=15000, help="Upper bound for dataset size")
-@click.option("--max-features", default=200, help="Upper bound for number of features")
-@click.option(
-    "--run-outlier/--no-run-outlier", default=True, help="Run outlier detection"
-)
-@click.option(
-    "--run-supervised/--no-run-supervised",
-    default=True,
-    help="Run supervised evaluations",
-)
-@click.option(
-    "--adbench-data",
-    default="data/adbench_tabular_datasets",
-    help="Run supervised evaluations",
-)
-@click.option("--data-dir", default="data", help="Upper bound for dataset size")
-def main(
-    debug,
-    max_samples,
-    max_features,
-    run_outlier,
-    run_supervised,
-    adbench_data,
-    data_dir,
-):
-    """Command-line interface for running the EurIPS benchmark.
-
-    This CLI entry point allows configuring and executing the benchmark with
-    various options for debugging, dataset filtering, and task selection.
-
-    Args:
-        debug (bool): Run in debug mode with reduced configurations.
-        max_samples (int): Maximum number of samples per dataset.
-        max_features (int): Maximum number of features per dataset.
-        run_outlier (bool): Enable/disable outlier detection benchmarks.
-        run_supervised (bool): Enable/disable supervised evaluations.
-        adbench_data (str): Path to ADBoard benchmark datasets.
-        data_dir (str): Directory where processed data and results will be stored.
-    """
-    run_main(
-        debug=debug,
-        max_samples=max_samples,
-        max_features=max_features,
-        run_outlier=run_outlier,
-        run_supervised=run_supervised,
-        adbench_dataset_path=adbench_data,
-        data_dir=data_dir,
-        bin_edges=[0.05, 0.1],
-    )
-
 
 if __name__ == "__main__":
-    main()
+    main(debug=DEBUG)
