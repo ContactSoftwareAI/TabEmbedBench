@@ -328,6 +328,7 @@ class AbstractEmbeddingGenerator(ABC):
             Exception: If the embeddings generated for training and testing data
                 contain NaN values.
         """
+        complete_start_time = time.perf_counter()
         X_train_preprocessed, X_test_preprocessed, preprocess_times = (
             self.preprocess_data(X_train, X_test, outlier=outlier, **kwargs)
         )
@@ -336,7 +337,7 @@ class AbstractEmbeddingGenerator(ABC):
             X_train_preprocessed, X_test_preprocessed, outlier=outlier, **kwargs
         )
         compute_embeddings_time = time.perf_counter() - start_time
-
+        end_time = time.perf_counter() - complete_start_time
         if isinstance(results, tuple) and len(results) == 3:
             train_embeddings, test_embeddings, model_specific_metadata = results
         else:
@@ -353,6 +354,7 @@ class AbstractEmbeddingGenerator(ABC):
 
         embedding_metadata = {
             "embedding_model": self.name,
+            "preprocess_fit_compute_embedding_time": end_time,
             "compute_embeddings_time": compute_embeddings_time,
         }
 
