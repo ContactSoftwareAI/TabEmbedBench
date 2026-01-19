@@ -1,197 +1,86 @@
 # TabEmbedBench
 
-TabEmbedBench is a benchmarking framework for evaluating tabular data embedding methods across multiple tasks: outlier detection, classification, and regression. It provides a common API to run experiments with several embedding models and evaluator algorithms, and collects results in a consistent format.
+TabEmbedBench is a benchmarking framework for evaluating tabular data embedding models on outlier detection,
+classification, and regression tasks. It utilizes datasets from ADBench and TabArena to provide comprehensive
+performance evaluations.
 
-## Overview
+## Prerequisites
 
-- Benchmarks two families of tasks:
-  - Outlier detection (ADBench datasets)
-  - Supervised tasks from TabArena (classification and regression)
-- Provides several embedding generators
-- Includes KNN/MLP evaluators for supervised tasks and LOF/Isolation Forest/DeepSVDD for outlier detection
-- Scriptable via a Click-based CLI and a Python API
+- **Python**: 3.12 or 3.13 is required (as specified in `pyproject.toml`).
+- **uv**: It is recommended to use [uv](https://github.com/astral-sh/uv) for fast and reliable Python package
+  management.
 
+## Installation
 
-## Citations
+To install the project and its dependencies, follow these steps:
 
-If you use this code, please cite:
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd TabEmbedBench
+   ```
 
-```
-@misc{hoppe2025comparingtaskagnosticembeddingmodels,
-      title={Comparing Task-Agnostic Embedding Models for Tabular Data}, 
-      author={Frederik Hoppe and Lars Kleinemeier and Astrid Franz and Udo Göbel},
-      year={2025},
-      eprint={2511.14276},
-      archivePrefix={arXiv},
-      url={https://arxiv.org/abs/2511.14276}, 
-}
-```
+2. **Install the package in editable mode with uv**:
+   Using `uv sync` is the recommended way to set up the project. It automatically creates a virtual environment,
+   installs all dependencies, and installs the `tabembedbench` package itself in **editable mode**.
 
-## Tech stack
+   ```bash
+   uv sync
+   ```
 
-- Language: Python
-- Packaging/manager: `uv` (Astral) with `setuptools`
-- Python version: `>=3.11, <3.14` (see `pyproject.toml`)
-- Key libs: PyTorch, scikit-learn, polars, pyod, openml, tabpfn, tabicl, skrub, ray, optuna, seaborn
+   **What this does:**
+    - **Editable Install**: The package is installed in a way that changes to the source code in `src/tabembedbench` are
+      immediately reflected without needing to reinstall. This is ideal for development.
+    - **Virtual Environment**: A `.venv` directory is created containing all project-specific dependencies, ensuring
+      isolation from your system Python.
+    - **Lockfile Consistency**: `uv` uses `uv.lock` to ensure that everyone working on the project has the exact same
+      versions of all dependencies.
 
-## Requirements
+3. **(Optional) Install specific dependency groups**:
+   If you only need production dependencies, you can use:
+   ```bash
+   uv sync --no-dev
+   ```
 
-- Python 3.11 or 3.12 (3.13 also supported by the spec; stay `<3.14`)
-- `uv` package manager installed
-- Optional: CUDA-enabled GPU for faster neural models (PyTorch index for CUDA 12.8 is pre-configured via uv on Windows/Linux)
+## What it Does
 
-### Install uv
-- Pip: `pip install uv`
-- Installer: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- Homebrew (macOS/Linux): `brew install uv`
-See: https://docs.astral.sh/uv/getting-started/installation/
+TabEmbedBench is designed to simplify the evaluation of tabular embedding models. It provides:
 
-## Installation (development)
+- **Unified Interface**: A common API for different embedding models (TabPFN, TabStar, etc.).
+- **Automated Benchmarking**: Tools to run models against standard datasets from ADBench and TabArena.
+- **Multi-task Evaluation**: Support for Outlier Detection, Classification, and Regression.
+- **Extensibility**: Easily add new models or evaluators by following the provided abstract base classes.
 
-1) Clone the repo
+## Running Experiments
+
+The project includes an example experiment script for the IJCAI benchmark.
+
+### IJCAI Run
+
+To run the IJCAI experiment script `src/tabembedbench/examples/ijcai_run.py`, use the following command:
+
 ```bash
-git clone <repository-url>
-cd TabEmbedBench
+uv run python src/tabembedbench/examples/ijcai_run.py
 ```
 
-2) Sync dependencies and create venv
-```bash
-uv sync --dev
-```
-This will create `.venv/`, install dependencies from `pyproject.toml`, and install the package in editable mode.
+By default, the script is configured with `DEBUG = False`. If you want to run a quicker test, you can modify the `DEBUG`
+flag in `src/tabembedbench/examples/ijcai_run.py` to `True`.
 
-3) Activate the environment (optional)
-```bash
-# Unix/macOS
-source .venv/bin/activate
-# Windows
-.venv\Scripts\activate
-```
-You can also run commands via `uv run` without activating the venv.
+### Configuration
 
-## How to run
+The experiments are configured via `BenchmarkConfig` and `DatasetConfig` objects within the script. You can adjust
+parameters such as:
 
-### CLI (recommended)
-A Click-based CLI is provided in `src/tabembedbench/examples/eurips_run.py`.
+- `data_dir`: Local directory for dataset storage.
+- `gcs_bucket`: Google Cloud Storage bucket for results (if applicable).
+- `run_outlier` / `run_tabarena`: Toggle specific benchmark components.
 
-Using uv:
-```bash
-uv run src/tabembedbench/examples/eurips_run.py
-```
-Common options:
-```bash
-uv run src/tabembedbench/examples/eurips_run.py --debug
-uv run src/tabembedbench/examples/eurips_run.py --max-samples 1000 --max-features 50
-uv run src/tabembedbench/examples/eurips_run.py --no-run-outlier
-uv run src/tabembedbench/examples/eurips_run.py --no-run-supervised
-uv run src/tabembedbench/examples/eurips_run.py --adbench-data data/adbench_tabular_datasets --data-dir data
-```
-The CLI options (from the Click decorators):
-- `--debug`
-- `--max-samples` (default: 10000)
-- `--max-features` (default: 200)
-- `--run-outlier/--no-run-outlier` (default: run)
-- `--run-supervised/--no-run-supervised` (default: run)
-- `--adbench-data` (default: `data/adbench_tabular_datasets`)
-- `--data-dir` (default: `data`)
+## Project Structure
 
-Using Python directly (after activation):
-```bash
-python src/tabembedbench/examples/eurips_run.py --debug
-```
-
-### Python API
-Minimal example using the high-level API in `benchmark/run_benchmark.py`:
-```python
-from tabembedbench.benchmark.run_benchmark import run_benchmark, DatasetConfig, BenchmarkConfig
-from tabembedbench.embedding_models import TabICLEmbedding, TableVectorizerEmbedding, TabPFNEmbedding
-
-models = [
-    TabICLEmbedding(),
-    TabPFNEmbedding(num_estimators=5),
-    TableVectorizerEmbedding(),
-]
-
-dataset_config = DatasetConfig(
-    adbench_dataset_path="data/adbench_tabular_datasets",
-    upper_bound_dataset_size=1000,
-    upper_bound_num_features=50,
-)
-
-benchmark_config = BenchmarkConfig(
-    run_outlier=True,
-    run_supervised=True,
-    run_tabpfn_subset=True,
-)
-
-result_outlier, result_tabarena, result_dir = run_benchmark(
-    embedding_models=models,
-    evaluator_algorithms=[],  # see Evaluators below
-    dataset_config=dataset_config,
-    benchmark_config=benchmark_config,
-)
-```
-Note: See the example script for how evaluators are constructed and passed in.
-
-## Embedding models
-
-Available in `src/tabembedbench/embedding_models/` and re-exported in `tabembedbench.embedding_models`:
-- `TabICLEmbedding`
-- `TabPFNEmbedding`
-- `TableVectorizerEmbedding`
-
-All implement the `AbstractEmbeddingGenerator` interface.
-
-## Evaluators
-
-Located in `src/tabembedbench/evaluators/` and used by the example runner:
-- Supervised: `KNNClassifierEvaluator`, `KNNRegressorEvaluator`, `MLPClassifierEvaluator`, `MLPRegressorEvaluator`
-- Outlier detection: `LocalOutlierFactorEvaluator`, `IsolationForestEvaluator`, `DeepSVDDEvaluator`
-
-Refer to `src/tabembedbench/examples/eurips_run.py` for the complete evaluator grid and parameters.
-
-## Results
-
-- Results and plots are written under the chosen `--data-dir` (default `data/`).
-- Example outputs in this repository show CSV and plots under timestamped `data/tabembedbench_*/` directories.
-
-## Development
-
-- Lint/format with Ruff (configured in `pyproject.toml`):
-```bash
-uv run ruff check .
-uv run ruff format .
-```
-- Code style: see `tool.ruff` settings in `pyproject.toml`.
-
-## Project structure
-
-```
-TabEmbedBench/
-├── pyproject.toml
-├── requirements.txt
-├── uv.lock
-├── data/
-└── src/
-    └── tabembedbench/
-        ├── benchmark/
-        │   ├── run_benchmark.py
-        │   ├── outlier_benchmark.py
-        │   └── tabarena_benchmark.py
-        ├── embedding_models/
-        │   ├── __init__.py
-        │   ├── abstractembedding.py
-        │   ├── tabicl_embedding.py
-        │   ├── tabpfn_embedding.py
-        │   └── tablevectorizer_embedding.py
-        ├── evaluators/
-        │   ├── abstractevaluator.py
-        │   ├── knn_classifier.py
-        │   ├── knn_regressor.py
-        │   ├── mlp_classifier.py
-        │   ├── mlp_regressor.py
-        │   └── outlier.py
-        └── examples/
-            └── eurips_run.py
-```
-
+- `src/tabembedbench/`: Core source code.
+    - `benchmark/`: Benchmark execution logic.
+    - `embedding_models/`: Implementations of various tabular embedding models (e.g., TabPFN, TabStar, SphereBased).
+    - `evaluators/`: Evaluation metrics and algorithms for classification, regression, and outlier detection.
+    - `examples/`: Example scripts and benchmark runners (including `ijcai_run.py`).
+- `tests/`: Unit and integration tests.
+- `pyproject.toml`: Project metadata and dependency definitions.

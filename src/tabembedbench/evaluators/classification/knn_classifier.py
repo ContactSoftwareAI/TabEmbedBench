@@ -1,7 +1,9 @@
 import numpy as np
+import optuna
 from sklearn.neighbors import KNeighborsClassifier
 
-from tabembedbench.evaluators import AbstractEvaluator
+from tabembedbench.constants import CLASSIFICATION_TASKS, CLASSIFIER_OPTIMIZATION_METRIC
+from tabembedbench.evaluators import AbstractEvaluator, AbstractHPOEvaluator
 
 
 class KNNClassifierEvaluator(AbstractEvaluator):
@@ -37,7 +39,13 @@ class KNNClassifierEvaluator(AbstractEvaluator):
             other_model_params (dict, optional): Additional parameters to pass to
                 KNeighborsClassifier. Defaults to {}.
         """
-        super().__init__(name="KNNClassifier", task_type="Supervised Classification")
+        super().__init__(
+            name="KNNClassifier",
+            task_type=[
+                "Supervised Binary Classification",
+                "Supervised Multiclass Classification",
+            ],
+        )
         self.num_neighbors = num_neighbors
 
         self.model_params = dict(other_model_params.items())
@@ -103,3 +111,80 @@ class KNNClassifierEvaluator(AbstractEvaluator):
         params["num_neighbors"] = self.num_neighbors
 
         return params
+
+
+class KNNClassifierEvaluatorHPO(AbstractHPOEvaluator):
+    """
+    Evaluator class for performing hyperparameter optimization on K-Nearest Neighbors
+    classifier models.
+
+    This class inherits from an abstract hyperparameter optimization evaluator and is
+    used for optimizing specific parameters for the K-Nearest Neighbors (KNN) classifier.
+    It provides methods to define the search space and retrieve scoring metrics suitable
+    for classification tasks. This class also handles generating predictions from the
+    optimized model.
+
+    Attributes:
+        model_class (type): The classifier model class used, set to KNeighborsClassifier
+            for this evaluator.
+    """
+
+    model_class = KNeighborsClassifier
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(
+            name="KNN_HPO",
+            task_type=CLASSIFICATION_TASKS,
+            **kwargs,
+        )
+
+    def get_scoring_metric(self) -> str:
+        """Return the scoring metric for classification."""
+        return CLASSIFIER_OPTIMIZATION_METRIC
+
+    def _get_search_space(self) -> dict[str, dict]:
+        """
+        Retrieves the search space configuration for hyperparameter tuning.
+
+        This method defines a dictionary representing the range and type of
+        parameters to optimize in a model. Each key in the dictionary
+        corresponds to a hyperparameter, and its value is another dictionary
+        describing the parameter's type, range/type constraints, and
+        other related properties.
+
+        Returns:
+            dict[str, dict]: A dictionary specifying the hyperparameter search
+            space. The structure includes:
+                - "n_neighbors": An integer parameter with a defined range,
+                  including bounds and step size.
+                - "weights": A categorical parameter indicating the choice of
+                  weighting scheme.
+                - "metric": A categorical parameter specifying the distance
+                  metric to be used.
+        """
+        return {
+            "n_neighbors": {"type": "int", "low": 5, "high": 100, "step": 5},
+            "weights": {"type": "categorical", "choices": ["uniform", "distance"]},
+            "metric": {
+                "type": "categorical",
+                "choices": ["euclidean", "manhattan", "cosine"],
+            },
+        }
+
+    def _get_model_predictions(self, model, embeddings: np.ndarray):
+        """
+        Gets model predictions as probabilities for given embeddings.
+
+        This method takes a trained model and an array of embeddings, and returns the
+        probabilities predicted by the model for each embedding.
+
+        Args:
+            model: Trained model instance with a `predict_proba` method.
+            embeddings (np.ndarray): Array of embeddings for which predictions are to
+                be made.
+
+        Returns:
+            np.ndarray: Array of predicted probabilities corresponding to input
+            embeddings.
+        """
+        return model.predict_proba(embeddings)

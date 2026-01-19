@@ -2,6 +2,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from google.cloud import storage
+
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 NEIGHBORS_PROGRESS = 5
@@ -69,12 +71,32 @@ def setup_unified_logging(
 
     outlier_logger = logging.getLogger("TabEmbedBench_Outlier")
     tabarena_logger = logging.getLogger("TabEmbedBench_TabArena")
+    dataset_separation = logging.getLogger("TabEmbedBench_DatasetSeparation")
     main_logger = logging.getLogger("TabEmbedBench_Main")
 
-    for logger in [outlier_logger, tabarena_logger, main_logger]:
+    for logger in [outlier_logger, tabarena_logger, dataset_separation, main_logger]:
         logger.setLevel(logging_level)
 
     return log_file
+
+
+def upload_logs_to_gcs(local_log_file: Path, bucket_name: str, gcs_path: str):
+    """Uploads the local log file to Google Cloud Storage."""
+    if not local_log_file or not local_log_file.exists():
+        return
+
+    try:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        # Construct the full path: e.g., ijcai/logs/benchmark_complete_timestamp.log
+        blob_path = f"{gcs_path}/logs/{local_log_file.name}"
+        blob = bucket.blob(blob_path)
+        blob.upload_from_filename(str(local_log_file))
+        print(f"Successfully uploaded logs to gs://{bucket_name}/{blob_path}")
+    except Exception as e:
+        logging.getLogger("TabEmbedBench_Main").error(
+            f"Failed to upload logs to GCS: {e}"
+        )
 
 
 def get_benchmark_logger(name: str) -> logging.Logger:
