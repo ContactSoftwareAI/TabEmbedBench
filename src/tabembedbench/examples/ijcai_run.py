@@ -44,8 +44,6 @@ from tabembedbench.evaluators.regression import (
 logger = logging.getLogger("IJCAI_Run_Benchmark")
 
 DEBUG = False
-GOOGLE_BUCKET = "bucket_tabdata"
-GCS_DIR = "ijcai"
 DATA_DIR = "ijcai_run"
 
 DATASETCONFIG = DatasetConfig(
@@ -63,8 +61,6 @@ BENCHMARK_CONFIG = BenchmarkConfig(
     data_dir=DATA_DIR,
     dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
     dataset_separation_configurations_tabpfn_subset_json_path="dataset_separation_tabarena_tabpfn_subset.json",
-    gcs_bucket=GOOGLE_BUCKET,
-    gcs_filepath=GCS_DIR,
 )
 
 NUM_ESTIMATORS = 5
