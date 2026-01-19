@@ -5,7 +5,7 @@ description = "A benchmarking framework for evaluating tabular data embedding on
 requires-python = ">=3.12,<3.14"
 authors = [
     { name = "Lars Kleinemeier" },
-    { name = "Frederik Hoppe" }
+    { name = "XXXXX Hoppe" }
 ]
 dependencies = [
     "liac-arff==2.5.0",

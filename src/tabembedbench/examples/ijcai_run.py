@@ -89,7 +89,6 @@ def get_embedding_models(debug=False):
             TabICLEmbedding(),
         ]
 
-    sphere_model_64 = SphereBasedEmbedding(embed_dim=64)
     sphere_model_192 = SphereBasedEmbedding(embed_dim=192)
     sphere_model_256 = SphereBasedEmbedding(embed_dim=256)
     sphere_model_512 = SphereBasedEmbedding(embed_dim=512)
@@ -101,7 +100,6 @@ def get_embedding_models(debug=False):
     tabStar_embedding = TabStarEmbedding()
 
     embedding_models = [
-        sphere_model_64,
         sphere_model_192,
         sphere_model_256,
         sphere_model_512,
