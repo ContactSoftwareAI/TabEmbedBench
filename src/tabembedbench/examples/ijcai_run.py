@@ -191,7 +191,7 @@ def get_evaluators(debug=False):
 )
 @click.option(
     "--adbench-path",
-    type=click.Path(exists=True),
+    type=click.Path(),
     default="data/adbench_tabular_datasets",
     help="Path to ADBench tabular datasets.",
 )
@@ -276,7 +276,7 @@ def main(
     embedding_models = get_embedding_models(debug=debug)
     evaluators = get_evaluators(debug=debug)
 
-    click.echo(f"📊 Configuration Summary:")
+    click.echo(f"Configuration Summary:")
     click.echo(f"   Debug Mode: {click.style(str(debug), fg='yellow')}")
     click.echo(
         f"   Embedding Models: {click.style(str(len(embedding_models)), fg='green')}"
