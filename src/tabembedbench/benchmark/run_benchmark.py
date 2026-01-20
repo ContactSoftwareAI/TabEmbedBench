@@ -14,9 +14,6 @@ from typing import Tuple
 import polars as pl
 import torch
 
-from tabembedbench.benchmark.dataset_separation_benchmark import (
-    run_dataseparation_benchmark,
-)
 from tabembedbench.benchmark.outlier_benchmark import run_outlier_benchmark
 from tabembedbench.benchmark.tabarena_benchmark import run_tabarena_benchmark
 from tabembedbench.embedding_models import AbstractEmbeddingGenerator
@@ -56,38 +53,32 @@ class DatasetConfig:
 
 @dataclass
 class BenchmarkConfig:
-    """Configuration object for benchmarking tasks.
+    """
+    Configuration class for benchmarking settings.
 
-    This class is used to define the configuration settings for running benchmark
-    tests, including flags for specific tasks, directory paths for data storage,
-    logging levels, and whether to save logs. It centralizes benchmark-related
-    configurations to ensure consistent and customizable behavior across different
-    benchmarking runs.
+    This class defines the configuration for running various benchmark tests, including options
+    to enable or disable specific benchmarks, set the logging preferences, and define the location
+    of data storage. It provides convenient access to parameters that control benchmarking behavior.
 
     Attributes:
-        run_outlier (bool): Whether to include outlier detection benchmarks in the
-            run.
-        run_tabarena (bool): Whether to run supervised benchmarks.
-        run_tabpfn_subset (bool): Whether to include TabPFN subset benchmarks in
-            the run.
-        data_dir (str | Path): Path to the directory where necessary data is
-            stored or will be stored.
-        save_logs (bool): Whether to save logs generated during the benchmarking
-            process.
-        logging_level (int): The logging level for the benchmark runs, aligning
-            with Python's logging module level constants (e.g., logging.INFO).
+        run_outlier (bool): Indicates whether the outlier benchmark should be executed.
+        run_tabarena (bool): Indicates whether the TabArena benchmark should be executed.
+        run_tabpfn_subset (bool): Indicates whether the TabPFN subset benchmark should be executed.
+        data_dir (str | Path): Path to the directory where data is stored.
+        save_logs (bool): Specifies whether benchmark logs should be saved persistently.
+        logging_level (int): The logging level to be used for the benchmarks.
+        gcs_bucket (str | None): Name of the Google Cloud Storage bucket for saving results,
+            if applicable.
+        gcs_filepath (str | None): Path in the GCS bucket where results should be stored,
+            if applicable.
     """
 
     run_outlier: bool = True
     run_tabarena: bool = True
-    run_dataset_tabpfn_separation: bool = False
-    run_dataset_separation: bool = False
     run_tabpfn_subset: bool = False
     data_dir: str | Path = "data"
     save_logs: bool = True
     logging_level: int = logging.INFO
-    dataset_separation_configurations_json_path: str | Path | None = None
-    dataset_separation_configurations_tabpfn_subset_json_path: str | Path | None = None
     gcs_bucket: str | None = None
     gcs_filepath: str | None = None
 
@@ -97,21 +88,28 @@ def run_benchmark(
     evaluator_algorithms: list[AbstractEvaluator],
     dataset_config: DatasetConfig | None = None,
     benchmark_config: BenchmarkConfig | None = None,
-) -> Tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame, pl.DataFrame, Path]:
-    """Run comprehensive benchmark evaluation for embedding models.
-
-    This function orchestrates the complete benchmarking process, running both
-    outlier detection and supervised (classification/regression) benchmarks
-    on the provided embedding models.
+) -> Tuple[pl.DataFrame, pl.DataFrame, Path]:
+    """
+    Executes a benchmarking pipeline that evaluates the performance of multiple embedding
+    models and evaluators on specific datasets through outlier detection and supervised
+    learning benchmarks. The method organizes results and logs into designated output
+    directories.
 
     Args:
-        embedding_models: List of embedding model instances to evaluate.
-        evaluator_algorithms: List of evaluator instances to use for assessment.
-        dataset_config: Configuration for dataset parameters. If None, uses defaults.
-        benchmark_config: Configuration for benchmark execution. If None, uses defaults.
+        embedding_models (list[AbstractEmbeddingGenerator]): List of embedding model
+            instances to evaluate.
+        evaluator_algorithms (list[AbstractEvaluator]): List of evaluator instances to
+            conduct benchmarking.
+        dataset_config (DatasetConfig | None): Configuration for dataset paths, filters,
+            and parameters. If None, a default configuration is used.
+        benchmark_config (BenchmarkConfig | None): Configuration for benchmarks, logging,
+            and cloud storage options. If None, a default configuration is used.
 
     Returns:
-        Tuple of (outlier_results_df, tabarena_results_df, result_directory).
+        Tuple[pl.DataFrame, pl.DataFrame, Path]: A tuple consisting of:
+            - The result DataFrame from the outlier detection benchmark.
+            - The result DataFrame from the supervised benchmark (TabArena).
+            - The path to the directory containing all the benchmark results and logs.
     """
     dataset_config = dataset_config or DatasetConfig()
     benchmark_config = benchmark_config or BenchmarkConfig()
@@ -201,53 +199,6 @@ def run_benchmark(
         logger.info("Skipping supervised benchmark.")
         result_tabarena_df = pl.DataFrame()
 
-    if (
-        benchmark_config.run_dataset_tabpfn_separation
-        and benchmark_config.dataset_separation_configurations_tabpfn_subset_json_path
-        is not None
-    ):
-        logger.info(
-            "Running dataset separation on TabPFN constrainted dataset benchmark..."
-        )
-        try:
-            result_dataset_tabpfn_separation_df = run_dataseparation_benchmark(
-                embedding_models=models,
-                evaluators=evaluators,
-                timestamp=timestamp,
-                result_dir=result_dir,
-                use_tabpfn_subset=benchmark_config.run_tabpfn_subset,
-                dataset_configurations_json_path=benchmark_config.dataset_separation_configurations_tabpfn_subset_json_path,
-                google_bucket=google_bucket_path,
-            )
-            _cleanup_models(models, logger)
-        except Exception as e:
-            logger.exception(f"Error during supervised benchmark: {e}")
-            result_dataset_tabpfn_separation_df = pl.DataFrame()
-    else:
-        result_dataset_tabpfn_separation_df = pl.DataFrame()
-
-    if (
-        benchmark_config.run_dataset_separation
-        and benchmark_config.dataset_separation_configurations_json_path is not None
-    ):
-        logger.info("Running dataset separation benchmark...")
-        try:
-            result_dataset_separation_df = run_dataseparation_benchmark(
-                embedding_models=models,
-                evaluators=evaluators,
-                timestamp=timestamp,
-                result_dir=result_dir,
-                use_tabpfn_subset=benchmark_config.run_tabpfn_subset,
-                dataset_configurations_json_path=benchmark_config.dataset_separation_configurations_json_path,
-                google_bucket=google_bucket_path,
-            )
-            _cleanup_models(models, logger)
-        except Exception as e:
-            logger.exception(f"Error during supervised benchmark: {e}")
-            result_dataset_separation_df = pl.DataFrame()
-    else:
-        result_dataset_separation_df = pl.DataFrame()
-
     if benchmark_config.gcs_bucket and log_file_path:
         logger.info("Uploading logs to Google Cloud Storage...")
         upload_logs_to_gcs(
@@ -260,8 +211,6 @@ def run_benchmark(
     return (
         result_outlier_df,
         result_tabarena_df,
-        result_dataset_tabpfn_separation_df,
-        result_dataset_separation_df,
         result_dir,
     )
 
