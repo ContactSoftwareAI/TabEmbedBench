@@ -86,10 +86,10 @@ class BenchmarkConfig:
     data_dir: str | Path = "data"
     save_logs: bool = True
     logging_level: int = logging.INFO
-    dataset_separation_configurations_json_path: str | Path = None
-    dataset_separation_configurations_tabpfn_subset_json_path: str | Path = None
-    gcs_bucket: str = (None,)
-    gcs_filepath: str = (None,)
+    dataset_separation_configurations_json_path: str | Path | None = None
+    dataset_separation_configurations_tabpfn_subset_json_path: str | Path | None = None
+    gcs_bucket: str | None = None
+    gcs_filepath: str | None = None
 
 
 def run_benchmark(
