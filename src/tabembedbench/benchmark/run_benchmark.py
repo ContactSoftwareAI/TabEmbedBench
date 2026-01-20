@@ -80,7 +80,7 @@ class BenchmarkConfig:
 
     run_outlier: bool = True
     run_tabarena: bool = True
-    run_dataset_tabpfn_separation: bool = True
+    run_dataset_tabpfn_separation: bool = False
     run_dataset_separation: bool = False
     run_tabpfn_subset: bool = False
     data_dir: str | Path = "data"
@@ -89,7 +89,7 @@ class BenchmarkConfig:
     dataset_separation_configurations_json_path: str | Path = None
     dataset_separation_configurations_tabpfn_subset_json_path: str | Path = None
     gcs_bucket: str = (None,)
-    gcs_filepath: str = None
+    gcs_filepath: str = (None,)
 
 
 def run_benchmark(
