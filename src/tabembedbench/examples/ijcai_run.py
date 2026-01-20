@@ -45,26 +45,6 @@ from tabembedbench.evaluators.regression import (
 
 logger = logging.getLogger("IJCAI_Run_Benchmark")
 
-DEBUG = False
-DATA_DIR = "ijcai_run"
-
-DATASETCONFIG = DatasetConfig(
-    adbench_dataset_path="data/adbench_tabular_datasets",
-    exclude_adbench_datasets=[],
-    exclude_tabarena_datasets=[],
-    upper_bound_dataset_size=15000,
-    upper_bound_num_features=500,
-)
-
-
-BENCHMARK_CONFIG = BenchmarkConfig(
-    run_outlier=True,
-    run_tabarena=True,
-    data_dir=DATA_DIR,
-)
-
-NUM_ESTIMATORS = 5
-
 
 def get_embedding_models(debug=False):
     """
@@ -78,11 +58,12 @@ def get_embedding_models(debug=False):
     Returns:
         list: List of embedding models
     """
+    NUM_ESTIMATORS = 5
+
     if debug:
         return [
-            # SphereBasedEmbedding(embed_dim=16),
-            TabICLWrapper(),
-            TabICLEmbedding(),
+            TableVectorizerEmbedding(),
+            SphereBasedEmbedding(embed_dim=16),
         ]
 
     sphere_model_192 = SphereBasedEmbedding(embed_dim=192)
@@ -227,16 +208,14 @@ def get_evaluators(debug=False):
     help="Upper bound on number of features.",
 )
 @click.option(
-    "--run-outlier",
-    is_flag=True,
+    "--run-outlier/--no-run-outlier",
     default=True,
-    help="Enable outlier detection benchmarking.",
+    help="Enable/disable outlier detection benchmarking.",
 )
 @click.option(
-    "--run-tabarena",
-    is_flag=True,
+    "--run-tabarena/--no-run-tabarena",
     default=True,
-    help="Enable TabArena benchmarking.",
+    help="Enable/disable TabArena benchmarking.",
 )
 @click.option(
     "--exclude-adbench",
