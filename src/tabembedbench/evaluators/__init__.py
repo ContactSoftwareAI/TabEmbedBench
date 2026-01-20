@@ -5,9 +5,7 @@ from tabembedbench.evaluators.abstractevaluator import (
 from tabembedbench.evaluators.classification import (
     KNNClassifierEvaluator,
     KNNClassifierEvaluatorHPO,
-    LogisticRegressionHPOEvaluator,
     MLPClassifierEvaluator,
-    SVMClassifierEvaluator,
 )
 from tabembedbench.evaluators.outlier import (
     DeepSVDDEvaluator,
@@ -27,9 +25,7 @@ __all__ = [
     "IsolationForestEvaluator",
     "KNNClassifierEvaluator",
     "KNNClassifierEvaluatorHPO",
-    "LogisticRegressionEvaluator",
     "MLPClassifierEvaluator",
-    "SVMClassifierEvaluator",
     "KNNRegressorEvaluator",
     "MLPRegressorEvaluator",
 ]

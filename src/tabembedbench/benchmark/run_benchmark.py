@@ -199,14 +199,6 @@ def run_benchmark(
         logger.info("Skipping supervised benchmark.")
         result_tabarena_df = pl.DataFrame()
 
-    if benchmark_config.gcs_bucket and log_file_path:
-        logger.info("Uploading logs to Google Cloud Storage...")
-        upload_logs_to_gcs(
-            local_log_file=log_file_path,
-            bucket_name=benchmark_config.gcs_bucket,
-            gcs_path=f"{benchmark_config.gcs_filepath}/{str(result_dir)}" or "",
-        )
-
     logger.info(f"Benchmark completed at {datetime.now()}")
     return (
         result_outlier_df,
