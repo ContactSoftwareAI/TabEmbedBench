@@ -7,6 +7,8 @@ datasets. It supports classification, regression, and outlier detection tasks.
 
 import logging
 
+import click
+
 from tabembedbench.benchmark.run_benchmark import (
     BenchmarkConfig,
     DatasetConfig,
@@ -59,8 +61,6 @@ BENCHMARK_CONFIG = BenchmarkConfig(
     run_outlier=True,
     run_tabarena=True,
     data_dir=DATA_DIR,
-    dataset_separation_configurations_json_path="dataset_separation_tabarena.json",
-    dataset_separation_configurations_tabpfn_subset_json_path="dataset_separation_tabarena_tabpfn_subset.json",
 )
 
 NUM_ESTIMATORS = 5
@@ -101,16 +101,11 @@ def get_embedding_models(debug=False):
         sphere_model_512,
         tabicl_embedding,
         tablevectorizer,
+        tabpfn,
+        tabpfn_random,
+        tabpfn_constant,
+        tabStar_embedding,
     ]
-
-    embedding_models.extend(
-        [
-            tabpfn,
-            tabpfn_random,
-            tabpfn_constant,
-            tabStar_embedding,
-        ]
-    )
 
     return embedding_models
 
@@ -200,23 +195,127 @@ def get_evaluators(debug=False):
     return evaluator_algorithms
 
 
-def main(debug=False):
-    embedding_models = get_embedding_models(debug=debug)
+@click.command()
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    help="Run in debug mode with minimal models and evaluators for testing.",
+)
+@click.option(
+    "--data-dir",
+    type=click.Path(),
+    default="ijcai_run",
+    help="Directory where results will be saved.",
+)
+@click.option(
+    "--adbench-path",
+    type=click.Path(exists=True),
+    default="data/adbench_tabular_datasets",
+    help="Path to ADBench tabular datasets.",
+)
+@click.option(
+    "--dataset-size",
+    type=int,
+    default=15000,
+    help="Upper bound on dataset size (number of samples).",
+)
+@click.option(
+    "--num-features",
+    type=int,
+    default=500,
+    help="Upper bound on number of features.",
+)
+@click.option(
+    "--run-outlier",
+    is_flag=True,
+    default=True,
+    help="Enable outlier detection benchmarking.",
+)
+@click.option(
+    "--run-tabarena",
+    is_flag=True,
+    default=True,
+    help="Enable TabArena benchmarking.",
+)
+@click.option(
+    "--exclude-adbench",
+    multiple=True,
+    default=[],
+    help="ADBench dataset names to exclude (can be used multiple times).",
+)
+@click.option(
+    "--exclude-tabarena",
+    multiple=True,
+    default=[],
+    help="TabArena dataset names to exclude (can be used multiple times).",
+)
+def main(
+    debug,
+    data_dir,
+    adbench_path,
+    dataset_size,
+    num_features,
+    run_outlier,
+    run_tabarena,
+    exclude_adbench,
+    exclude_tabarena,
+):
+    """
+    Main entry point for running the benchmarking pipeline. This function processes
+    command-line options, initializes configurations, and runs the benchmarking for
+    outlier detection and TabArena datasets using specified embedding models and
+    evaluators.
 
+    Args:
+        debug (bool): Run in debug mode with minimal models and evaluators for testing.
+        data_dir (click.Path): Directory where results will be saved.
+        adbench_path (click.Path): Path to ADBench tabular datasets.
+        dataset_size (int): Upper bound on dataset size (number of samples).
+        num_features (int): Upper bound on number of features.
+        run_outlier (bool): Enable outlier detection benchmarking.
+        run_tabarena (bool): Enable TabArena benchmarking.
+        exclude_adbench (Tuple[str, ...]): ADBench dataset names to exclude; can be
+            specified multiple times.
+        exclude_tabarena (Tuple[str, ...]): TabArena dataset names to exclude; can be
+            specified multiple times.
+    """
+    dataset_config = DatasetConfig(
+        adbench_dataset_path=adbench_path,
+        exclude_adbench_datasets=list(exclude_adbench),
+        exclude_tabarena_datasets=list(exclude_tabarena),
+        upper_bound_dataset_size=dataset_size,
+        upper_bound_num_features=num_features,
+    )
+
+    benchmark_config = BenchmarkConfig(
+        run_outlier=run_outlier,
+        run_tabarena=run_tabarena,
+        data_dir=data_dir,
+    )
+
+    embedding_models = get_embedding_models(debug=debug)
     evaluators = get_evaluators(debug=debug)
+
+    click.echo(f"📊 Configuration Summary:")
+    click.echo(f"   Debug Mode: {click.style(str(debug), fg='yellow')}")
+    click.echo(
+        f"   Embedding Models: {click.style(str(len(embedding_models)), fg='green')}"
+    )
+    click.echo(f"   Evaluators: {click.style(str(len(evaluators)), fg='green')}")
+    click.echo(f"   Max Dataset Size: {click.style(str(dataset_size), fg='green')}")
+    click.echo(f"   Max Features: {click.style(str(num_features), fg='green')}")
+    click.echo(f"   Run Outlier Detection: {click.style(str(run_outlier), fg='green')}")
+    click.echo(f"   Run TabArena: {click.style(str(run_tabarena), fg='green')}")
+    click.echo(f"   Results Directory: {click.style(data_dir, fg='cyan')}")
+    click.echo("")
 
     logger.info(f"Using {len(embedding_models)} embedding model(s)")
     logger.info(f"Using {len(evaluators)} evaluator(s)")
 
-    dataset_config = DATASETCONFIG
-
-    benchmark_config = BENCHMARK_CONFIG
-
     (
         result_outlier,
         result_tabarena,
-        result_dataset_separation_tabpfn,
-        result_dataset_separation,
         result_dir,
     ) = run_benchmark(
         embedding_models=embedding_models,
@@ -227,4 +326,4 @@ def main(debug=False):
 
 
 if __name__ == "__main__":
-    main(debug=DEBUG)
+    main()

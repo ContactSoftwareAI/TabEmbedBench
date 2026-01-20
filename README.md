@@ -56,20 +56,39 @@ The project includes an example experiment script for the IJCAI benchmark.
 To run the IJCAI experiment script `src/tabembedbench/examples/ijcai_run.py`, use the following command:
 
 ```bash
-uv run python src/tabembedbench/examples/ijcai_run.py
+uv run python src/tabembedbench/examples/ijcai_run.py [OPTIONS]
 ```
 
-By default, the script is configured with `DEBUG = False`. If you want to run a quicker test, you can modify the `DEBUG`
-flag in `src/tabembedbench/examples/ijcai_run.py` to `True`.
+### Command Line Options
 
-### Configuration
+The IJCAI benchmark runner supports several options to customize the run:
 
-The experiments are configured via `BenchmarkConfig` and `DatasetConfig` objects within the script. You can adjust
-parameters such as:
+- `--debug`: Run in debug mode with minimal models and evaluators for testing.
+- `--data-dir PATH`: Directory where results will be saved (default: `ijcai_run`).
+- `--adbench-path PATH`: Path to ADBench tabular datasets (default: `data/adbench_tabular_datasets`).
+- `--dataset-size INTEGER`: Upper bound on dataset size (number of samples) (default: `15000`).
+- `--num-features INTEGER`: Upper bound on number of features (default: `500`).
+- `--run-outlier / --no-run-outlier`: Enable/disable outlier detection benchmarking (default: `True`).
+- `--run-tabarena / --no-run-tabarena`: Enable/disable TabArena benchmarking (default: `True`).
+- `--exclude-adbench TEXT`: ADBench dataset names to exclude (can be used multiple times).
+- `--exclude-tabarena TEXT`: TabArena dataset names to exclude (can be used multiple times).
 
-- `data_dir`: Local directory for dataset storage.
-- `gcs_bucket`: Google Cloud Storage bucket for results (if applicable).
-- `run_outlier` / `run_tabarena`: Toggle specific benchmark components.
+**Example: Running a quick debug test**
+
+```bash
+uv run python src/tabembedbench/examples/ijcai_run.py --debug
+```
+
+**Example: Excluding specific datasets**
+
+```bash
+uv run python src/tabembedbench/examples/ijcai_run.py --exclude-adbench "Cardiotocography" --exclude-tabarena "blood"
+```
+
+### Configuration (Advanced)
+
+While most parameters are available via command line, more complex configurations can still be adjusted within
+`src/tabembedbench/examples/ijcai_run.py` by modifying the `get_embedding_models` and `get_evaluators` functions.
 
 ## Project Structure
 
