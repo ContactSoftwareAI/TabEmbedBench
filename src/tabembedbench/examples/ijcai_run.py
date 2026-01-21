@@ -26,9 +26,6 @@ from tabembedbench.embedding_models.tabicl_embedding import (
     TabICLEmbedding,
     TabICLWrapper,
 )
-from tabembedbench.evaluators import (
-    LogisticRegressionHPOEvaluator,
-)
 from tabembedbench.evaluators.classification import (
     KNNClassifierEvaluator,
     MLPClassifierEvaluator,
@@ -70,6 +67,7 @@ def get_embedding_models(debug=False):
     sphere_model_256 = SphereBasedEmbedding(embed_dim=256)
     sphere_model_512 = SphereBasedEmbedding(embed_dim=512)
     tabicl_embedding = TabICLEmbedding()
+    tabicl_wrapper = TabICLWrapper()
     tablevectorizer = TableVectorizerEmbedding()
     tabpfn = TabPFNEmbedding(num_estimators=NUM_ESTIMATORS)
     tabpfn_random = TabPFNEmbeddingRandomVector(num_estimators=NUM_ESTIMATORS)
@@ -81,6 +79,7 @@ def get_embedding_models(debug=False):
         sphere_model_256,
         sphere_model_512,
         tabicl_embedding,
+        tabicl_wrapper,
         tablevectorizer,
         tabpfn,
         tabpfn_random,
@@ -165,7 +164,6 @@ def get_evaluators(debug=False):
 
     evaluator_algorithms.extend(
         [
-            LogisticRegressionHPOEvaluator(),
             MLPRegressorEvaluator(),
             MLPClassifierEvaluator(),
             deep_svdd_dynamic,
