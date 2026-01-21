@@ -4,7 +4,6 @@ from tabembedbench.evaluators.abstractevaluator import (
 )
 from tabembedbench.evaluators.classification import (
     KNNClassifierEvaluator,
-    KNNClassifierEvaluatorHPO,
     MLPClassifierEvaluator,
 )
 from tabembedbench.evaluators.outlier import (
@@ -24,7 +23,6 @@ __all__ = [
     "LocalOutlierFactorEvaluator",
     "IsolationForestEvaluator",
     "KNNClassifierEvaluator",
-    "KNNClassifierEvaluatorHPO",
     "MLPClassifierEvaluator",
     "KNNRegressorEvaluator",
     "MLPRegressorEvaluator",

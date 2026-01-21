@@ -7,6 +7,5 @@ from tabembedbench.evaluators.classification.mlp_classifier import (
 
 __all__ = [
     "KNNClassifierEvaluator",
-    "KNNClassifierEvaluatorHPO",
     "MLPClassifierEvaluator",
 ]

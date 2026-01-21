@@ -19,7 +19,6 @@ from tabembedbench.utils.exception_utils import (
 from tabembedbench.utils.logging_utils import get_benchmark_logger
 from tabembedbench.utils.torch_utils import empty_gpu_cache, get_device, log_gpu_memory
 from tabembedbench.utils.tracking_utils import MemoryTracker, save_dataframe
-from tabembedbench.utils.unsupervised_metrics import calculate_rank_me
 
 
 class AbstractBenchmark(ABC):
@@ -285,14 +284,6 @@ class AbstractBenchmark(ABC):
         train_embeddings, test_embeddings, embedding_metadata = embeddings
         dataset_metadata = dataset_configurations["dataset_metadata"]
         embedding_metadata.update(model_memory)
-        embedding_metadata["train_rank_me_score"] = calculate_rank_me(
-            embeddings=train_embeddings
-        )
-        embedding_metadata["test_rank_me_score"] = (
-            calculate_rank_me(embeddings=test_embeddings)
-            if test_embeddings is not None
-            else None
-        )
         embedding_metadata.update(dataset_metadata)
         self._embedding_metadata_buffer.append(embedding_metadata)
         self._save_embedding_metadata(dataframe_name="embedding_metadata")
