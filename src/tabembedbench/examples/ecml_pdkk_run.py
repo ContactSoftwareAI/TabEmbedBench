@@ -1,4 +1,4 @@
-"""IJCAI benchmark runner for evaluating tabular embedding models.
+"""ECML PDKK benchmark runner for evaluating tabular embedding models.
 
 This module provides functionality to run comprehensive benchmarks on various
 tabular embedding models using multiple evaluation algorithms across different
