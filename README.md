@@ -49,19 +49,19 @@ TabEmbedBench is designed to simplify the evaluation of tabular embedding models
 
 ## Running Experiments
 
-The project includes an example experiment script for the IJCAI benchmark.
+The project includes an example experiment script for the ECML-PKDD benchmark.
 
-### IJCAI Run
+### ECML-PKDD Run
 
-To run the IJCAI experiment script `src/tabembedbench/examples/ijcai_run.py`, use the following command:
+To run the ECML-PKDD experiment script `src/tabembedbench/examples/ecml_pkdd_run.py`, use the following command:
 
 ```bash
-uv run python src/tabembedbench/examples/ijcai_run.py [OPTIONS]
+uv run python src/tabembedbench/examples/ecml_pkdd_run.py [OPTIONS]
 ```
 
 ### Command Line Options
 
-The IJCAI benchmark runner supports several options to customize the run:
+The ECML-PKDD benchmark runner supports several options to customize the run:
 
 - `--debug`: Run in debug mode with minimal models and evaluators for testing.
 - `--data-dir PATH`: Directory where results will be saved (default: `ijcai_run`).
@@ -76,19 +76,19 @@ The IJCAI benchmark runner supports several options to customize the run:
 **Example: Running a quick debug test**
 
 ```bash
-uv run python src/tabembedbench/examples/ijcai_run.py --debug
+uv run python src/tabembedbench/examples/ecml_pkdd_run.py --debug
 ```
 
 **Example: Excluding specific datasets**
 
 ```bash
-uv run python src/tabembedbench/examples/ijcai_run.py --exclude-adbench "Cardiotocography" --exclude-tabarena "blood"
+uv run python src/tabembedbench/examples/ecml_pkdd_run.py --exclude-adbench "Cardiotocography" --exclude-tabarena "blood"
 ```
 
 ### Configuration (Advanced)
 
 While most parameters are available via command line, more complex configurations can still be adjusted within
-`src/tabembedbench/examples/ijcai_run.py` by modifying the `get_embedding_models` and `get_evaluators` functions.
+`src/tabembedbench/examples/ecml_pkdd_run.py` by modifying the `get_embedding_models` and `get_evaluators` functions.
 
 ## Project Structure
 
@@ -96,6 +96,6 @@ While most parameters are available via command line, more complex configuration
     - `benchmark/`: Benchmark execution logic.
     - `embedding_models/`: Implementations of various tabular embedding models (e.g., TabPFN, TabStar, SphereBased).
     - `evaluators/`: Evaluation metrics and algorithms for classification, regression, and outlier detection.
-    - `examples/`: Example scripts and benchmark runners (including `ijcai_run.py`).
+    - `examples/`: Example scripts and benchmark runners (including `ecml_pkdd_run.py`).
 - `tests/`: Unit and integration tests.
 - `pyproject.toml`: Project metadata and dependency definitions.
