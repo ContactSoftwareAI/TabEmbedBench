@@ -64,7 +64,7 @@ uv run python src/tabembedbench/examples/ecml_pkdd_run.py [OPTIONS]
 The ECML-PKDD benchmark runner supports several options to customize the run:
 
 - `--debug`: Run in debug mode with minimal models and evaluators for testing.
-- `--data-dir PATH`: Directory where results will be saved (default: `ijcai_run`).
+- `--data-dir PATH`: Directory where results will be saved (default: `ecml_pkdd_run`).
 - `--adbench-path PATH`: Path to ADBench tabular datasets (default: `data/adbench_tabular_datasets`).
 - `--dataset-size INTEGER`: Upper bound on dataset size (number of samples) (default: `15000`).
 - `--num-features INTEGER`: Upper bound on number of features (default: `500`).
