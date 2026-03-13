@@ -40,7 +40,7 @@ from tabembedbench.evaluators.regression import (
     MLPRegressorEvaluator,
 )
 
-logger = logging.getLogger("IJCAI_Run_Benchmark")
+logger = logging.getLogger("ECML_PKDD_Run_Benchmark")
 
 
 def get_embedding_models(debug=False):
@@ -184,7 +184,7 @@ def get_evaluators(debug=False):
 @click.option(
     "--data-dir",
     type=click.Path(),
-    default="ijcai_run",
+    default="ecml_pkdd_run",
     help="Directory where results will be saved.",
 )
 @click.option(
